@@ -8,7 +8,7 @@ description = "Reproducible repository snapshots for AI agents"
 
 [dependencies]
 anyhow = "1"
-base64 = "0.22"
+base64 = "0.23"
 clap = { version = "4.5", features = ["derive"] }
 hex = "0.4"
 serde = { version = "1", features = ["derive"] }
