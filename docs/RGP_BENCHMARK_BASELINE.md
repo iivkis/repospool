@@ -25,7 +25,8 @@ that as a transport/coverage limitation, not as a successful experiment.
 ## Preparation
 
 Run `task benchmark:plan` in `nix develop` or with Python stdlib. The
-`Gate B pinned corpus preparation` workflow (`workflow_dispatch`) generates
+`Gate B pinned corpus preparation` workflow (`workflow_dispatch`, plus a path-filtered one-time push trigger on
+`main` when the protocol files change) generates
 individually checked `.rgp` artifacts from exact Git commits, places an
 independently hashed `provenance.json` beside each one, and publishes them as
 **GitHub Actions workflow artifacts**, the transport channel proven in Gate A.
