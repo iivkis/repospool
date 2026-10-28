@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail, ensure, Context, Result};
+use anyhow::{anyhow, ensure, Context, Result};
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
@@ -356,7 +356,7 @@ fn verify(path: &Path) -> Result<Manifest> {
     let payload = parse_transport(path)?;
     let mut archive = ZipArchive::new(Cursor::new(payload))?;
     ensure!(
-        archive.len() > 0 && archive.len() <= MAX_ENTRIES,
+        !archive.is_empty() && archive.len() <= MAX_ENTRIES,
         "RESOURCE_LIMIT: ZIP entry count"
     );
     let mut names = HashSet::new();
