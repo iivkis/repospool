@@ -137,7 +137,7 @@ def evaluate(plan: dict, results: dict) -> dict:
     if results.get("collector") != "gate_b_capture/1.0" or not isinstance(trace_map, dict):
         result["reasons"].append("Uncollected score table: original session traces required")
         trace_map = {}
-    sha_pattern = re.compile(r"[0-9a-f]{64}\\Z")
+    sha_pattern = re.compile(r"[0-9a-f]{64}\Z")
     trace_digests = list(trace_map.values())
     if (len(trace_digests) != len(trials)
             or any(not isinstance(name, str) or not name.endswith(".json")
