@@ -33,20 +33,19 @@ jobs:
         run: cargo test --all-targets
       - name: Reader stdlib tests
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Immutable golden fixtures and Rust/Python verifier parity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/golden_fixtures.py check
+          cargo build --locked
+          python3 scripts/golden_fixtures.py check --rust-cli target/debug/rgp
       - name: Tiny valid RGP transport fixture and negative tests
         shell: bash
         run: |
           set -euo pipefail
           python3 scripts/transport_probe.py generate --output-dir "$RUNNER_TEMP/probe" --sizes 102400
           python3 scripts/transport_probe.py verify --input-dir "$RUNNER_TEMP/probe" --expected "$RUNNER_TEMP/probe/expected.json"
-      - name: Make small fixture available for real connector retrieval
-        uses: actions/upload-artifact@v4
-        with:
-          name: rgp-transport-smoke-102400
-          path: ${{ runner.temp }}/probe/
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: 1
       - name: Canonical cross-language round-trip and determinism
         shell: bash
         run: |
@@ -68,4 +67,4 @@ jobs:
       - uses: DeterminateSystems/nix-installer-action@v17
       - uses: DeterminateSystems/magic-nix-cache-action@v11
       - run: nix flake check --show-trace
-      - run: nix develop --command bash -c 'cargo --version && rustc --version && uv --version && python3 --version && task --version && task --list && task --dry check'
+      - run: nix develop --no-update-lock-file --command bash -c 'cargo --version && rustc --version && uv --version && python3 --version && task --version && task --list && task --dry check'

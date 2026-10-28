@@ -44,6 +44,18 @@ tasks:
       - task: test:rust
       - task: test:python
 
+  contract:golden:
+    desc: Verify immutable RGP fixtures, their recorded hashes and SQLite schema tests
+    cmds:
+      - python3 scripts/golden_fixtures.py check
+      - python3 -m unittest discover -s tests -p 'test_*.py' -q
+
+  contract:cross:
+    desc: Build Rust verifier and check positive/negative golden fixtures against both implementations
+    cmds:
+      - cargo build --locked
+      - python3 scripts/golden_fixtures.py check --rust-cli target/debug/rgp
+
   smoke:
     desc: Run Rust generator, determinism, Rust verifier and Python Reader end-to-end
     cmds:
@@ -64,6 +76,7 @@ tasks:
       - task: fmt:check
       - task: lint
       - task: test
+      - task: contract:cross
       - task: smoke
 
   generate:
