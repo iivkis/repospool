@@ -137,3 +137,18 @@ tasks:
       TRIALS: '{{.TRIALS | default "benchmarks/gate_b/trials.template.json"}}'
     cmds:
       - python3 scripts/gate_b.py report --trials '{{.TRIALS}}'
+
+  benchmark:trace-check:
+    desc: Validate one observed agent trial trace (SESSION=path/to/session.json)
+    vars:
+      SESSION: '{{.SESSION | default "benchmarks/gate_b/session.example.json"}}'
+    cmds:
+      - python3 scripts/gate_b_capture.py check-session --session '{{.SESSION}}'
+
+  benchmark:collect:
+    desc: Compile observed agent event traces and print the fail-closed Gate B verdict
+    vars:
+      SESSIONS: '{{.SESSIONS | default "benchmarks/gate_b/sessions"}}'
+      TRIALS_OUTPUT: '{{.TRIALS_OUTPUT | default "benchmarks/gate_b/trials.json"}}'
+    cmds:
+      - python3 scripts/gate_b_capture.py collect --sessions '{{.SESSIONS}}' --output '{{.TRIALS_OUTPUT}}'

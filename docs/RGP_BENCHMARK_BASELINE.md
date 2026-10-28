@@ -134,3 +134,8 @@ confirmed against the workflow run summary before treating it as an external
 trust anchor. Full connector transfer-byte accounting, model tokens, agent
 correctness and the 72 paired trials remain **unmeasured**. Gate B remains
 **HOLD**.
+
+
+## Real-trial trace ingestion
+
+The [trace capture protocol](GATE_B_TRACE_PROTOCOL.md) defines provider usage receipts, connector calls, independent rubric assessments, raw evidence URIs, trusted artifact hashes and `trace_sha256`. `scripts/gate_b_capture.py` compiles instrumented event logs into the existing `scripts/gate_b.py` evaluator. No such logs have been supplied yet. An empty trace directory **must** score `HOLD`; synthetic unit-test traces are explicitly not experimental evidence.

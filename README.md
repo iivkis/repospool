@@ -69,3 +69,8 @@ repositories. The trusted `python/rgp_bootstrap.py` now recognizes either the
 legacy `expected.json` or the benchmark's `provenance.json` co-packed with one
 RGP. Neither co-packed metadata file proves authenticity without an external
 trust anchor. The 72 agent trials and Gate B decision are still outstanding.
+
+
+### Evidence capture (real trials only)
+
+Use `task benchmark:trace-check SESSION=/path/to/real-session.json` to validate one provider-instrumented event trace, then `task benchmark:collect SESSIONS=/path/to/traces TRIALS_OUTPUT=/path/to/trials.json` to compute a trial report. See [trace protocol](docs/GATE_B_TRACE_PROTOCOL.md). The collector does not run agents or invent unavailable provider metrics, and its session template is not a real measurement.
