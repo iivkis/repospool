@@ -1,0 +1,21 @@
+[package]
+name = "rgp"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+license = "MIT"
+description = "Reproducible repository snapshots for AI agents"
+
+[dependencies]
+anyhow = "1"
+base64 = "0.22"
+clap = { version = "4.5", features = ["derive"] }
+hex = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+zip = { version = "0.6.6", default-features = false, features = ["deflate"] }
+
+[profile.release]
+lto = "thin"
+strip = true

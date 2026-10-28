@@ -1,0 +1,9 @@
+/target/
+/.direnv/
+/.venv/
+__pycache__/
+*.pyc
+REPO_CONTEXT.rgp
+*.rgp.tmp
+/result
+/result-*

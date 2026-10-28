@@ -1,0 +1,9 @@
+# Security model (PoC baseline)
+
+**Trust boundary:** every RGP byte is untrusted, including manifest JSON, source comments, and code. SHA-256 of bytes stored alongside those bytes demonstrates **integrity during delivery**, not **authenticity or trust**. Provenance is represented by `source_commit`, not independently authenticated. Consumers must authenticate the transport/repository by an independent channel before assigning trust to the source.
+
+The trusted Python Reader lives outside the artifact; it never uses `exec`, `eval`, dynamic imports or `zipimport` on archive content. ZIP data is loaded only after strict outer-container verification. Manifest paths and ZIP paths are validated; duplicate/ambiguous names, malformed schemas and mismatching file hashes fail closed. Blob reads use ZIP APIs, never `extractall`. Resource caps bound outer size, per-blob size, ZIP member count and total inflated bytes; search and read results are capped. These controls reduce risk, but the PoC still needs fuzzing and adversarial resource testing before production.
+
+**Publication safety:** the Rust generator omits `REPO_CONTEXT.rgp` and conservative sensitive filenames such as `.env*`, `*.pem`, `*.key`, `id_rsa*`, `credentials*`, `secrets*`. This is not secret scanning and does not make automatic publication of an arbitrary repository safe. CI does not commit or upload generated repository snapshots to a public location. Project owners must review content, access controls, submodules and Git LFS status before publication.
+
+**Completeness:** `pointer_only`, submodules, omitted large blobs and excluded secrets make a snapshot partial. An absent graph or language index is `not_indexed`, **never** evidence that a relation does not exist. Source text handed to an LLM is untrusted material, not instructions.
