@@ -33,3 +33,15 @@ For each trial record: connector operation and configuration, source Actions run
 ## Gate policy
 
 Gate A is **HOLD** until at least one concrete, reproducible method delivers the selected target repository size **end to end** and a sandboxed trusted Python Reader opens and verifies it three times. No semantic/SCIP indexing starts on an untested delivery hypothesis. Local Rust/Python unit tests and the fixture workflow are necessary but insufficient.
+
+## Tested local consumer bootstrap
+
+The Actions artifact retrieval mode is now validated end-to-end with the trusted stdlib adapter:
+
+```sh
+python3 python/rgp_bootstrap.py --actions-zip /path/from/connector.zip \
+  --output /tmp/REPO_CONTEXT.rgp --trusted-sha256 <independently-verified-SHA256>
+python3 python/rgp_reader.py --artifact /tmp/REPO_CONTEXT.rgp overview
+```
+
+Do not treat the co-downloaded `expected.json` as a trustworthy signature. The adapter validates it for internal consistency, but only a separately authenticated checksum can establish the identity of the bytes against an external source. The direct GitHub Contents API path still has its own untested limits.

@@ -1,38 +1,21 @@
 # Gate A — transport proof of concept
 
-**Decision: CONDITIONAL GO for GitHub Actions artifact delivery through the connected GitHub app; HOLD for direct repository-file delivery.**  
-**Measurement date:** 29 October 2026 (UTC measurements on 28 October). Repository: `iivkis/rgp`.
+**Status: HOLD — connector end-to-end tests pending** (29 October 2026).
 
-The producer is Rust; independently generated Python-stdlib synthetic RGP/1.0 fixtures have been downloaded through the **GitHub connected app** using `download_workflow_artifact`, then opened in a Python sandbox using the trusted stdlib Reader. The fixture source is a deterministic `SHAKE256` stream, with no private repository bytes.
+Repository: `iivkis/rgp`. The Rust generator and independent stdlib Python Reader passed prior GitHub CI round-trip checks. The test harness now generates **valid, incompressible, independently verified RGP fixtures**, rather than a non-RGP ZIP containing `probe.bin`.
 
-## Actual connector measurements
+| Test or property | Evidence | Status |
+|---|---|---|
+| Local Rust + Python end-to-end | Existing CI and independent Reader tests | PASS (local/CI only) |
+| Synthetic 100 KiB/5 MiB/20 MiB/50 MiB RGP | Deterministic generator and standalone validation command | Implementation prepared; connector not yet tested |
+| GitHub Actions workflow artifacts | `.github/workflows/transport-probe.yml`, manual matrix | Workflow added; needs remote run |
+| Actual connector `fetch_file`, `fetch`, artifact download | Three independent retrieves per supported tier | NOT MEASURED |
+| Range boundaries, silent truncation, order, duplicates, timeouts | Connector-specific experiments | NOT MEASURED |
+| Calls, transfer bytes, tokens, latency, peak memory | Raw connector trial records | NOT MEASURED |
+| `max_supported_artifact_bytes` / `max_supported_repo_bytes` | Must derive from measured mode-specific failures and passes | UNKNOWN |
 
-Source: [Gate A transport fixtures run 40740764150](https://github.com/iivkis/rgp/actions/runs/40740764150) (successful). Every artifact contains `expected.json` and one valid `probe-<size>.rgp`. Each ZIP download creates an actual sandbox file, not merely a metadata response. The received RGP was compared byte-for-byte with an **independently locally regenerated** fixture, and its inner ZIP, manifest, blob hashes and tree digest were validated.
+A fixture is a synthetic `RGP/1.0`, not a real Git snapshot; its hashes are recorded in `expected.json`. The generator's 64 MiB *decoded ZIP* cap and 128 MiB *outer RGP text* cap are local safety policies, **not** connector guarantees. Source Actions artifact download and GitHub Contents API are different transport contracts.
 
-| Target outer RGP | Received RGP bytes | Outer RGP SHA-256 | Artifact ZIP bytes | Artifact ID | Connector downloads / validated |
-|---|---:|---|---:|---:|---:|
-| 102,400 | 102,608 | `4916e7639550e1959dc8286adec84ac036f759ea8786415c220e9b2af9b38200` | 103,337 | 12837769822 | **3 / 3** |
-| 5,242,880 | 5,244,662 | `0506f5ac14ce8a841b1751e88b311f83500afb7396bacc39624a5fbe2aed0ff3` | 5,245,400 | 12838648567 | **3 / 3** |
-| 20,971,520 | 20,978,478 | `eb58e02db6bc2200c0fcfcb086a25c5413f7dd60d74069bd5594cd6629415715` | 20,979,223 | 12839107809 | **3 / 3** |
-| 52,428,800 | 52,446,429 | `f2f8c28db3996d6e2dde84ffa3e1770c68937e2049a2e261a3e082d8ccf612d4` | 52,447,174 | 12838244340 | **3 / 3** |
+See [protocol](TRANSPORT_PROBE_PROTOCOL.md) for reproducible steps and strict pass/fail requirements. Until actual connector reads verify the same bytes in the agent sandbox, **Gate A remains HOLD**.
 
-**Results: 12/12 fully intact RGP downloads.** Measured tested ceiling, **not a documented platform limit**: `52,446,429` bytes of outer RGP, packaged in an Actions ZIP of `52,447,174` bytes. Files around 50 MiB of RGP text are demonstrated using **this exact connector operation and sandbox path**. The original synthetic content for that tier is `38,810,337` bytes. A minimum/maximum useful repository size is **not established** from this one synthetic class because actual compression ratios and publication policy differ.
-
-The outer GitHub Actions ZIP wrapper is a separate transport format. The resulting `RGP/1.0` file is still fully reconstructed and verified before use. It does **not** establish that `fetch_file` or `fetch` can retrieve `REPO_CONTEXT.rgp` from the repository root.
-
-## Scope and unknowns
-
-- **Verified:** three full transfers per tier, strict RGP length and SHA-256, Python stdlib Reader and original blob hashes, synthetic deterministic fixtures, GitHub artifact connector into this sandbox.
-- **Partially observed:** `fetch_file` returned the same 67 KiB roadmap text in three independent reads, and `fetch` of its raw URL returned identical text. This is **not** a byte-authenticated RGP transport test.
-- **Not measured:** end-to-end connector latency, token usage, actual transfer byte count, connector peak memory, automatic retry/timeout behavior, connector byte-range support, deliberate out-of-order/duplicate response reconstruction, upper failure boundary, access outside this sandbox, and direct-file retrieval beyond small text.
-- **Security:** fixture production and artifact download do not prove authenticity of arbitrary downloaded executable code. Reader imports nothing from RGP; generated and received content remains untrusted input. Fixture `expected.json` alone was not used as a trust anchor: independently regenerated bytes were compared.
-
-The generator's current 64 MiB ZIP / 128 MiB outer-text caps are **local resource limits**, not actual connector limits. Do not infer arbitrary repository size support from the 50 MiB text test.
-
-## Gate outcome and next steps
-
-**Experimental transport Gate A: GO only when GitHub Actions artifact download is selected as the delivery adapter** and the target sandbox matches this tested path. **Primary direct-root-file channel: HOLD** until actual committed RGPs are fetched three times per tier and byte-verified. A future release may publish the canonical `REPO_CONTEXT.rgp` in the repository root and separately expose its same bytes as an Actions artifact, but that production pipeline has not been verified.
-
-No semantic graph work should be represented as proved useful: **Gate B requires a separate agent-level baseline experiment**. Continue with specification, reader hardening and dedicated adapter integration; do not overstate connector portability.
-
-Raw per-trial observations: [transport_trials.json](gate-a/transport_trials.json). Reproducible procedure: [TRANSPORT_PROBE_PROTOCOL.md](TRANSPORT_PROBE_PROTOCOL.md).
+The delivered [trusted Actions bootstrap](../python/rgp_bootstrap.py) was separately exercised against an actual **50 MiB** connector download using an out-of-band fixture SHA-256: 52,446,429 reconstructed bytes, 5 validated blobs, 2.72 seconds and ~375 MiB peak process RSS on this sandbox for the bootstrap invocation. These are consumer-local measurements, not connector network latency.
