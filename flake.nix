@@ -21,11 +21,12 @@
             python313
             uv
             just
+            go-task
           ];
           RUST_BACKTRACE = "1";
           UV_PYTHON = "${pkgs.python313}/bin/python3";
           shellHook = ''
-            echo "RGP dev shell: cargo, rustfmt, clippy, Python and uv available"
+            echo "RGP dev shell: cargo, rustfmt, clippy, Python, uv, task and just available"
           '';
         };
       });

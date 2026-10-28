@@ -8,6 +8,8 @@ import hashlib
 import io
 import json
 import re
+import stat
+import unicodedata
 import zipfile
 from pathlib import Path
 
@@ -18,6 +20,8 @@ MAX_ENTRIES = 50_000
 MAX_RATIO = 200
 MAX_RESULT = 256 * 1024
 HEX = re.compile(r"[0-9a-f]{64}\Z")
+COMMIT = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
+EXCLUSION_REASONS = frozenset({"self_artifact", "sensitive_path", "submodule_unavailable", "size_limit"})
 
 
 class RgpError(ValueError):
@@ -37,7 +41,7 @@ def _safe_path(path: str) -> bool:
         and bool(path)
         and not path.startswith("/")
         and "\\" not in path
-        and not any(ord(c) < 32 or ord(c) == 127 for c in path)
+        and not any(unicodedata.category(c) == "Cc" for c in path)
         and all(segment not in ("", ".", "..") for segment in path.split("/"))
     )
 
@@ -110,8 +114,9 @@ class Reader:
                 for index, info in enumerate(infos):
                     name = info.filename
                     _require(_safe_path(name), "UNSAFE_PATH", f"invalid ZIP path: {name!r}")
-                    _require(name.casefold() not in names, "UNSAFE_PATH", "duplicate ZIP path")
-                    names.add(name.casefold())
+                    _require(not stat.S_ISLNK(info.external_attr >> 16), "UNSAFE_PATH", "ZIP symlink entry")
+                    _require(name.lower() not in names, "UNSAFE_PATH", "duplicate ZIP path")
+                    names.add(name.lower())
                     _require(name == "manifest.json" or name.startswith("files/"), "UNSAFE_PATH", "unexpected ZIP member")
                     _require(info.file_size <= (MAX_TOTAL if name == "manifest.json" else MAX_FILE), "RESOURCE_LIMIT", "oversized ZIP member")
                     _require(info.file_size <= max(4096, info.compress_size * MAX_RATIO), "RESOURCE_LIMIT", "compression ratio")
@@ -129,13 +134,25 @@ class Reader:
             raise RgpError("UNSUPPORTED_FORMAT", "invalid ZIP archive") from exc
         _require("manifest_data" in locals(), "UNSUPPORTED_FORMAT", "missing manifest")
         try:
-            manifest = json.loads(manifest_data)
+            def no_duplicate_keys(pairs):
+                result = {}
+                for key, value in pairs:
+                    _require(key not in result, "UNSUPPORTED_FORMAT", "duplicate JSON key")
+                    result[key] = value
+                return result
+
+            manifest = json.loads(manifest_data, object_pairs_hook=no_duplicate_keys)
         except (ValueError, UnicodeError) as exc:
             raise RgpError("UNSUPPORTED_FORMAT", "malformed JSON manifest") from exc
         _require(isinstance(manifest, dict) and manifest.get("schema_version") == "1.0", "UNSUPPORTED_FORMAT", "manifest schema")
+        commit = manifest.get("source_commit")
+        tree_hash = manifest.get("input_tree_digest")
+        _require(isinstance(commit, str) and bool(COMMIT.fullmatch(commit)), "UNSUPPORTED_FORMAT", "source commit")
+        _require(isinstance(tree_hash, str) and bool(HEX.fullmatch(tree_hash)), "UNSUPPORTED_FORMAT", "tree digest")
+        _require(manifest.get("index_coverage") == "not_indexed" and manifest.get("graph_coverage") == "not_indexed", "UNSUPPORTED_FORMAT", "coverage fields")
         files = manifest.get("files")
         excluded = manifest.get("excluded")
-        _require(isinstance(files, list) and isinstance(excluded, list) and len(files) <= MAX_ENTRIES, "UNSUPPORTED_FORMAT", "manifest shape")
+        _require(isinstance(files, list) and isinstance(excluded, list) and len(files) <= MAX_ENTRIES and len(excluded) <= MAX_ENTRIES, "UNSUPPORTED_FORMAT", "manifest shape")
         records = {}
         used = set()
         previous = None
@@ -143,10 +160,10 @@ class Reader:
             _require(isinstance(entry, dict), "UNSUPPORTED_FORMAT", "file entry")
             path = entry.get("path")
             _require(_safe_path(path), "UNSAFE_PATH", "manifest file path")
-            _require(path.casefold() not in used, "UNSAFE_PATH", "colliding paths")
+            _require(path.lower() not in used, "UNSAFE_PATH", "colliding paths")
             _require(previous is None or previous < path, "UNSUPPORTED_FORMAT", "file ordering")
             previous = path
-            used.add(path.casefold())
+            used.add(path.lower())
             mode = entry.get("mode")
             _require(mode in ("100644", "100755", "120000"), "UNSUPPORTED_FORMAT", "file mode")
             _require(entry.get("kind") == ("symlink" if mode == "120000" else "file"), "UNSUPPORTED_FORMAT", "file kind")
@@ -158,11 +175,15 @@ class Reader:
             _require(type(entry.get("size")) is int and entry["size"] == len(blobs[blob]), "HASH_MISMATCH", "blob length")
             records[path] = entry
         _require(set(blobs) == {rec["blob"] for rec in records.values()}, "UNSUPPORTED_FORMAT", "unused ZIP blobs")
+        last_exclusion = None
         for exclusion in excluded:
             _require(isinstance(exclusion, dict), "UNSUPPORTED_FORMAT", "exclusion entry")
             path = exclusion.get("path")
-            _require(_safe_path(path) and path.casefold() not in used, "UNSAFE_PATH", "invalid exclusion path")
-            used.add(path.casefold())
+            _require(_safe_path(path) and path.lower() not in used, "UNSAFE_PATH", "invalid exclusion path")
+            _require(last_exclusion is None or last_exclusion < path, "UNSUPPORTED_FORMAT", "exclusion ordering")
+            last_exclusion = path
+            _require(exclusion.get("reason") in EXCLUSION_REASONS, "UNSUPPORTED_FORMAT", "exclusion reason")
+            used.add(path.lower())
         _require(_tree_digest(files) == manifest.get("input_tree_digest"), "HASH_MISMATCH", "input tree digest")
         self.manifest = manifest
         self._blobs = blobs
@@ -190,13 +211,16 @@ class Reader:
         raise RgpError("UNSUPPORTED_FORMAT", "unknown coverage scope")
 
     def tree(self, prefix: str = "", limit: int = 200, cursor: str | None = None) -> dict:
-        _require(0 < limit <= 200, "RESOURCE_LIMIT", "tree limit")
+        _require(isinstance(prefix, str) and (cursor is None or isinstance(cursor, str)), "UNSUPPORTED_FORMAT", "tree cursor")
+        _require(type(limit) is int and 0 < limit <= 200, "RESOURCE_LIMIT", "tree limit")
         paths = [p for p in self._files if p.startswith(prefix) and (cursor is None or p > cursor)]
         page = paths[:limit]
         return {"paths": page, "next_cursor": page[-1] if len(paths) > limit else None}
 
     def read(self, path: str, start_line: int | None = None, end_line: int | None = None) -> dict:
         _require(path in self._files, "PARTIAL_SNAPSHOT", "file not present in snapshot")
+        _require(start_line is None or (type(start_line) is int and start_line >= 1), "UNSUPPORTED_FORMAT", "start line")
+        _require(end_line is None or (type(end_line) is int and end_line >= 0), "UNSUPPORTED_FORMAT", "end line")
         entry = self._files[path]
         data = self._blobs[entry["blob"]]
         try:
@@ -214,21 +238,28 @@ class Reader:
         return {"path": path, "encoding": "utf-8", "content": content, "start_line": start, "end_line": end, "status": entry["status"]}
 
     def search(self, query: str, paths: list[str] | None = None, limit: int = 50, cursor: int | None = None) -> dict:
-        _require(0 < len(query) <= 1024 and 0 < limit <= 100, "RESOURCE_LIMIT", "search limits")
+        _require(isinstance(query, str) and 0 < len(query) <= 1024, "RESOURCE_LIMIT", "search query")
+        _require(type(limit) is int and 0 < limit <= 100, "RESOURCE_LIMIT", "search limit")
         _require(cursor is None or (type(cursor) is int and cursor >= 0), "UNSUPPORTED_FORMAT", "cursor")
+        _require(paths is None or (isinstance(paths, list) and all(isinstance(p, str) for p in paths)), "UNSUPPORTED_FORMAT", "paths")
         selected = sorted(self._files) if paths is None else sorted(set(paths) & self._files.keys())
-        matches = []
+        offset = cursor or 0
+        seen = 0
+        page = []
         for path in selected:
             try:
                 text = self._blobs[self._files[path]["blob"]].decode("utf-8")
             except UnicodeDecodeError:
                 continue
             for number, line in enumerate(text.splitlines(), start=1):
-                if query in line:
-                    matches.append({"path": path, "line": number, "excerpt": line[:512]})
-        offset = cursor or 0
-        page = matches[offset:offset + limit]
-        return {"matches": page, "next_cursor": offset + limit if offset + limit < len(matches) else None}
+                if query not in line:
+                    continue
+                if seen >= offset:
+                    page.append({"path": path, "line": number, "excerpt": line[:512]})
+                    if len(page) > limit:
+                        return {"matches": page[:limit], "next_cursor": offset + limit}
+                seen += 1
+        return {"matches": page, "next_cursor": None}
 
 
 def main() -> None:

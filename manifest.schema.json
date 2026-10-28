@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/iivkis/rgp/blob/main/manifest.schema.json",
+  "title": "RGP v1.0 snapshot manifest",
+  "description": "Contract for ZIP manifest.json. Validation is performed directly in the trusted stdlib Reader, which does not require a JSON Schema library.",
+  "type": "object",
+  "required": ["schema_version", "source_commit", "input_tree_digest", "files", "excluded", "index_coverage", "graph_coverage"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "source_commit": {"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"},
+    "input_tree_digest": {"$ref": "#/$defs/sha256"},
+    "files": {
+      "type": "array", "maxItems": 50000,
+      "items": {"$ref": "#/$defs/file"}
+    },
+    "excluded": {
+      "type": "array", "maxItems": 50000,
+      "items": {"$ref": "#/$defs/exclusion"}
+    },
+    "index_coverage": {"const": "not_indexed"},
+    "graph_coverage": {"const": "not_indexed"}
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "path": {
+      "type": "string", "minLength": 1,
+      "description": "Relative UTF-8 path with no absolute prefix, backslash, controls or empty/dot/dotdot components. The stricter cross-record collision and path rules are checked by Reader."
+    },
+    "file": {
+      "type": "object",
+      "required": ["path", "mode", "kind", "size", "sha256", "blob", "status"],
+      "properties": {
+        "path": {"$ref": "#/$defs/path"},
+        "mode": {"enum": ["100644", "100755", "120000"]},
+        "kind": {"enum": ["file", "symlink"]},
+        "size": {"type": "integer", "minimum": 0, "maximum": 16777216},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "blob": {"type": "string", "pattern": "^files/[a-f0-9]{64}$"},
+        "status": {"enum": ["included", "pointer_only"]}
+      },
+      "allOf": [
+        {"if": {"properties": {"mode": {"const": "120000"}}, "required": ["mode"]}, "then": {"properties": {"kind": {"const": "symlink"}}}, "else": {"properties": {"kind": {"const": "file"}}}}
+      ],
+      "additionalProperties": true
+    },
+    "exclusion": {
+      "type": "object",
+      "required": ["path", "reason"],
+      "properties": {
+        "path": {"$ref": "#/$defs/path"},
+        "reason": {"enum": ["self_artifact", "sensitive_path", "submodule_unavailable", "size_limit"]}
+      },
+      "additionalProperties": true
+    }
+  }
+}

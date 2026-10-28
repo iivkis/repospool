@@ -68,4 +68,4 @@ jobs:
       - uses: DeterminateSystems/nix-installer-action@v17
       - uses: DeterminateSystems/magic-nix-cache-action@v11
       - run: nix flake check --show-trace
-      - run: nix develop --command bash -c 'cargo --version && rustc --version && uv --version && python3 --version'
+      - run: nix develop --command bash -c 'cargo --version && rustc --version && uv --version && python3 --version && task --version && task --list && task --dry check'
