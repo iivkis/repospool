@@ -133,6 +133,11 @@ class GateBTest(unittest.TestCase):
         trials["trials"][0]["trace_sha256"] = trials["trials"][1]["trace_sha256"]
         self.assertEqual(evaluate(PLAN, trials)["status"], "HOLD")
 
+    def test_malformed_trace_digest_type_cannot_go(self):
+        trials = make_trials()
+        trials["trials"][0]["trace_sha256"] = ["not-a-digest"]
+        self.assertEqual(evaluate(PLAN, trials)["status"], "HOLD")
+
     def test_wrong_model_rejected(self):
         trials = make_trials()
         trials["trials"][0]["model_id"] = "other-model"
