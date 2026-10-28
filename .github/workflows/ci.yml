@@ -52,6 +52,6 @@ jobs:
         with:
           persist-credentials: false
       - uses: DeterminateSystems/nix-installer-action@v17
-      - uses: DeterminateSystems/magic-nix-cache-action@v11
+      - uses: DeterminateSystems/magic-nix-cache-action@v15
       - run: nix flake check --show-trace
       - run: nix develop --command bash -c 'cargo --version && rustc --version && uv --version && python3 --version'
