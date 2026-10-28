@@ -53,11 +53,31 @@ def bootstrap(zip_path: Path, output: Path, trusted_sha256: str | None = None) -
                 _require(info.file_size <= max(4096, info.compress_size * MAX_RATIO), "RESOURCE_LIMIT", "ZIP compression ratio")
                 names.add(name)
             rgps = [n for n in names if n.endswith(".rgp")]
-            _require(len(rgps) == 1 and names - set(rgps) <= {"expected.json"}, "UNSUPPORTED_FORMAT", "unexpected Actions artifact files")
+            _require(
+                len(rgps) == 1 and names - set(rgps) <= {"expected.json", "provenance.json"},
+                "UNSUPPORTED_FORMAT", "unexpected Actions artifact files",
+            )
             artifact_name = rgps[0]
             received = archive.read(artifact_name)
             _require(len(received) <= 2 * MAX_ARTIFACT, "RESOURCE_LIMIT", "RGP too large")
             digest = hashlib.sha256(received).hexdigest()
+            provenance = None
+            if "provenance.json" in names:
+                meta_info = archive.getinfo("provenance.json")
+                _require(meta_info.file_size <= 64 * 1024, "RESOURCE_LIMIT", "provenance.json too large")
+                try:
+                    provenance = json.loads(archive.read("provenance.json"))
+                except (ValueError, UnicodeDecodeError) as exc:
+                    raise RgpError("UNSUPPORTED_FORMAT", "invalid provenance.json") from exc
+                _require(isinstance(provenance, dict), "UNSUPPORTED_FORMAT", "provenance.json shape")
+                _require(provenance.get("rgp_sha256") == digest, "HASH_MISMATCH", "provenance RGP SHA-256")
+                _require(type(provenance.get("rgp_bytes")) is int and
+                         provenance["rgp_bytes"] == len(received), "HASH_MISMATCH", "provenance RGP bytes")
+                _require(isinstance(provenance.get("plan_sha256"), str) and
+                         bool(HEX.fullmatch(provenance["plan_sha256"])),
+                         "UNSUPPORTED_FORMAT", "provenance benchmark plan SHA-256")
+                _require(provenance.get("transport_verified") is False,
+                         "UNSUPPORTED_FORMAT", "producer must not claim connector delivery")
             if "expected.json" in names:
                 meta = archive.getinfo("expected.json")
                 _require(meta.file_size <= 64 * 1024, "RESOURCE_LIMIT", "expected.json too large")
@@ -75,6 +95,14 @@ def bootstrap(zip_path: Path, output: Path, trusted_sha256: str | None = None) -
         raise RgpError("UNSUPPORTED_FORMAT", "invalid Actions ZIP wrapper") from exc
     _require(trusted_sha256 is None or trusted_sha256 == digest, "HASH_MISMATCH", "external trusted SHA-256")
     reader = Reader(received)
+    if provenance is not None:
+        _require(provenance.get("source_commit") == reader.manifest["source_commit"],
+                 "HASH_MISMATCH", "provenance source commit")
+        overview = provenance.get("reader_overview")
+        _require(isinstance(overview, dict) and
+                 overview.get("input_tree_digest") == reader.manifest["input_tree_digest"] and
+                 overview.get("file_count") == len(reader.manifest["files"]),
+                 "HASH_MISMATCH", "provenance snapshot metadata")
     result = reader.validate()
     output.parent.mkdir(parents=True, exist_ok=True)
     name = None
