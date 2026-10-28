@@ -80,8 +80,8 @@ Use `task benchmark:trace-check SESSION=/path/to/real-session.json` to validate 
 The pinned `rgp` Actions artifact was downloaded via the connected GitHub
 app and opened by the stdlib Reader. Its 132,217-byte RGP matches independently
 recorded SHA-256 `8e5871336d1aaad32d89e6e1b0e581a836d608e7e3e453b10c32b6d586fcaa6f`.
-Four decoded Git blobs were checked against the corresponding GitHub
-`fetch_file` blob identifiers at commit `95963a2`: all four matched.
+Twelve decoded Git blobs across three repositories were checked against the corresponding GitHub
+`fetch_file` blob identifiers at each repository's pinned commit: all twelve matched.
 See [pilot_preflight_2026-10-29.json](benchmarks/gate_b/pilot_preflight_2026-10-29.json).
 
 This is a **transport/source-integrity preflight, not one of the 72 agent runs**.
