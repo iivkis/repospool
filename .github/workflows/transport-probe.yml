@@ -2,9 +2,6 @@ name: Gate A transport fixtures
 
 on:
   workflow_dispatch:
-  # Temporary one-branch experiment; remove before merging.
-  push:
-    branches: [feat/gate-a-transport-fixtures]
 
 permissions:
   contents: read
