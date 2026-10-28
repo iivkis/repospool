@@ -1,0 +1,107 @@
+# https://taskfile.dev
+version: '3'
+
+vars:
+  ARTIFACT: '{{.ARTIFACT | default "REPO_CONTEXT.rgp"}}'
+  REPO: '{{.REPO | default "."}}'
+
+# All commands work inside `nix develop`; Python inside an agent sandbox
+# requires only stdlib and never calls uv.
+tasks:
+  default:
+    desc: List available project commands
+    cmds:
+      - task --list
+
+  fmt:
+    desc: Format Rust sources
+    cmds:
+      - cargo fmt --all
+
+  fmt:check:
+    desc: Verify Rust formatting
+    cmds:
+      - cargo fmt --all -- --check
+
+  lint:
+    desc: Run Clippy with warnings treated as errors
+    cmds:
+      - cargo clippy --locked --all-targets -- -D warnings
+
+  test:rust:
+    desc: Run Rust unit and integration tests
+    cmds:
+      - cargo test --locked --all-targets
+
+  test:python:
+    desc: Run dependency-free Reader/bootstrap tests through uv
+    cmds:
+      - uv run --no-project --offline python3 -m unittest discover -s tests -p 'test_*.py' -v
+
+  test:
+    desc: Run all Rust and Python tests
+    cmds:
+      - task: test:rust
+      - task: test:python
+
+  smoke:
+    desc: Run Rust generator, determinism, Rust verifier and Python Reader end-to-end
+    cmds:
+      - |
+        set -eu
+        work="$(mktemp -d)"
+        trap 'rm -rf "$work"' EXIT
+        cargo run --locked -- generate --repo . --output "$work/a.rgp"
+        cargo run --locked -- generate --repo . --output "$work/b.rgp"
+        cmp "$work/a.rgp" "$work/b.rgp"
+        cargo run --locked -- verify --artifact "$work/a.rgp" --repo .
+        python3 python/rgp_reader.py --artifact "$work/a.rgp" validate
+        python3 python/rgp_reader.py --artifact "$work/a.rgp" read --path README.md
+
+  check:
+    desc: Run formatting, lint, all tests, and deterministic snapshot smoke test
+    cmds:
+      - task: fmt:check
+      - task: lint
+      - task: test
+      - task: smoke
+
+  generate:
+    desc: Generate a snapshot (override REPO and ARTIFACT as needed)
+    cmds:
+      - cargo run --locked -- generate --repo '{{.REPO}}' --output '{{.ARTIFACT}}'
+
+  verify:
+    desc: Verify a snapshot and its freshness relative to REPO
+    cmds:
+      - cargo run --locked -- verify --artifact '{{.ARTIFACT}}' --repo '{{.REPO}}'
+
+  inspect:
+    desc: Inspect a snapshot's verified manifest
+    cmds:
+      - cargo run --locked -- inspect --artifact '{{.ARTIFACT}}'
+
+  probe:tiny:
+    desc: Generate and independently verify a small transport fixture
+    cmds:
+      - |
+        set -eu
+        work="$(mktemp -d)"
+        trap 'rm -rf "$work"' EXIT
+        python3 scripts/transport_probe.py generate --output-dir "$work" --sizes 102400
+        python3 scripts/transport_probe.py verify --input-dir "$work" --expected "$work/expected.json"
+
+  probe:full:
+    desc: Generate/verify 100KiB, 5MiB, 20MiB, 50MiB transport fixtures (manual; large)
+    cmds:
+      - |
+        set -eu
+        work="$(mktemp -d)"
+        trap 'rm -rf "$work"' EXIT
+        python3 scripts/transport_probe.py generate --output-dir "$work"
+        python3 scripts/transport_probe.py verify --input-dir "$work" --expected "$work/expected.json"
+
+  nix:check:
+    desc: Check the pinned development flake
+    cmds:
+      - nix flake check --no-update-lock-file --show-trace
