@@ -62,3 +62,10 @@ task benchmark:report     # empty default results correctly report HOLD
 ```
 
 No actual Gate B trials have been recorded. **Gate B status: HOLD.**
+
+The [Gate B corpus checkpoint](benchmarks/gate_b/corpus_preparation.json)
+records one verified connected-GitHub download for each of the three pinned
+repositories. The trusted `python/rgp_bootstrap.py` now recognizes either the
+legacy `expected.json` or the benchmark's `provenance.json` co-packed with one
+RGP. Neither co-packed metadata file proves authenticity without an external
+trust anchor. The 72 agent trials and Gate B decision are still outstanding.

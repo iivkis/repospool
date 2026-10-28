@@ -110,3 +110,27 @@ semantic indexing.
 
 The baseline is not a comparison of Git commands against local Python file
 reads: that would conflate transport, model behavior and answer correctness.
+
+## Corpus preparation checkpoint (29 October 2026)
+
+[Preparation run 40767794459](https://github.com/iivkis/rgp/actions/runs/40767794459)
+completed successfully for the **amended** plan. Exact pinned Git snapshots produced
+three fully included RGP files. The artifacts were retrieved once each via the
+connected GitHub `download_workflow_artifact` operation, and their outer ZIP
+contents were restored with the trusted stdlib bootstrap, then opened by the
+trusted Reader. The raw summary is in
+[`benchmarks/gate_b/corpus_preparation.json`](../benchmarks/gate_b/corpus_preparation.json).
+
+| Repo | RGP bytes | Files included | Snapshot completeness |
+| --- | ---: | ---: | --- |
+| `rgp` | 132,217 | 46 | complete |
+| `serde_json` | 260,958 | 93 | complete |
+| `itsdangerous` | 143,569 | 50 | complete |
+
+These checks establish **single-fetch integrity and compatibility** with the
+specific Actions ZIP wrapper. Hashes read from the co-packed `provenance.json`
+are not independent proof of authenticity; the trusted SHA-256 should still be
+confirmed against the workflow run summary before treating it as an external
+trust anchor. Full connector transfer-byte accounting, model tokens, agent
+correctness and the 72 paired trials remain **unmeasured**. Gate B remains
+**HOLD**.

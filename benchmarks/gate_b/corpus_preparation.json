@@ -1,0 +1,48 @@
+{
+  "schema_version": "1.0",
+  "workflow_run": "https://github.com/iivkis/rgp/actions/runs/40767794459",
+  "plan_sha256": "f37052b1e9fb760236d5f227091fd8ead00144f756e69023a60609a126dd9d58",
+  "status": "PREPARED_NOT_BENCHMARKED",
+  "note": "Three connector downloads passed trusted Actions ZIP bootstrap + stdlib Reader using a hash co-packed with the artifact. This is integrity testing only; authentic independent SHA anchoring and the paired agent benchmark remain outstanding.",
+  "artifacts": [
+    {
+      "repository": "itsdangerous",
+      "artifact_id": 12851291291,
+      "actions_zip_bytes": 106347,
+      "rgp_bytes": 143569,
+      "sha256": "c4f60f1b6231df092d60df440f7b8e7f6bcf3d8c9af6672fee656110f5183446",
+      "source_commit": "672971d66a2ef9f85151e53283113f33d642dabd",
+      "plan_sha256": "f37052b1e9fb760236d5f227091fd8ead00144f756e69023a60609a126dd9d58",
+      "included_files": 50,
+      "snapshot_complete": true,
+      "adapter_result": "PASS",
+      "integrity_anchor": "co-packed provenance.json (not independent authenticity proof)"
+    },
+    {
+      "repository": "serde_json",
+      "artifact_id": 12851041881,
+      "actions_zip_bytes": 192270,
+      "rgp_bytes": 260958,
+      "sha256": "7802be3b67bfab094518c76f87f0baec749f4a40dd4458dd14fcc7f3de588a6a",
+      "source_commit": "8c535a260ce561eaab4111aafc29038eb9f77ff3",
+      "plan_sha256": "f37052b1e9fb760236d5f227091fd8ead00144f756e69023a60609a126dd9d58",
+      "included_files": 93,
+      "snapshot_complete": true,
+      "adapter_result": "PASS",
+      "integrity_anchor": "co-packed provenance.json (not independent authenticity proof)"
+    },
+    {
+      "repository": "rgp",
+      "artifact_id": 12850617584,
+      "actions_zip_bytes": 98237,
+      "rgp_bytes": 132217,
+      "sha256": "8e5871336d1aaad32d89e6e1b0e581a836d608e7e3e453b10c32b6d586fcaa6f",
+      "source_commit": "95963a23e2fd1e5eb68a72db3bde849ed7119a7c",
+      "plan_sha256": "f37052b1e9fb760236d5f227091fd8ead00144f756e69023a60609a126dd9d58",
+      "included_files": 46,
+      "snapshot_complete": true,
+      "adapter_result": "PASS",
+      "integrity_anchor": "co-packed provenance.json (not independent authenticity proof)"
+    }
+  ]
+}
