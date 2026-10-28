@@ -13,14 +13,18 @@ agent runs). Real file paths and task rubrics were inspected before the experime
 | Repo | Role | Pinned commit |
 | --- | --- | --- |
 | `iivkis/rgp` | Mixed Rust/Python | `95963a23e2fd1e5eb68a72db3bde849ed7119a7c` |
-| `BurntSushi/memchr` | Rust | `bd6068c30e9074a90c285e47912fa0b047d07597` |
+| `serde-rs/json` | Rust | `8c535a260ce561eaab4111aafc29038eb9f77ff3` |
 | `pallets/itsdangerous` | Python | `672971d66a2ef9f85151e53283113f33d642dabd` |
 
-`memchr` includes large benchmark inputs. A partial RGP snapshot is **not** a
-fully equivalent replacement for the GitHub repository. Inspect the published
-coverage and record any missing paths before conducting paired runs. If the
-product's current 64 MiB ZIP cap prevents generating a useful pack, record
-that as a transport/coverage limitation, not as a successful experiment.
+The first frozen plan (`plan.v1.0.json`) used `BurntSushi/memchr`, but its
+first real pinned-corpus workflow failed with `RESOURCE_LIMIT: compression
+ratio` (run 40767257399). The producer rejected a highly compressible entry
+by design, rather than weakening a ZIP-bomb guardrail. **Before any paired
+agent trial**, the Rust case was amended to `serde-rs/json` and the original
+plan retained as immutable evidence. The original plan's SHA-256 was
+`f71b529f9e7e11d7085b73bd5f0a39cbad936c13d113d5c714ea224e4d785d96`.
+Do not pool trials from the two plans. The current suite has its own digest,
+which must be recorded with every trial set.
 
 ## Preparation
 

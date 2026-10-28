@@ -24,9 +24,9 @@ jobs:
           - repository: rgp
             url: https://github.com/iivkis/rgp.git
             commit: 95963a23e2fd1e5eb68a72db3bde849ed7119a7c
-          - repository: memchr
-            url: https://github.com/BurntSushi/memchr.git
-            commit: bd6068c30e9074a90c285e47912fa0b047d07597
+          - repository: serde_json
+            url: https://github.com/serde-rs/json.git
+            commit: 8c535a260ce561eaab4111aafc29038eb9f77ff3
           - repository: itsdangerous
             url: https://github.com/pallets/itsdangerous.git
             commit: 672971d66a2ef9f85151e53283113f33d642dabd
