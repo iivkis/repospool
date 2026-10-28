@@ -26,4 +26,4 @@ The Git source is a **fixed commit** (default `HEAD` resolved before enumeration
 
 `.github/workflows/ci.yml` runs Rust format, Clippy, tests, Python stdlib tests and a deterministic cross-language snapshot smoke test for pull requests and main. `.github/workflows/security.yml` runs a scheduled dependency audit. Both have read-only repository permissions. Dependabot maintains Cargo and Actions updates. `nix flake check` verifies the flake evaluates; CI exercises `nix develop` as a separate environment smoke test.
 
-See [format specification](docs/RGP_FORMAT_SPEC.md), [security model](docs/RGP_SECURITY_MODEL.md), and [Gate A report](docs/POC_TRANSPORT_REPORT.md). CI alone does **not** demonstrate that any GitHub connector can transport 5–50 MiB without truncation.
+See the [project roadmap](docs/ROADMAP_v1.1.md), [format specification](docs/RGP_FORMAT_SPEC.md), [security model](docs/RGP_SECURITY_MODEL.md), and [Gate A report](docs/POC_TRANSPORT_REPORT.md). CI alone does **not** demonstrate that any GitHub connector can transport 5–50 MiB without truncation.
