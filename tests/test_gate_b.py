@@ -49,6 +49,7 @@ class GateBTest(unittest.TestCase):
         info = validate_plan(PLAN)
         self.assertEqual(info["tasks"], 12)
         self.assertEqual(info["repositories"], 3)
+        self.assertIn("serde_json", {r["id"] for r in PLAN["repositories"]})
         self.assertEqual(len(info["plan_sha256"]), 64)
 
     def test_default_template_cannot_pass(self):

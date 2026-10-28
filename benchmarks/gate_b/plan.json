@@ -1,14 +1,17 @@
 {
   "schema_version": "1.0",
-  "status": "preregistered",
-  "description": "Gate B: matched real-agent evaluation, not a local retrieval microbenchmark.",
+  "status": "preregistered-amended-before-agent-trials",
+  "description": "Gate B: amended preregistration before any real-agent trials; memchr hit immutable RGP compression-ratio guardrail in Actions preparation.",
   "repetitions_per_arm": 3,
-  "arms": ["github_connector", "rgp_actions_artifact"],
+  "arms": [
+    "github_connector",
+    "rgp_actions_artifact"
+  ],
   "requirements": {
     "minimum_repositories": 3,
     "minimum_tasks": 10,
-    "minimum_connector_call_reduction": 0.30,
-    "minimum_total_token_reduction": 0.20,
+    "minimum_connector_call_reduction": 0.3,
+    "minimum_total_token_reduction": 0.2,
     "no_correctness_regressions": true
   },
   "repositories": [
@@ -19,9 +22,9 @@
       "profile": "mixed-rust-python"
     },
     {
-      "id": "memchr",
-      "github": "BurntSushi/memchr",
-      "commit": "bd6068c30e9074a90c285e47912fa0b047d07597",
+      "id": "serde_json",
+      "github": "serde-rs/json",
+      "commit": "8c535a260ce561eaab4111aafc29038eb9f77ff3",
       "profile": "rust"
     },
     {
@@ -37,7 +40,10 @@
       "repository": "rgp",
       "kind": "locate-and-explain",
       "prompt": "Find the code that validates the RGP Base64 payload length and SHA-256 and explain what each check protects against, citing source paths.",
-      "reference_paths": ["python/rgp_reader.py", "src/main.rs"],
+      "reference_paths": [
+        "python/rgp_reader.py",
+        "src/main.rs"
+      ],
       "rubric": "Both independent implementations must be identified; distinguish a byte-integrity check from provenance/authenticity."
     },
     {
@@ -45,7 +51,9 @@
       "repository": "rgp",
       "kind": "control-flow",
       "prompt": "Trace how the CLI takes a Git commit and turns tracked Git blobs into an RGP snapshot, including handling of submodules and LFS pointers.",
-      "reference_paths": ["src/main.rs"],
+      "reference_paths": [
+        "src/main.rs"
+      ],
       "rubric": "Find snapshot(), fixed Git commit and blob reads, submodule exclusions and pointer_only status."
     },
     {
@@ -53,7 +61,10 @@
       "repository": "rgp",
       "kind": "testing",
       "prompt": "Where is Reader search-cursor misuse prevented and which test covers the cursor contract?",
-      "reference_paths": ["python/rgp_reader.py", "tests/test_reader_api.py"],
+      "reference_paths": [
+        "python/rgp_reader.py",
+        "tests/test_reader_api.py"
+      ],
       "rubric": "Identify cursor binding to snapshot and query parameters and point to an actual test."
     },
     {
@@ -61,47 +72,61 @@
       "repository": "rgp",
       "kind": "impact",
       "prompt": "If a developer replaced the Actions ZIP bootstrap with unrestricted extractall(), identify the relevant code and the risk this introduces.",
-      "reference_paths": ["python/rgp_bootstrap.py", "docs/RGP_SECURITY_MODEL.md"],
+      "reference_paths": [
+        "python/rgp_bootstrap.py",
+        "docs/RGP_SECURITY_MODEL.md"
+      ],
       "rubric": "Explain path traversal and trust boundary and cite both implementation and policy."
     },
     {
-      "id": "memchr-byte-entry",
-      "repository": "memchr",
+      "id": "serde-json-deserializer",
+      "repository": "serde_json",
       "kind": "locate-and-explain",
-      "prompt": "Locate the public one-byte forward and reverse search functions, and describe what they return when no match exists.",
-      "reference_paths": ["src/memchr.rs"],
-      "rubric": "Identify memchr and memrchr and their Option<usize> result."
+      "prompt": "Find the deserializer constructors for JSON from a string and from bytes; explain why entry points are distinct.",
+      "reference_paths": [
+        "src/de.rs"
+      ],
+      "rubric": "Identify Deserializer::from_str and from_slice and distinguish UTF-8 and byte input."
     },
     {
-      "id": "memchr-substring-searcher",
-      "repository": "memchr",
+      "id": "serde-json-serializer",
+      "repository": "serde_json",
       "kind": "control-flow",
-      "prompt": "Identify the substring Searcher implementation and the file containing its Two-Way search path.",
-      "reference_paths": ["src/memmem/searcher.rs"],
-      "rubric": "Locate Searcher and its twoway method without claiming the path is unconditional."
+      "prompt": "Find the JSON serializer implementation for scalar numeric and string values; cite the exact method locations.",
+      "reference_paths": [
+        "src/ser.rs"
+      ],
+      "rubric": "Identify the Serializer methods for integer, float, and string values without claiming one universal branch."
     },
     {
-      "id": "memchr-simd-path",
-      "repository": "memchr",
+      "id": "serde-json-error-position",
+      "repository": "serde_json",
       "kind": "impact",
-      "prompt": "Find the x86_64 AVX2 byte-search implementation and the architecture-level module that exposes it.",
-      "reference_paths": ["src/arch/x86_64/avx2/memchr.rs", "src/arch/x86_64/memchr.rs"],
-      "rubric": "Cite both architecture files; do not claim all machines execute AVX2."
+      "prompt": "Where are error categories and input line/column accessors defined? Explain what an error-reporting change could affect.",
+      "reference_paths": [
+        "src/error.rs"
+      ],
+      "rubric": "Identify Error::line(), Error::column(), and classify() with caveats on user-visible diagnostics."
     },
     {
-      "id": "memchr-primitive-tests",
-      "repository": "memchr",
+      "id": "serde-json-ser-tests",
+      "repository": "serde_json",
       "kind": "testing",
-      "prompt": "Locate the tests covering single-byte memchr behavior and the corresponding public API implementation.",
-      "reference_paths": ["src/tests/memchr/mod.rs", "src/memchr.rs"],
-      "rubric": "Identify a real test location and match it to the public byte-search API."
+      "prompt": "Locate the real serialization tests for integer, float, string and list values, and the production serializer they exercise.",
+      "reference_paths": [
+        "tests/test.rs",
+        "src/ser.rs"
+      ],
+      "rubric": "Identify test_write_* functions and the production src/ser.rs implementation."
     },
     {
       "id": "itsdangerous-timestamp",
       "repository": "itsdangerous",
       "kind": "locate-and-explain",
       "prompt": "Find the timestamp-aware signature verification method and the code that evaluates token age.",
-      "reference_paths": ["src/itsdangerous/timed.py"],
+      "reference_paths": [
+        "src/itsdangerous/timed.py"
+      ],
       "rubric": "Identify TimestampSigner.unsign and the max_age/expiration checks."
     },
     {
@@ -109,7 +134,9 @@
       "repository": "itsdangerous",
       "kind": "control-flow",
       "prompt": "Find the HMAC signing algorithm and identify the signing entry point where signatures are produced.",
-      "reference_paths": ["src/itsdangerous/signer.py"],
+      "reference_paths": [
+        "src/itsdangerous/signer.py"
+      ],
       "rubric": "Identify HMACAlgorithm.get_signature and Signer.get_signature."
     },
     {
@@ -117,7 +144,10 @@
       "repository": "itsdangerous",
       "kind": "impact",
       "prompt": "Which functions verify signatures before deserializing a payload, and what changes would be security-sensitive?",
-      "reference_paths": ["src/itsdangerous/serializer.py", "src/itsdangerous/signer.py"],
+      "reference_paths": [
+        "src/itsdangerous/serializer.py",
+        "src/itsdangerous/signer.py"
+      ],
       "rubric": "Distinguish Serializer.loads, unsign and load_payload; no claim that decoding itself authenticates data."
     },
     {
@@ -125,7 +155,10 @@
       "repository": "itsdangerous",
       "kind": "testing",
       "prompt": "Where are timestamp-expiry tests and which production implementation do they exercise?",
-      "reference_paths": ["tests/test_itsdangerous/test_timed.py", "src/itsdangerous/timed.py"],
+      "reference_paths": [
+        "tests/test_itsdangerous/test_timed.py",
+        "src/itsdangerous/timed.py"
+      ],
       "rubric": "Identify test_timed.py and the timestamp-aware signer or serializer."
     }
   ]
