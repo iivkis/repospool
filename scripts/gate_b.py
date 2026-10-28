@@ -177,6 +177,8 @@ def evaluate(plan: dict, results: dict) -> dict:
         result["reasons"].append(f"{len(missing)} paired trials missing (of {result['expected_trials']})")
     row_digests = [r.get("trace_sha256") for r in records.values()]
     if (len(row_digests) != len(trials)
+            or any(not isinstance(value, str) or not sha_pattern.fullmatch(value)
+                   for value in row_digests)
             or len(set(row_digests)) != len(row_digests)
             or set(row_digests) != set(trace_digests)):
         result["reasons"].append("Session trace digests do not match the compiled trial rows")
