@@ -125,3 +125,15 @@ tasks:
     desc: Check the pinned development flake
     cmds:
       - nix flake check --no-update-lock-file --show-trace
+
+  benchmark:plan:
+    desc: Validate pinned Gate B tasks and print preregistration SHA-256
+    cmds:
+      - python3 scripts/gate_b.py plan
+
+  benchmark:report:
+    desc: Evaluate actual paired agent trials; missing trials must remain HOLD
+    vars:
+      TRIALS: '{{.TRIALS | default "benchmarks/gate_b/trials.template.json"}}'
+    cmds:
+      - python3 scripts/gate_b.py report --trials '{{.TRIALS}}'

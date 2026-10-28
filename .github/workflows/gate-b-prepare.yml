@@ -1,0 +1,130 @@
+name: Gate B pinned corpus preparation
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/gate-b-prepare.yml
+      - benchmarks/gate_b/plan.json
+      - scripts/gate_b.py
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Prepare ${{ matrix.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - repository: rgp
+            url: https://github.com/iivkis/rgp.git
+            commit: 95963a23e2fd1e5eb68a72db3bde849ed7119a7c
+          - repository: memchr
+            url: https://github.com/BurntSushi/memchr.git
+            commit: bd6068c30e9074a90c285e47912fa0b047d07597
+          - repository: itsdangerous
+            url: https://github.com/pallets/itsdangerous.git
+            commit: 672971d66a2ef9f85151e53283113f33d642dabd
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Validate preregistered comparison plan
+        run: python3 scripts/gate_b.py plan
+      - name: Download exact pinned source without running its code
+        shell: bash
+        env:
+          SRC_URL: ${{ matrix.url }}
+          SRC_COMMIT: ${{ matrix.commit }}
+        run: |
+          set -euo pipefail
+          git init -q "$RUNNER_TEMP/source"
+          git -C "$RUNNER_TEMP/source" remote add origin "$SRC_URL"
+          git -C "$RUNNER_TEMP/source" -c protocol.version=2 fetch --depth=1 --filter=blob:none origin "$SRC_COMMIT"
+          git -C "$RUNNER_TEMP/source" checkout --detach -q FETCH_HEAD
+          test "$(git -C "$RUNNER_TEMP/source" rev-parse HEAD)" = "$SRC_COMMIT"
+      - name: Verify benchmark reference paths exist at pinned commit
+        env:
+          SRC_REPO: ${{ matrix.repository }}
+          SRC_COMMIT: ${{ matrix.commit }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import subprocess
+          from pathlib import Path
+          from scripts.gate_b import strict_json
+          plan = strict_json(Path("benchmarks/gate_b/plan.json"))
+          tasks = [t for t in plan["tasks"] if t["repository"] == os.environ["SRC_REPO"]]
+          assert tasks, "no benchmark tasks for this repository"
+          for task in tasks:
+              for path in task["reference_paths"]:
+                  subprocess.run(
+                      ["git", "-C", str(Path(os.environ["RUNNER_TEMP"]) / "source"),
+                       "cat-file", "-e", f"{os.environ['SRC_COMMIT']}:{path}"],
+                      check=True,
+                  )
+          print(f"Validated {len(tasks)} pinned task reference sets")
+          PY
+      - name: Produce and verify pinned RGP snapshot
+        shell: bash
+        env:
+          SRC_COMMIT: ${{ matrix.commit }}
+        run: |
+          set -euo pipefail
+          cargo run --locked --release -- generate \
+            --repo "$RUNNER_TEMP/source" --rev "$SRC_COMMIT" \
+            --output "$RUNNER_TEMP/REPO_CONTEXT.rgp"
+          cargo run --locked --release -- verify \
+            --artifact "$RUNNER_TEMP/REPO_CONTEXT.rgp" --repo "$RUNNER_TEMP/source"
+          python3 python/rgp_reader.py --artifact "$RUNNER_TEMP/REPO_CONTEXT.rgp" validate
+      - name: Write transport-independent provenance
+        shell: bash
+        env:
+          SRC_REPO: ${{ matrix.repository }}
+          SRC_COMMIT: ${{ matrix.commit }}
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          from python.rgp_reader import Reader
+          root = Path(os.environ["RUNNER_TEMP"])
+          path = root / "REPO_CONTEXT.rgp"
+          reader = Reader(path)
+          assert reader.manifest["source_commit"] == os.environ["SRC_COMMIT"]
+          plan_path = Path("benchmarks/gate_b/plan.json")
+          from scripts.gate_b import digest_plan, strict_json
+          report = {
+              "repository": os.environ["SRC_REPO"],
+              "source_commit": os.environ["SRC_COMMIT"],
+              "plan_sha256": digest_plan(strict_json(plan_path)),
+              "rgp_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+              "rgp_bytes": path.stat().st_size,
+              "reader_overview": reader.overview(),
+              "transport_verified": False,
+              "note": "CI generation and ZIP integrity only. Agent-side connector download must be measured separately."
+          }
+          (root / "provenance.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              summary.write(f"### {report['repository']}\n")
+              summary.write(f"Pinned commit: `{report['source_commit']}`\n\n")
+              summary.write(f"RGP SHA-256: `{report['rgp_sha256']}`\n\n")
+              summary.write(f"RGP bytes: {report['rgp_bytes']}\n\n")
+              summary.write(f"Snapshot complete: {report['reader_overview']['snapshot_complete']}\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gate-b-${{ matrix.repository }}
+          path: |
+            ${{ runner.temp }}/REPO_CONTEXT.rgp
+            ${{ runner.temp }}/provenance.json
+          retention-days: 7
+          if-no-files-found: error
