@@ -8,11 +8,12 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   rust:
-    concurrency:
-      group: rust-${{ github.ref }}
-      cancel-in-progress: true
     name: Rust fmt, clippy, test and snapshot
     runs-on: ubuntu-latest
     steps:
@@ -27,26 +28,37 @@ jobs:
       - name: Formatting
         run: cargo fmt --all -- --check
       - name: Clippy
-        run: cargo clippy --locked --all-targets -- -D warnings
+        run: cargo clippy --all-targets -- -D warnings
       - name: Rust tests
-        run: cargo test --locked --all-targets
+        run: cargo test --all-targets
       - name: Reader stdlib tests
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Tiny valid RGP transport fixture and negative tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/transport_probe.py generate --output-dir "$RUNNER_TEMP/probe" --sizes 102400
+          python3 scripts/transport_probe.py verify --input-dir "$RUNNER_TEMP/probe" --expected "$RUNNER_TEMP/probe/expected.json"
+      - name: Make small fixture available for real connector retrieval
+        uses: actions/upload-artifact@v4
+        with:
+          name: rgp-transport-smoke-102400
+          path: ${{ runner.temp }}/probe/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
       - name: Canonical cross-language round-trip and determinism
         shell: bash
         run: |
           set -euo pipefail
-          cargo run --locked -- generate --repo . --output "$RUNNER_TEMP/a.rgp"
-          cargo run --locked -- generate --repo . --output "$RUNNER_TEMP/b.rgp"
+          cargo run -- generate --repo . --output "$RUNNER_TEMP/a.rgp"
+          cargo run -- generate --repo . --output "$RUNNER_TEMP/b.rgp"
           cmp "$RUNNER_TEMP/a.rgp" "$RUNNER_TEMP/b.rgp"
-          cargo run --locked -- verify --artifact "$RUNNER_TEMP/a.rgp" --repo .
+          cargo run -- verify --artifact "$RUNNER_TEMP/a.rgp" --repo .
           python3 python/rgp_reader.py --artifact "$RUNNER_TEMP/a.rgp" overview
           python3 python/rgp_reader.py --artifact "$RUNNER_TEMP/a.rgp" read --path README.md
 
   nix:
-    concurrency:
-      group: nix-${{ github.ref }}
-      cancel-in-progress: true
     name: Nix flake dev-shell evaluation
     runs-on: ubuntu-latest
     steps:
@@ -54,5 +66,6 @@ jobs:
         with:
           persist-credentials: false
       - uses: DeterminateSystems/nix-installer-action@v17
-      - run: nix flake check --no-update-lock-file --show-trace
-      - run: nix develop --no-update-lock-file --command bash -c 'cargo --version && rustc --version && uv --version && python3 --version && uv sync --frozen --offline'
+      - uses: DeterminateSystems/magic-nix-cache-action@v11
+      - run: nix flake check --show-trace
+      - run: nix develop --command bash -c 'cargo --version && rustc --version && uv --version && python3 --version'

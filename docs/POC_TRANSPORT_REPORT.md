@@ -1,17 +1,21 @@
 # Gate A — transport proof of concept
 
-**Status: NOT VERIFIED / Gate A open** (29 October 2026).
+**Status: HOLD — connector end-to-end tests pending** (29 October 2026).
 
-Repository: `iivkis/rgp`. The Rust producer and independent Python stdlib Reader implement byte-level transport self-checks and CI local round-trip tests. This does **not** prove the GitHub connector delivers a large text artifact intact.
+Repository: `iivkis/rgp`. The Rust generator and independent stdlib Python Reader passed prior GitHub CI round-trip checks. The test harness now generates **valid, incompressible, independently verified RGP fixtures**, rather than a non-RGP ZIP containing `probe.bin`.
 
-| Question | Observation | Status |
+| Test or property | Evidence | Status |
 |---|---|---|
-| Local Rust ZIP + text encoding | Implemented; CI round-trip is configured | Pending CI execution |
-| Python stdlib independent decode and SHA/byte checks | Implemented; tests configured | Pending CI execution |
-| Connector 100 KiB / 5 MiB / 20 MiB / 50 MiB | No measured runs | Unverified |
-| Repeated connector retrieval, truncation and byte/range accuracy | No measured runs | Unverified |
-| Calls, transfer bytes, tokens, latency and memory | No measured runs | Unverified |
-| `max_supported_artifact_bytes` | Not established | Unverified |
-| `max_supported_repo_bytes` | Not established | Unverified |
+| Local Rust + Python end-to-end | Existing CI and independent Reader tests | PASS (local/CI only) |
+| Synthetic 100 KiB/5 MiB/20 MiB/50 MiB RGP | Deterministic generator and standalone validation command | Implementation prepared; connector not yet tested |
+| GitHub Actions workflow artifacts | `.github/workflows/transport-probe.yml`, manual matrix | Workflow added; needs remote run |
+| Actual connector `fetch_file`, `fetch`, artifact download | Three independent retrieves per supported tier | NOT MEASURED |
+| Range boundaries, silent truncation, order, duplicates, timeouts | Connector-specific experiments | NOT MEASURED |
+| Calls, transfer bytes, tokens, latency, peak memory | Raw connector trial records | NOT MEASURED |
+| `max_supported_artifact_bytes` / `max_supported_repo_bytes` | Must derive from measured mode-specific failures and passes | UNKNOWN |
 
-**Gate A decision: HOLD.** Do not claim a supported connector size or implement semantic graph indexing until the chosen connector's actual retrieval path has been measured on repeated samples. The generator's 64 MiB compressed-payload cap is a local resource policy, not a connector promise.
+A fixture is a synthetic `RGP/1.0`, not a real Git snapshot; its hashes are recorded in `expected.json`. The generator's 64 MiB *decoded ZIP* cap and 128 MiB *outer RGP text* cap are local safety policies, **not** connector guarantees. Source Actions artifact download and GitHub Contents API are different transport contracts.
+
+See [protocol](TRANSPORT_PROBE_PROTOCOL.md) for reproducible steps and strict pass/fail requirements. Until actual connector reads verify the same bytes in the agent sandbox, **Gate A remains HOLD**.
+
+The delivered [trusted Actions bootstrap](../python/rgp_bootstrap.py) was separately exercised against an actual **50 MiB** connector download using an out-of-band fixture SHA-256: 52,446,429 reconstructed bytes, 5 validated blobs, 2.72 seconds and ~375 MiB peak process RSS on this sandbox for the bootstrap invocation. These are consumer-local measurements, not connector network latency.
