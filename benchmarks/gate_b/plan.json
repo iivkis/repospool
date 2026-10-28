@@ -1,0 +1,132 @@
+{
+  "schema_version": "1.0",
+  "status": "preregistered",
+  "description": "Gate B: matched real-agent evaluation, not a local retrieval microbenchmark.",
+  "repetitions_per_arm": 3,
+  "arms": ["github_connector", "rgp_actions_artifact"],
+  "requirements": {
+    "minimum_repositories": 3,
+    "minimum_tasks": 10,
+    "minimum_connector_call_reduction": 0.30,
+    "minimum_total_token_reduction": 0.20,
+    "no_correctness_regressions": true
+  },
+  "repositories": [
+    {
+      "id": "rgp",
+      "github": "iivkis/rgp",
+      "commit": "95963a23e2fd1e5eb68a72db3bde849ed7119a7c",
+      "profile": "mixed-rust-python"
+    },
+    {
+      "id": "memchr",
+      "github": "BurntSushi/memchr",
+      "commit": "bd6068c30e9074a90c285e47912fa0b047d07597",
+      "profile": "rust"
+    },
+    {
+      "id": "itsdangerous",
+      "github": "pallets/itsdangerous",
+      "commit": "672971d66a2ef9f85151e53283113f33d642dabd",
+      "profile": "python"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "rgp-transport-hash",
+      "repository": "rgp",
+      "kind": "locate-and-explain",
+      "prompt": "Find the code that validates the RGP Base64 payload length and SHA-256 and explain what each check protects against, citing source paths.",
+      "reference_paths": ["python/rgp_reader.py", "src/main.rs"],
+      "rubric": "Both independent implementations must be identified; distinguish a byte-integrity check from provenance/authenticity."
+    },
+    {
+      "id": "rgp-git-snapshot",
+      "repository": "rgp",
+      "kind": "control-flow",
+      "prompt": "Trace how the CLI takes a Git commit and turns tracked Git blobs into an RGP snapshot, including handling of submodules and LFS pointers.",
+      "reference_paths": ["src/main.rs"],
+      "rubric": "Find snapshot(), fixed Git commit and blob reads, submodule exclusions and pointer_only status."
+    },
+    {
+      "id": "rgp-search-cursor",
+      "repository": "rgp",
+      "kind": "testing",
+      "prompt": "Where is Reader search-cursor misuse prevented and which test covers the cursor contract?",
+      "reference_paths": ["python/rgp_reader.py", "tests/test_reader_api.py"],
+      "rubric": "Identify cursor binding to snapshot and query parameters and point to an actual test."
+    },
+    {
+      "id": "rgp-trust-boundary",
+      "repository": "rgp",
+      "kind": "impact",
+      "prompt": "If a developer replaced the Actions ZIP bootstrap with unrestricted extractall(), identify the relevant code and the risk this introduces.",
+      "reference_paths": ["python/rgp_bootstrap.py", "docs/RGP_SECURITY_MODEL.md"],
+      "rubric": "Explain path traversal and trust boundary and cite both implementation and policy."
+    },
+    {
+      "id": "memchr-byte-entry",
+      "repository": "memchr",
+      "kind": "locate-and-explain",
+      "prompt": "Locate the public one-byte forward and reverse search functions, and describe what they return when no match exists.",
+      "reference_paths": ["src/memchr.rs"],
+      "rubric": "Identify memchr and memrchr and their Option<usize> result."
+    },
+    {
+      "id": "memchr-substring-searcher",
+      "repository": "memchr",
+      "kind": "control-flow",
+      "prompt": "Identify the substring Searcher implementation and the file containing its Two-Way search path.",
+      "reference_paths": ["src/memmem/searcher.rs"],
+      "rubric": "Locate Searcher and its twoway method without claiming the path is unconditional."
+    },
+    {
+      "id": "memchr-simd-path",
+      "repository": "memchr",
+      "kind": "impact",
+      "prompt": "Find the x86_64 AVX2 byte-search implementation and the architecture-level module that exposes it.",
+      "reference_paths": ["src/arch/x86_64/avx2/memchr.rs", "src/arch/x86_64/memchr.rs"],
+      "rubric": "Cite both architecture files; do not claim all machines execute AVX2."
+    },
+    {
+      "id": "memchr-primitive-tests",
+      "repository": "memchr",
+      "kind": "testing",
+      "prompt": "Locate the tests covering single-byte memchr behavior and the corresponding public API implementation.",
+      "reference_paths": ["src/tests/memchr/mod.rs", "src/memchr.rs"],
+      "rubric": "Identify a real test location and match it to the public byte-search API."
+    },
+    {
+      "id": "itsdangerous-timestamp",
+      "repository": "itsdangerous",
+      "kind": "locate-and-explain",
+      "prompt": "Find the timestamp-aware signature verification method and the code that evaluates token age.",
+      "reference_paths": ["src/itsdangerous/timed.py"],
+      "rubric": "Identify TimestampSigner.unsign and the max_age/expiration checks."
+    },
+    {
+      "id": "itsdangerous-hmac",
+      "repository": "itsdangerous",
+      "kind": "control-flow",
+      "prompt": "Find the HMAC signing algorithm and identify the signing entry point where signatures are produced.",
+      "reference_paths": ["src/itsdangerous/signer.py"],
+      "rubric": "Identify HMACAlgorithm.get_signature and Signer.get_signature."
+    },
+    {
+      "id": "itsdangerous-deserialization",
+      "repository": "itsdangerous",
+      "kind": "impact",
+      "prompt": "Which functions verify signatures before deserializing a payload, and what changes would be security-sensitive?",
+      "reference_paths": ["src/itsdangerous/serializer.py", "src/itsdangerous/signer.py"],
+      "rubric": "Distinguish Serializer.loads, unsign and load_payload; no claim that decoding itself authenticates data."
+    },
+    {
+      "id": "itsdangerous-expiry-tests",
+      "repository": "itsdangerous",
+      "kind": "testing",
+      "prompt": "Where are timestamp-expiry tests and which production implementation do they exercise?",
+      "reference_paths": ["tests/test_itsdangerous/test_timed.py", "src/itsdangerous/timed.py"],
+      "rubric": "Identify test_timed.py and the timestamp-aware signer or serializer."
+    }
+  ]
+}
