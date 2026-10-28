@@ -27,25 +27,19 @@ jobs:
       - name: Formatting
         run: cargo fmt --all -- --check
       - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
-      - name: Export generated Cargo lockfile for pinning
-        uses: actions/upload-artifact@v4
-        with:
-          name: cargo-lock
-          path: Cargo.lock
-          retention-days: 1
+        run: cargo clippy --locked --all-targets -- -D warnings
       - name: Rust tests
-        run: cargo test --all-targets
+        run: cargo test --locked --all-targets
       - name: Reader stdlib tests
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v
       - name: Canonical cross-language round-trip and determinism
         shell: bash
         run: |
           set -euo pipefail
-          cargo run -- generate --repo . --output "$RUNNER_TEMP/a.rgp"
-          cargo run -- generate --repo . --output "$RUNNER_TEMP/b.rgp"
+          cargo run --locked -- generate --repo . --output "$RUNNER_TEMP/a.rgp"
+          cargo run --locked -- generate --repo . --output "$RUNNER_TEMP/b.rgp"
           cmp "$RUNNER_TEMP/a.rgp" "$RUNNER_TEMP/b.rgp"
-          cargo run -- verify --artifact "$RUNNER_TEMP/a.rgp" --repo .
+          cargo run --locked -- verify --artifact "$RUNNER_TEMP/a.rgp" --repo .
           python3 python/rgp_reader.py --artifact "$RUNNER_TEMP/a.rgp" overview
           python3 python/rgp_reader.py --artifact "$RUNNER_TEMP/a.rgp" read --path README.md
 
@@ -60,11 +54,5 @@ jobs:
         with:
           persist-credentials: false
       - uses: DeterminateSystems/nix-installer-action@v17
-      - run: nix flake check --show-trace
-      - name: Export generated Nix lockfile for pinning
-        uses: actions/upload-artifact@v4
-        with:
-          name: flake-lock
-          path: flake.lock
-          retention-days: 1
-      - run: nix develop --command bash -c 'cargo --version && rustc --version && uv --version && python3 --version'
+      - run: nix flake check --no-update-lock-file --show-trace
+      - run: nix develop --no-update-lock-file --command bash -c 'cargo --version && rustc --version && uv --version && python3 --version && uv sync --frozen --offline'
