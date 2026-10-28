@@ -8,12 +8,11 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   rust:
+    concurrency:
+      group: rust-${{ github.ref }}
+      cancel-in-progress: true
     name: Rust fmt, clippy, test and snapshot
     runs-on: ubuntu-latest
     steps:
@@ -51,6 +50,9 @@ jobs:
           python3 python/rgp_reader.py --artifact "$RUNNER_TEMP/a.rgp" read --path README.md
 
   nix:
+    concurrency:
+      group: nix-${{ github.ref }}
+      cancel-in-progress: true
     name: Nix flake dev-shell evaluation
     runs-on: ubuntu-latest
     steps:
