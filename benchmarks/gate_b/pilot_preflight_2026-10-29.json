@@ -46,5 +46,85 @@
     "connector_network_latency_ms": null,
     "independent_answer_grades": null
   },
-  "caveats": "No isolated model run. Download and source fetch are not paired trials; no efficiency, answer accuracy, or token reductions claimed. Hashes from the user-controlled GitHub repo are integrity anchors, not cryptographic author signatures."
+  "caveats": "No isolated model run. Download and source fetch are not paired trials; no efficiency, answer accuracy, or token reductions claimed. Hashes from the user-controlled GitHub repo are integrity anchors, not cryptographic author signatures.",
+  "additional_repositories": [
+    {
+      "repository": "serde-rs/json",
+      "source_commit": "8c535a260ce561eaab4111aafc29038eb9f77ff3",
+      "actions_artifact_id": 12851041881,
+      "rgp_bytes": 260958,
+      "rgp_sha256": "7802be3b67bfab094518c76f87f0baec749f4a40dd4458dd14fcc7f3de588a6a",
+      "included_files": 93,
+      "snapshot_complete": true,
+      "independent_git_blob_checks": [
+        {
+          "path": "src/de.rs",
+          "sha1": "d353b2d3ecb3146ef7f3ceb5a05a8d3a47144ea9",
+          "bytes": 86855,
+          "match": true
+        },
+        {
+          "path": "src/ser.rs",
+          "sha1": "053f95a29080e58316d7d52011f97fe02424387f",
+          "bytes": 63877,
+          "match": true
+        },
+        {
+          "path": "src/error.rs",
+          "sha1": "b74f4449eff68917bf2f4149e4cb971ce48b8df0",
+          "bytes": 17221,
+          "match": true
+        },
+        {
+          "path": "tests/test.rs",
+          "sha1": "b8b084e7597404f536b3d04d17bfec7070be24ec",
+          "bytes": 79904,
+          "match": true
+        }
+      ]
+    },
+    {
+      "repository": "pallets/itsdangerous",
+      "source_commit": "672971d66a2ef9f85151e53283113f33d642dabd",
+      "actions_artifact_id": 12851291291,
+      "rgp_bytes": 143569,
+      "rgp_sha256": "c4f60f1b6231df092d60df440f7b8e7f6bcf3d8c9af6672fee656110f5183446",
+      "included_files": 50,
+      "snapshot_complete": true,
+      "independent_git_blob_checks": [
+        {
+          "path": "src/itsdangerous/timed.py",
+          "sha1": "52deeeab44f09c1c7f54438c9f48f54d61366085",
+          "bytes": 8087,
+          "match": true
+        },
+        {
+          "path": "src/itsdangerous/signer.py",
+          "sha1": "e324dc03da90d9002200b68088f501df62777cd6",
+          "bytes": 9647,
+          "match": true
+        },
+        {
+          "path": "src/itsdangerous/serializer.py",
+          "sha1": "5ed949cabed57d878d13917ab1e0ae7d05ae15fc",
+          "bytes": 15563,
+          "match": true
+        },
+        {
+          "path": "tests/test_itsdangerous/test_timed.py",
+          "sha1": "a4c1741f96536d6d6e0aa9b6670e8b61a98190b3",
+          "bytes": 3807,
+          "match": true
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "repositories_verified": 3,
+    "git_blobs_verified": 12,
+    "git_blob_mismatches": 0,
+    "verified_via": "GitHub Actions artifact downloads, Python stdlib Reader, pinned GitHub fetch_file blob SHAs",
+    "gate_b_status": "HOLD",
+    "eligible_agent_trials": 0
+  }
 }
