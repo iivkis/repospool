@@ -19,6 +19,10 @@ MAX_FILE = 16 * 1024 * 1024
 MAX_ENTRIES = 50_000
 MAX_RATIO = 200
 MAX_RESULT = 256 * 1024
+MAX_MANIFEST = 16 * 1024 * 1024
+MAX_CURSOR = 8192
+MAX_PATH_BYTES = 4096
+MAX_OVERVIEW_EXCLUSIONS = 100
 HEX = re.compile(r"[0-9a-f]{64}\Z")
 COMMIT = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
 EXCLUSION_REASONS = frozenset({"self_artifact", "sensitive_path", "submodule_unavailable", "size_limit"})
@@ -39,6 +43,7 @@ def _safe_path(path: str) -> bool:
     return (
         isinstance(path, str)
         and bool(path)
+        and len(path.encode("utf-8")) <= MAX_PATH_BYTES
         and not path.startswith("/")
         and "\\" not in path
         and not any(unicodedata.category(c) == "Cc" for c in path)
@@ -118,7 +123,7 @@ class Reader:
                     _require(name.lower() not in names, "UNSAFE_PATH", "duplicate ZIP path")
                     names.add(name.lower())
                     _require(name == "manifest.json" or name.startswith("files/"), "UNSAFE_PATH", "unexpected ZIP member")
-                    _require(info.file_size <= (MAX_TOTAL if name == "manifest.json" else MAX_FILE), "RESOURCE_LIMIT", "oversized ZIP member")
+                    _require(info.file_size <= (MAX_MANIFEST if name == "manifest.json" else MAX_FILE), "RESOURCE_LIMIT", "oversized ZIP member")
                     _require(info.file_size <= max(4096, info.compress_size * MAX_RATIO), "RESOURCE_LIMIT", "compression ratio")
                     total += info.file_size
                     _require(total <= MAX_TOTAL, "RESOURCE_LIMIT", "expanded ZIP size")
@@ -190,35 +195,85 @@ class Reader:
         self._files = records
 
     def validate(self) -> dict:
+        """All transport, manifest and content checks completed during construction."""
         return {"valid": True, "input_tree_digest": self.manifest["input_tree_digest"], "file_count": len(self._files)}
+
+    def _snapshot_summary(self) -> dict:
+        pointer_only = sum(entry["status"] == "pointer_only" for entry in self._files.values())
+        by_reason = {reason: 0 for reason in sorted(EXCLUSION_REASONS)}
+        for excluded in self.manifest["excluded"]:
+            by_reason[excluded["reason"]] += 1
+        # Self-referential output is deliberately outside the snapshot's input scope.
+        unavailable = sum(count for reason, count in by_reason.items() if reason != "self_artifact")
+        complete = pointer_only == 0 and unavailable == 0
+        return {
+            "status": "available" if complete else "partial",
+            "snapshot_complete": complete,
+            "included_files": len(self._files) - pointer_only,
+            "pointer_only_files": pointer_only,
+            "excluded_files": unavailable,
+            "self_artifact_excluded": by_reason["self_artifact"],
+            "excluded_by_reason": {reason: count for reason, count in by_reason.items() if count},
+            "included_bytes": sum(entry["size"] for entry in self._files.values() if entry["status"] == "included"),
+        }
 
     def overview(self) -> dict:
         return {
             "source_commit": self.manifest["source_commit"],
             "input_tree_digest": self.manifest["input_tree_digest"],
             "file_count": len(self._files),
-            "excluded": self.manifest["excluded"],
-            "snapshot_complete": not self.manifest["excluded"] and all(e["status"] == "included" for e in self._files.values()),
+            "excluded": self.manifest["excluded"][:MAX_OVERVIEW_EXCLUSIONS],
+            "excluded_truncated": len(self.manifest["excluded"]) > MAX_OVERVIEW_EXCLUSIONS,
+            **self._snapshot_summary(),
             "index_coverage": "not_indexed",
             "graph_coverage": "not_indexed",
         }
 
     def coverage(self, scope: str = "snapshot") -> dict:
         if scope == "snapshot":
-            return self.overview()
-        if scope in ("index", "graph", "investigation"):
-            return {"scope": scope, "status": "not_indexed" if scope != "investigation" else "unknown"}
+            return {"scope": "snapshot", **self.overview()}
+        if scope in ("index", "graph"):
+            return {"scope": scope, "status": "not_indexed", "reason": "no analyzer output in RGP 1.0"}
+        if scope == "investigation":
+            return {"scope": "investigation", "status": "unknown", "reason": "Reader cannot observe agent comprehension"}
         raise RgpError("UNSUPPORTED_FORMAT", "unknown coverage scope")
 
+    def _cursor_context(self, operation: str, parameters: object) -> str:
+        raw = json.dumps([self.manifest["input_tree_digest"], operation, parameters], ensure_ascii=False, separators=(",", ":"))
+        return _digest(raw.encode("utf-8"))[:32]
+
+    def _make_cursor(self, operation: str, context: str, path: str, line: int) -> str:
+        state = json.dumps([1, operation, context, path, line], ensure_ascii=False, separators=(",", ":"))
+        return base64.urlsafe_b64encode(state.encode("utf-8")).decode("ascii").rstrip("=")
+
+    def _read_cursor(self, token: str | None, operation: str, context: str) -> tuple[str, int] | None:
+        if token is None:
+            return None
+        _require(isinstance(token, str) and 0 < len(token) <= MAX_CURSOR and bool(re.fullmatch(r"[A-Za-z0-9_-]+", token)), "UNSUPPORTED_FORMAT", "invalid cursor")
+        try:
+            raw = base64.b64decode(token + "=" * (-len(token) % 4), altchars=b"-_", validate=True)
+            state = json.loads(raw)
+        except (ValueError, UnicodeError, base64.binascii.Error) as exc:
+            raise RgpError("UNSUPPORTED_FORMAT", "malformed cursor") from exc
+        _require(isinstance(state, list) and len(state) == 5 and state[:3] == [1, operation, context], "UNSUPPORTED_FORMAT", "cursor does not match query or snapshot")
+        _, _, _, path, line = state
+        _require(isinstance(path, str) and path in self._files and type(line) is int and line >= 0, "UNSUPPORTED_FORMAT", "invalid cursor position")
+        _require(self._make_cursor(operation, context, path, line) == token, "UNSUPPORTED_FORMAT", "noncanonical cursor")
+        return path, line
+
     def tree(self, prefix: str = "", limit: int = 200, cursor: str | None = None) -> dict:
-        _require(isinstance(prefix, str) and (cursor is None or isinstance(cursor, str)), "UNSUPPORTED_FORMAT", "tree cursor")
+        _require(isinstance(prefix, str) and len(prefix.encode("utf-8")) <= 4096, "UNSUPPORTED_FORMAT", "tree prefix")
         _require(type(limit) is int and 0 < limit <= 200, "RESOURCE_LIMIT", "tree limit")
-        paths = [p for p in self._files if p.startswith(prefix) and (cursor is None or p > cursor)]
+        context = self._cursor_context("tree", prefix)
+        position = self._read_cursor(cursor, "tree", context)
+        _require(position is None or (position[1] == 0 and position[0].startswith(prefix)), "UNSUPPORTED_FORMAT", "tree cursor position")
+        paths = [p for p in self._files if p.startswith(prefix) and (position is None or p > position[0])]
         page = paths[:limit]
-        return {"paths": page, "next_cursor": page[-1] if len(paths) > limit else None}
+        next_cursor = self._make_cursor("tree", context, page[-1], 0) if len(paths) > limit else None
+        return {"paths": page, "next_cursor": next_cursor, "snapshot_status": self._snapshot_summary()["status"]}
 
     def read(self, path: str, start_line: int | None = None, end_line: int | None = None) -> dict:
-        _require(path in self._files, "PARTIAL_SNAPSHOT", "file not present in snapshot")
+        _require(isinstance(path, str) and path in self._files, "PARTIAL_SNAPSHOT", "file not present in snapshot")
         _require(start_line is None or (type(start_line) is int and start_line >= 1), "UNSUPPORTED_FORMAT", "start line")
         _require(end_line is None or (type(end_line) is int and end_line >= 0), "UNSUPPORTED_FORMAT", "end line")
         entry = self._files[path]
@@ -227,7 +282,7 @@ class Reader:
             text = data.decode("utf-8")
         except UnicodeDecodeError:
             _require(start_line is None and end_line is None, "UNSUPPORTED_FORMAT", "no line coordinates for binary")
-            _require(len(data) <= MAX_RESULT, "RESOURCE_LIMIT", "binary output exceeds cap")
+            _require(((len(data) + 2) // 3) * 4 <= MAX_RESULT, "RESOURCE_LIMIT", "binary output exceeds cap")
             return {"path": path, "encoding": "base64", "content": base64.b64encode(data).decode("ascii"), "status": entry["status"]}
         lines = text.splitlines(keepends=True)
         start = 1 if start_line is None else start_line
@@ -237,29 +292,37 @@ class Reader:
         _require(len(content.encode("utf-8")) <= MAX_RESULT, "RESOURCE_LIMIT", "result too large")
         return {"path": path, "encoding": "utf-8", "content": content, "start_line": start, "end_line": end, "status": entry["status"]}
 
-    def search(self, query: str, paths: list[str] | None = None, limit: int = 50, cursor: int | None = None) -> dict:
-        _require(isinstance(query, str) and 0 < len(query) <= 1024, "RESOURCE_LIMIT", "search query")
+    def search(self, query: str, paths: list[str] | None = None, limit: int = 50, cursor: str | None = None) -> dict:
+        _require(isinstance(query, str) and 0 < len(query.encode("utf-8")) <= 1024, "RESOURCE_LIMIT", "search query")
         _require(type(limit) is int and 0 < limit <= 100, "RESOURCE_LIMIT", "search limit")
-        _require(cursor is None or (type(cursor) is int and cursor >= 0), "UNSUPPORTED_FORMAT", "cursor")
-        _require(paths is None or (isinstance(paths, list) and all(isinstance(p, str) for p in paths)), "UNSUPPORTED_FORMAT", "paths")
-        selected = sorted(self._files) if paths is None else sorted(set(paths) & self._files.keys())
-        offset = cursor or 0
-        seen = 0
+        _require(paths is None or (isinstance(paths, list) and len(paths) <= MAX_ENTRIES and all(isinstance(p, str) for p in paths)), "UNSUPPORTED_FORMAT", "paths")
+        if paths is not None:
+            _require(all(p in self._files for p in paths), "PARTIAL_SNAPSHOT", "requested search path is not in snapshot")
+        selected = sorted(self._files) if paths is None else sorted(set(paths))
+        context = self._cursor_context("search", [query, selected if paths is not None else None])
+        position = self._read_cursor(cursor, "search", context)
+        _require(position is None or (position[0] in selected and position[1] >= 1), "UNSUPPORTED_FORMAT", "search cursor position")
         page = []
+        last = None
         for path in selected:
+            if position is not None and path < position[0]:
+                continue
             try:
                 text = self._blobs[self._files[path]["blob"]].decode("utf-8")
             except UnicodeDecodeError:
                 continue
             for number, line in enumerate(text.splitlines(), start=1):
+                if position is not None and path == position[0] and number <= position[1]:
+                    continue
                 if query not in line:
                     continue
-                if seen >= offset:
-                    page.append({"path": path, "line": number, "excerpt": line[:512]})
-                    if len(page) > limit:
-                        return {"matches": page[:limit], "next_cursor": offset + limit}
-                seen += 1
-        return {"matches": page, "next_cursor": None}
+                if len(page) >= limit:
+                    return {"matches": page, "next_cursor": self._make_cursor("search", context, last[0], last[1]), "snapshot_status": self._snapshot_summary()["status"]}
+                # Excerpt is bounded in UTF-8 bytes, not Unicode code points.
+                excerpt = line.encode("utf-8")[:512].decode("utf-8", errors="ignore")
+                page.append({"path": path, "line": number, "excerpt": excerpt})
+                last = (path, number)
+        return {"matches": page, "next_cursor": None, "snapshot_status": self._snapshot_summary()["status"]}
 
 
 def main() -> None:
@@ -268,14 +331,21 @@ def main() -> None:
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("overview")
     commands.add_parser("validate")
+    coverage = commands.add_parser("coverage")
+    coverage.add_argument("--scope", choices=("snapshot", "index", "graph", "investigation"), default="snapshot")
     tree = commands.add_parser("tree")
     tree.add_argument("--prefix", default="")
+    tree.add_argument("--limit", type=int, default=200)
+    tree.add_argument("--cursor")
     read = commands.add_parser("read")
     read.add_argument("--path", required=True)
     read.add_argument("--start-line", type=int)
     read.add_argument("--end-line", type=int)
     search = commands.add_parser("search")
     search.add_argument("query")
+    search.add_argument("--path", action="append", dest="paths")
+    search.add_argument("--limit", type=int, default=50)
+    search.add_argument("--cursor")
     args = parser.parse_args()
     try:
         reader = Reader(args.artifact)
@@ -283,12 +353,14 @@ def main() -> None:
             result = reader.overview()
         elif args.command == "validate":
             result = reader.validate()
+        elif args.command == "coverage":
+            result = reader.coverage(args.scope)
         elif args.command == "tree":
-            result = reader.tree(args.prefix)
+            result = reader.tree(args.prefix, args.limit, args.cursor)
         elif args.command == "read":
             result = reader.read(args.path, args.start_line, args.end_line)
         else:
-            result = reader.search(args.query)
+            result = reader.search(args.query, args.paths, args.limit, args.cursor)
         print(json.dumps(result, ensure_ascii=False, indent=2))
     except RgpError as exc:
         parser.exit(2, f"{exc}\n")

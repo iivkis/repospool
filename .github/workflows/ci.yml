@@ -33,6 +33,13 @@ jobs:
         run: cargo test --all-targets
       - name: Reader stdlib tests
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Reader bounded API and CLI smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_reader_api.py' -v
+          python3 python/rgp_reader.py --artifact tests/fixtures/v1/valid-mixed.rgp coverage --scope snapshot
+          python3 python/rgp_reader.py --artifact tests/fixtures/v1/valid-mixed.rgp search 'return 42' --limit 1
       - name: Immutable golden fixtures and Rust/Python verifier parity
         shell: bash
         run: |
