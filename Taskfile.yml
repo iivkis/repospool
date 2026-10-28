@@ -50,6 +50,13 @@ tasks:
       - python3 scripts/golden_fixtures.py check
       - python3 -m unittest discover -s tests -p 'test_*.py' -q
 
+  reader:smoke:
+    desc: Exercise trusted Reader CLI pagination, coverage and bounded API tests
+    cmds:
+      - python3 -m unittest discover -s tests -p 'test_reader_api.py' -v
+      - python3 python/rgp_reader.py --artifact tests/fixtures/v1/valid-mixed.rgp coverage --scope snapshot
+      - python3 python/rgp_reader.py --artifact tests/fixtures/v1/valid-mixed.rgp search 'return 42' --limit 1
+
   contract:cross:
     desc: Build Rust verifier and check positive/negative golden fixtures against both implementations
     cmds:

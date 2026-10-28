@@ -12,6 +12,7 @@ use zip::{write::FileOptions, CompressionMethod, DateTime, ZipArchive, ZipWriter
 
 const MAX_ARTIFACT: usize = 64 * 1024 * 1024;
 const MAX_FILE: usize = 16 * 1024 * 1024;
+const MAX_MANIFEST: usize = 16 * 1024 * 1024;
 const MAX_TOTAL: usize = 128 * 1024 * 1024;
 const MAX_ENTRIES: usize = 50_000;
 const MAX_RATIO: u64 = 200;
@@ -79,7 +80,7 @@ fn sha(bytes: &[u8]) -> String {
 
 fn validate_path(path: &str) -> Result<()> {
     ensure!(
-        !path.is_empty() && !path.starts_with('/'),
+        !path.is_empty() && path.len() <= 4096 && !path.starts_with('/'),
         "UNSAFE_PATH: absolute or empty path"
     );
     ensure!(
@@ -375,8 +376,13 @@ fn verify(path: &Path) -> Result<Manifest> {
             name == "manifest.json" || name.starts_with("files/"),
             "UNSAFE_PATH: unexpected ZIP entry"
         );
+        let member_limit = if name == "manifest.json" {
+            MAX_MANIFEST
+        } else {
+            MAX_FILE
+        };
         ensure!(
-            entry.size() <= MAX_FILE as u64 || name == "manifest.json",
+            entry.size() <= member_limit as u64,
             "RESOURCE_LIMIT: single ZIP entry"
         );
         ensure!(

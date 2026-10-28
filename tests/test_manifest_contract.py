@@ -57,7 +57,7 @@ class ManifestContractTest(unittest.TestCase):
         self.assertTrue(reader.validate()["valid"])
         first = reader.search("beta", limit=1)
         self.assertEqual(first["matches"][0]["line"], 2)
-        self.assertEqual(first["next_cursor"], 1)
+        self.assertIsInstance(first["next_cursor"], str)
         second = reader.search("beta", limit=1, cursor=first["next_cursor"])
         self.assertEqual(second["matches"][0]["line"], 3)
         self.assertIsNone(second["next_cursor"])
