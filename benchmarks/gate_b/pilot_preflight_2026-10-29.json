@@ -1,0 +1,50 @@
+{
+  "schema_version": "1.0",
+  "kind": "gate_b_transport_preflight_not_agent_trial",
+  "status": "PASS_TRANSPORT_ONLY",
+  "measured_date_utc": "2026-10-29",
+  "repository": "iivkis/rgp",
+  "source_commit": "95963a23e2fd1e5eb68a72db3bde849ed7119a7c",
+  "workflow_run_url": "https://github.com/iivkis/rgp/actions/runs/40767794459",
+  "actions_artifact_id": 12850617584,
+  "rgp_bytes": 132217,
+  "rgp_sha256": "8e5871336d1aaad32d89e6e1b0e581a836d608e7e3e453b10c32b6d586fcaa6f",
+  "input_tree_digest": "b75e29c63295b66570e750595d12ff02ae9cae614eb9cf20cc0ca989365d2862",
+  "snapshot_complete": true,
+  "included_files": 46,
+  "independent_git_blob_checks": [
+    {
+      "path": "src/main.rs",
+      "sha1": "3022324de8b533dfc8927029e9cfc3dba286714f",
+      "bytes": 18103,
+      "match": true
+    },
+    {
+      "path": "python/rgp_reader.py",
+      "sha1": "cb11bd04c346309c038c38e3e5accb540c341139",
+      "bytes": 20515,
+      "match": true
+    },
+    {
+      "path": "README.md",
+      "sha1": "879b1ed75c06070b65b340822c1e94367a247a2a",
+      "bytes": 4915,
+      "match": true
+    },
+    {
+      "path": "python/rgp_bootstrap.py",
+      "sha1": "c27ccb09546489da7dca16413c86590a0ca16bee",
+      "bytes": 5253,
+      "match": true
+    }
+  ],
+  "result_note": "Git blob SHA-1 computed over 'blob <length>\\0' + recovered raw bytes; independently compared against pinned GitHub fetch_file blob SHAs.",
+  "scoring": {
+    "eligible_agent_trials": 0,
+    "total_required_agent_trials": 72,
+    "model_tokens": null,
+    "connector_network_latency_ms": null,
+    "independent_answer_grades": null
+  },
+  "caveats": "No isolated model run. Download and source fetch are not paired trials; no efficiency, answer accuracy, or token reductions claimed. Hashes from the user-controlled GitHub repo are integrity anchors, not cryptographic author signatures."
+}

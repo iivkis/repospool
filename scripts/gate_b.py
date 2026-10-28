@@ -11,6 +11,7 @@ import argparse
 import hashlib
 import json
 import math
+import re
 import statistics
 from pathlib import Path
 
@@ -130,6 +131,20 @@ def evaluate(plan: dict, results: dict) -> dict:
         result["reasons"].append("Fixed positive token budget is missing")
     if results.get("transport_verified") is not True:
         result["reasons"].append("Actual RGP connector transport has not been verified for these trials")
+    # Structural trace provenance. This is NOT authenticity: external audit of
+    # provider usage, the answer, and the actual connector events remains required.
+    trace_map = results.get("trace_sha256_by_filename")
+    if results.get("collector") != "gate_b_capture/1.0" or not isinstance(trace_map, dict):
+        result["reasons"].append("Uncollected score table: original session traces required")
+        trace_map = {}
+    sha_pattern = re.compile(r"[0-9a-f]{64}\\Z")
+    trace_digests = list(trace_map.values())
+    if (len(trace_digests) != len(trials)
+            or any(not isinstance(name, str) or not name.endswith(".json")
+                   or not isinstance(value, str) or not sha_pattern.fullmatch(value)
+                   for name, value in trace_map.items())
+            or len(set(trace_digests)) != len(trace_digests)):
+        result["reasons"].append("Session trace map missing, malformed or nonunique")
 
     repo_by_id = {r["id"]: r for r in plan["repositories"]}
     tasks_by_id = {t["id"]: t for t in plan["tasks"]}
@@ -160,6 +175,11 @@ def evaluate(plan: dict, results: dict) -> dict:
                for arm in ARMS if (tid, rep, arm) not in records]
     if missing:
         result["reasons"].append(f"{len(missing)} paired trials missing (of {result['expected_trials']})")
+    row_digests = [r.get("trace_sha256") for r in records.values()]
+    if (len(row_digests) != len(trials)
+            or len(set(row_digests)) != len(row_digests)
+            or set(row_digests) != set(trace_digests)):
+        result["reasons"].append("Session trace digests do not match the compiled trial rows")
     for arm in ARMS:
         arm_trials = [r for key, r in records.items() if key[2] == arm]
         result["arms"][arm] = {

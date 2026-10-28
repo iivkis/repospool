@@ -39,3 +39,17 @@ python3 scripts/gate_b.py report --trials benchmarks/gate_b/trials.json
 ```
 
 `collect` also prints the Gate B verdict. Missing pairs remain `HOLD`, regardless of measured savings in preliminary runs. The `sessions/` and compiled trial outputs should be reviewed for secrets before public publication; use GitHub artifact retention/access controls when appropriate.
+
+## Gate-decision provenance requirement (v1.0)
+
+The evaluator requires `collector="gate_b_capture/1.0"` together with
+`trace_sha256_by_filename` and one unique `trace_sha256` on every trial.
+The filename map and compiled rows must contain the same unique 64-character
+SHA-256 values. A manually authored numeric table without this linkage returns
+`HOLD`, even when its numbers suggest an efficiency improvement.
+
+**This proves only internal consistency, not authenticity.** A malicious party
+could invent both the events and their checksums. The independent reviewer must
+still verify the provider usage receipts, original answers, GitHub connector
+operations, and RGP SHA-256 against externally retained evidence before any
+GO decision is considered trustworthy.
