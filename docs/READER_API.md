@@ -19,6 +19,16 @@ while page["next_cursor"] is not None:
     page = reader.search("TODO", paths=["README.md"], limit=10, cursor=page["next_cursor"])
 ```
 
+A search result contains its exact `path` and 1-based `line`, plus a
+**match-aware excerpt** bounded to 512 UTF-8 bytes. For queries that fit in
+512 bytes, the excerpt includes the first occurrence of the queried string
+even if that occurrence lies thousands of characters into a long source or
+minified line. A query longer than 512 bytes cannot fit entirely; only the
+beginning of its matching text is shown. To inspect full surrounding source,
+use `reader.read(path, start_line=line, end_line=line)`, subject to the
+independent 256 KiB read-response bound. Excerpts are display snippets,
+not complete source lines or trustworthy provenance evidence.
+
 CLI equivalents: `python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp coverage --scope snapshot`, `tree --prefix src/ --limit 20 --cursor TOKEN`, `search TODO --path README.md --limit 20 --cursor TOKEN`. A `next_cursor` is a *string*, not a numeric offset. Pass it back unchanged with the **same** query, path scope, prefix, and snapshot. It is bound to the `input_tree_digest` and query parameters; a mismatched or malformed cursor raises `UNSUPPORTED_FORMAT`. Cursors are stable for the same immutable snapshot, even after a different commit with identical snapshot contents. They do **not** authenticate the archive's origin.
 
 ## Resource limits (v1.0 Reader)
