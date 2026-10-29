@@ -4,7 +4,28 @@ Gate B remains **HOLD**. The current 24 answers were scored by the same assistan
 
 The stdlib utility `scripts/gate_b_review.py` supports arm-masked source review. It does not call an inference API, make correctness judgments, or grant GO.
 
-## Generate a packet
+## Download a prepared review packet
+
+Every successful pull-request CI run now uploads a short-lived **gate-b-review-handoff**
+artifact under that run's *Artifacts* section on GitHub Actions. Download the
+artifact ZIP and keep its files together: `packet.json`, `review-template.json`,
+`initial-status.json`, `SHA256SUMS`, and `INSTRUCTIONS.md`. The blank
+`initial-status.json` must report **HOLD** and 24 missing review verdicts.
+
+The A/B order is independently randomized on each workflow run. **Do not pair
+a verdict from one run with a packet from another run**. The template includes
+the SHA-256 identity of its exact packet; the check command rejects a mismatch.
+Inspect the `SHA256SUMS` file to detect accidental corruption during handoff.
+Checksums stored alongside the artifact do not authenticate an untrusted
+origin: reviewers must obtain the ZIP from the intended GitHub Actions run.
+
+The artifact contains the original 24 answers from the public frozen corpus,
+but no prior correctness labels or arm identification. It is **review input**,
+not evidence that an independent review occurred. Artifact expiration does not
+affect the source protocol; a new run can generate a new packet.
+
+## Generate a packet locally
+
 
 ```sh
 python3 scripts/gate_b_review.py pack \

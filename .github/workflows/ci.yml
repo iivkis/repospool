@@ -48,14 +48,26 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_gate_b*.py' -v
           python3 scripts/gate_b.py report > "$RUNNER_TEMP/hold.json"
           python3 -c 'import json,sys; assert json.load(open(sys.argv[1]))["status"] == "HOLD"' "$RUNNER_TEMP/hold.json"
-      - name: Arm-masked Gate B review stays HOLD without independent verdicts
+      - name: Prepare arm-masked Gate B reviewer handoff and assert HOLD
         shell: bash
         run: |
           set -euo pipefail
-          python3 scripts/gate_b_review.py pack > "$RUNNER_TEMP/gate-b-packet.json"
-          python3 scripts/gate_b_review.py template --packet "$RUNNER_TEMP/gate-b-packet.json" > "$RUNNER_TEMP/gate-b-review.json"
-          python3 scripts/gate_b_review.py check --packet "$RUNNER_TEMP/gate-b-packet.json" --review "$RUNNER_TEMP/gate-b-review.json" > "$RUNNER_TEMP/gate-b-review-hold.json"
-          python3 -c 'import json,sys; v=json.load(open(sys.argv[1])); assert v["status"]=="HOLD" and v["missing"]==24' "$RUNNER_TEMP/gate-b-review-hold.json"
+          handoff="$RUNNER_TEMP/gate-b-review-handoff"
+          mkdir -p "$handoff"
+          python3 scripts/gate_b_review.py pack > "$handoff/packet.json"
+          python3 scripts/gate_b_review.py template --packet "$handoff/packet.json" > "$handoff/review-template.json"
+          python3 scripts/gate_b_review.py check --packet "$handoff/packet.json" --review "$handoff/review-template.json" > "$handoff/initial-status.json"
+          python3 -c 'import json,sys; v=json.load(open(sys.argv[1])); assert v["status"]=="HOLD" and v["missing"]==24' "$handoff/initial-status.json"
+          # Integrity and discovery hashes are supplied, but no reviewer verdict is invented.
+          (cd "$handoff" && sha256sum packet.json review-template.json initial-status.json > SHA256SUMS)
+          cp docs/GATE_B_REVIEW.md "$handoff/INSTRUCTIONS.md"
+      - name: Upload Gate B review handoff (not a reviewed result)
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-b-review-handoff
+          path: ${{ runner.temp }}/gate-b-review-handoff/
+          if-no-files-found: error
+          retention-days: 14
       - name: Immutable golden fixtures and Rust/Python verifier parity
         shell: bash
         run: |
