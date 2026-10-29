@@ -79,6 +79,13 @@ calls including independent Reader setup (66.67% fewer connector calls); per-tas
 required no GitHub calls. No token, timing or independent-quality claim is
 made. Reuse of shared files was not enabled in the GitHub baseline.
 
+A [cache-fair acquisition replay](benchmarks/gate_b/CACHE_FAIR_2026-10-29.md)
+has now measured **13 unique GitHub source fetches versus 6 RGP acquisition/
+Reader setup calls**, a 53.85% reduction. It reuses the earlier pilot's
+answers and correctness judgments; it is **not** a new independently graded
+run. A typed first-use source-cache ledger makes zero-call GitHub tasks
+explicit and rejects missing/mismatched Git blob anchors.
+
 The evaluator returns **GO_CANDIDATE**, not an automatic GO. **Gate B
 decision remains HOLD** pending independent correctness review and
-inspection of actual call history and fair cache treatment.
+authenticated call-history inspection.
