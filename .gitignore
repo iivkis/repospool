@@ -8,7 +8,5 @@ REPO_CONTEXT.rgp
 /result
 /result-*
 
-# Agent traces and unsanitized token/cost telemetry are private by default.
-/benchmarks/gate_b/sessions/
-/benchmarks/gate_b/trials.json
-/benchmarks/gate_b/diagnostics/
+# Assistant-only benchmark notes, unreviewed before publication
+/benchmarks/gate_b/observations.local.json

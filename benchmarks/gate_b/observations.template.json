@@ -1,0 +1,7 @@
+{
+  "schema_version": "2.0",
+  "method": "assistant_in_chat",
+  "plan_sha256": "26b1f3024542452ce1ab4ce3eb55174bfd4d67c85b08a001716c4bd7e0845ca7",
+  "observations": [],
+  "rgp_preparation_calls": null
+}

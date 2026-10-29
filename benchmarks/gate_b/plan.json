@@ -1,17 +1,15 @@
 {
-  "schema_version": "1.0",
-  "status": "preregistered-amended-before-agent-trials",
-  "description": "Gate B: amended preregistration before any real-agent trials; memchr hit immutable RGP compression-ratio guardrail in Actions preparation.",
-  "repetitions_per_arm": 3,
+  "schema_version": "2.0",
+  "status": "revised-for-assistant-only-comparison",
+  "description": "Assistant in this chat compares fixed GitHub connector retrievals against a validated RGP Reader; no model API, external model, automated agent or claimed provider tokens.",
   "arms": [
     "github_connector",
-    "rgp_actions_artifact"
+    "rgp_reader"
   ],
   "requirements": {
     "minimum_repositories": 3,
     "minimum_tasks": 10,
     "minimum_connector_call_reduction": 0.3,
-    "minimum_total_token_reduction": 0.2,
     "no_correctness_regressions": true
   },
   "repositories": [
@@ -161,5 +159,6 @@
       ],
       "rubric": "Identify test_timed.py and the timestamp-aware signer or serializer."
     }
-  ]
+  ],
+  "method": "assistant_in_chat"
 }

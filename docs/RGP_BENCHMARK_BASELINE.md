@@ -1,141 +1,83 @@
-# Gate B: preregistered practical-value benchmark
+# Gate B: assistant-operated comparison, protocol v2
 
-**Decision: HOLD.** The task suite, input commits, evaluator and Actions preparation
-workflow exist, but **there are no real paired agent trials yet**. No token/call
-savings, model correctness parity, or network latency is claimed.
+**Status: HOLD.** There is no embedded model, external model API, API key,
+automated agent runner, or inference dependency in RGP. The assistant working
+in this conversation is responsible for writing code, examining source and
+checking results. CI only runs deterministic builds, unit tests and format/
+security checks.
 
-## Frozen inputs (v1.0)
+## Why the protocol changed
 
-The authoritative [plan](../benchmarks/gate_b/plan.json) pins three public
-repositories, 12 tasks and **three independent repeats per arm per task** (72
-agent runs). Real file paths and task rubrics were inspected before the experiment.
+The initial Gate B prototype (v1) mistakenly treated model execution as
+infrastructure, requiring 72 provider-instrumented agent trials. That was not
+the project's intended usage. On 29 October 2026 it was replaced by protocol
+v2 at the user's explicit direction. **Old v1 trial counts and any notional
+GO decision cannot be carried into v2.** Earlier GitHub commits preserve the
+history; model-invocation scripts and workflows have been removed from HEAD.
 
-| Repo | Role | Pinned commit |
-| --- | --- | --- |
-| `iivkis/rgp` | Mixed Rust/Python | `95963a23e2fd1e5eb68a72db3bde849ed7119a7c` |
-| `serde-rs/json` | Rust | `8c535a260ce561eaab4111aafc29038eb9f77ff3` |
-| `pallets/itsdangerous` | Python | `672971d66a2ef9f85151e53283113f33d642dabd` |
+## Frozen comparison corpus
 
-The first frozen plan (`plan.v1.0.json`) used `BurntSushi/memchr`, but its
-first real pinned-corpus workflow failed with `RESOURCE_LIMIT: compression
-ratio` (run 40767257399). The producer rejected a highly compressible entry
-by design, rather than weakening a ZIP-bomb guardrail. **Before any paired
-agent trial**, the Rust case was amended to `serde-rs/json` and the original
-plan retained as immutable evidence. The original plan's SHA-256 was
-`f71b529f9e7e11d7085b73bd5f0a39cbad936c13d113d5c714ea224e4d785d96`.
-Do not pool trials from the two plans. The current suite has its own digest,
-which must be recorded with every trial set.
+The plan, [`benchmarks/gate_b/plan.json`](../benchmarks/gate_b/plan.json),
+retains 12 source-analysis tasks across three public repositories, each pinned
+to an exact Git commit. In the GitHub arm, the assistant uses the connected
+GitHub tools to read the pinned code. In the RGP arm, the *same assistant*
+reads a verified snapshot with the Python stdlib Reader. No second model is
+started. Rubrics and the required source paths are unchanged.
 
-## Preparation
+For each task and arm, record a short answer, which source paths support it,
+a link to inspectable evidence, whether the task rubric was met, and the
+**observed** number of GitHub connector calls. Do not infer or fabricate
+unavailable metrics. The RGP arm must include artifact retrieval and
+preparation connector calls **once per repository** in the total, and must
+not omit failed retrievals. Zero network calls for an already downloaded RGP
+is not a zero-cost acquisition. Measure equivalent units and distinguish
+one-time preparation costs from per-task calls.
 
-Run `task benchmark:plan` in `nix develop` or with Python stdlib. The
-`Gate B pinned corpus preparation` workflow (`workflow_dispatch`, plus a path-filtered one-time push trigger on
-`main` when the protocol files change) generates
-individually checked `.rgp` artifacts from exact Git commits, places an
-independently hashed `provenance.json` beside each one, and publishes them as
-**GitHub Actions workflow artifacts**, the transport channel proven in Gate A.
-Remote source code is fetched as data and never executed. The workflow's
-SHA-256 covers RGP **integrity**, not GitHub connector transport or artifact
-authenticity by itself. A fresh download must be validated in the agent sandbox
-against provenance obtained independently.
+We can measure actual connector call counts from visible tool invocations.
+This chat does **not** expose authoritative model-token usage or comparable
+network timings, so neither is a Gate B metric. The previous 20% token target
+cannot be tested under this setup. The original 30% connector-call reduction
+threshold and no-correctness-regressions guardrail remain. The evaluator
+returns **GO_CANDIDATE**, not automatic GO, even if the reported counts meet
+the threshold; evidence and correctness judgments still need inspection.
 
-## Paired experiment (manual agent evaluation)
+## Tools and current verification
 
-For each of the 12 task prompts in the plan and each of 3 repetitions, execute
-**both arms** with the same explicitly identified model, token budget,
-scoring rubric, and tool restrictions, changing only context transport:
+`python3 scripts/gate_b.py plan` validates the 12-task corpus and prints its
+plan SHA. `python3 scripts/gate_b.py report` checks the observations template:
+missing observations and unknown acquisition costs correctly give **HOLD**.
+When completed, pass `--observations /path/to/observations.json` to calculate
+call savings including one-time RGP retrievals.
 
-1. `github_connector`: agent retrieves files from a pinned commit with the
-   ordinary GitHub connector. Do not preload or reuse information from the RGP
-   arm. Pin the ref for *every* request; default-branch reads are not valid.
-2. `rgp_actions_artifact`: agent obtains the exact RGP via the verified
-   GitHub Actions artifact channel, verifies trusted SHA-256, uses the
-   stdlib Reader to search/read, and cites source files. Include preparation,
-   download, extraction, and Reader output in the total cost.
-
-Randomize / counterbalance arm order across tasks to reduce carryover.
-Isolate contexts between runs; do not expose the oracle reference paths or
-rubrics to the evaluated agent. Evaluate correctness using the preregistered
-rubrics, with human adjudication or reproducible task-specific checks. Store
-an evidence URL per run, including agent answer and source citations.
-
-Each record in `trials` needs:
-
-- `task_id`, `repository`, `source_commit`, `repetition` (1–3), `arm`,
-  `model_id`, `token_budget`, `correct` (reviewed boolean).
-- `connector_calls`, `connector_transferred_bytes`, `total_tokens`,
-  `duration_ms`, `preparation_ms`, `preparation_bytes`, `peak_memory_bytes`,
-  `missed_dependencies`, `false_positives`, `errors` (list), `evidence_url`.
-
-`total_tokens` is **all** relevant input and output model tokens. If exact
-usage cannot be measured, the run is incomplete. `duration_ms` includes
-RGP preparation/download/Reader work, not just the final answer. For shared
-prebuilt artifacts, amortization must be predeclared and applied identically;
-record construction and storage separately even when cached. Count transport
-calls even if the connector exposes an artifact as a file reference rather
-than returning bytes in the chat. `preparation_bytes` is a separate accounting
-field and must not silently disappear from transfer/storage cost.
-
-Use the [empty results template](../benchmarks/gate_b/trials.template.json),
-setting `plan_sha256` to `task benchmark:plan` output. Mark
-`transport_verified: true` **only after** agent-side end-to-end validation,
-not merely because the Action uploaded a file. Place raw trials under a
-reviewed report path, never create fictional passing data.
-
-## Evaluation and release decision
-
-Run:
+Run the RGP byte-level source audit after downloading the pinned snapshots:
 
 ```sh
-python3 scripts/gate_b.py plan
-python3 scripts/gate_b.py report --trials path/to/real-trials.json --output path/to/decision.json
-# or: task benchmark:report TRIALS=path/to/real-trials.json
+python3 scripts/gate_b_rgp_audit.py --rgp-dir /path/to/verified-rgp-files
 ```
 
-The evaluator rejects duplicate/misaligned runs and incompatible model,
-repository, commit or budget. It reports **median and nearest-rank p95**, totals
-and errors for each arm. Correctness must have **zero matched regressions**;
-then at least one preregistered improvement must hold:
+The directory must contain `rgp.rgp`, `serde_json.rgp`, and
+`itsdangerous.rgp`. The verifier checks each SHA-256 against the committed
+historical [corpus checkpoint](../benchmarks/gate_b/corpus_preparation.json),
+the source commit, snapshot completeness, file count, and the existence of
+all 12 task reference sets. The checkpoint was produced under the earlier
+plan hash; artifact hashes and pinned commits remain usable for byte-level
+verification, **not** as proof that the new comparison was already performed.
 
-- ≥30% reduction in **median connector calls per task run**, or
-- ≥20% reduction in **total model tokens across paired tasks**.
+The independently verified audit from 29 October 2026 is saved in
+[`source_audit_2026-10-29.json`](../benchmarks/gate_b/source_audit_2026-10-29.json).
+It reports three intact RGP files and 12/12 valid reference-path sets.
+**This is a source-integrity check, not 24 completed task observations.**
 
-`HOLD` means missing, unverifiable or untransported inputs. `PIVOT` means a
-**complete** comparison failed the criteria. `GO` is produced only from a
-complete, explicitly verified real-agent record meeting correctness and cost
-requirements. Synthetic unit tests exercise the evaluator but **never count
-as evidence**. This machine report still requires review of correctness
-rubrics, evidence URLs, completeness and any limitations before advancing to
-semantic indexing.
+## Decision rule
 
-The baseline is not a comparison of Git commands against local Python file
-reads: that would conflate transport, model behavior and answer correctness.
+- `HOLD`: fewer than 24 task-arm observations, unobserved acquisition costs,
+  or mismatched plan/evidence.
+- `PIVOT`: complete data, but any correctness regression or less than 30%
+  reduction in counted GitHub connector calls.
+- `GO_CANDIDATE`: complete data and threshold satisfied; the assistant must
+  inspect actual source evidence and recorded tool calls before recommending
+  GO.
 
-## Corpus preparation checkpoint (29 October 2026)
-
-[Preparation run 40767794459](https://github.com/iivkis/rgp/actions/runs/40767794459)
-completed successfully for the **amended** plan. Exact pinned Git snapshots produced
-three fully included RGP files. The artifacts were retrieved once each via the
-connected GitHub `download_workflow_artifact` operation, and their outer ZIP
-contents were restored with the trusted stdlib bootstrap, then opened by the
-trusted Reader. The raw summary is in
-[`benchmarks/gate_b/corpus_preparation.json`](../benchmarks/gate_b/corpus_preparation.json).
-
-| Repo | RGP bytes | Files included | Snapshot completeness |
-| --- | ---: | ---: | --- |
-| `rgp` | 132,217 | 46 | complete |
-| `serde_json` | 260,958 | 93 | complete |
-| `itsdangerous` | 143,569 | 50 | complete |
-
-These checks establish **single-fetch integrity and compatibility** with the
-specific Actions ZIP wrapper. Hashes read from the co-packed `provenance.json`
-are not independent proof of authenticity; the trusted SHA-256 should still be
-confirmed against the workflow run summary before treating it as an external
-trust anchor. Full connector transfer-byte accounting, model tokens, agent
-correctness and the 72 paired trials remain **unmeasured**. Gate B remains
-**HOLD**.
-
-
-## Real-trial trace ingestion
-
-The [trace capture protocol](GATE_B_TRACE_PROTOCOL.md) defines provider usage receipts, connector calls, independent rubric assessments, raw evidence URIs, trusted artifact hashes and `trace_sha256`. `scripts/gate_b_capture.py` compiles instrumented event logs into the existing `scripts/gate_b.py` evaluator. No such logs have been supplied yet. An empty trace directory **must** score `HOLD`; synthetic unit-test traces are explicitly not experimental evidence.
+Do not reinterpret earlier fixed-commit GitHub downloads or CI smoke tests as
+model/task benchmarks. Only this assistant's transparent work in the chat is
+the substantive evaluation.
