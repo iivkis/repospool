@@ -9,7 +9,7 @@ The stdlib utility `scripts/gate_b_review.py` supports arm-masked source review.
 Every successful pull-request CI run now uploads a short-lived **gate-b-review-handoff**
 artifact under that run's *Artifacts* section on GitHub Actions. Download the
 artifact ZIP and keep its files together: `packet.json`, `review-template.json`,
-`initial-status.json`, `SHA256SUMS`, and `INSTRUCTIONS.md`. The blank
+`initial-status.json`, `SHA256SUMS`, and `INSTRUCTIONS.md`, plus `source-line-counts.json` and `corpus-checkpoint.json`. The blank
 `initial-status.json` must report **HOLD** and 24 missing review verdicts.
 
 The A/B order is independently randomized on each workflow run. **Do not pair
@@ -40,7 +40,7 @@ The packet randomizes A/B ordering within each task and omits the original arm l
 
 ## Review
 
-A separate reviewer should inspect each answer against its task rubric and the pinned source paths. For each case, fill `correct` (true or false), `rationale`, and `evidence` with a source path plus start/end line numbers for each required file. Complete the reviewer identity, declaration of independence, and an inspectable record URL.
+A separate reviewer should inspect each answer against its task rubric and the pinned source paths. For each case, fill `correct` (true or false), `rationale`, and `evidence` with a source path plus start/end line numbers for each required file. The checker rejects lines outside the known file length; the length table is tied to the Git blob SHA-1 and original RGP SHA-256 checkpoint. Complete the reviewer identity, declaration of independence, and an inspectable record URL.
 
 ```sh
 python3 scripts/gate_b_review.py check \
@@ -48,8 +48,31 @@ python3 scripts/gate_b_review.py check \
   --review /tmp/gate-b-review.json
 ```
 
-Missing verdicts or reviewer declaration produce **HOLD**. An incorrect RGP answer or missed call threshold produces **PIVOT**. Complete passing source judgments produce **REVIEW_CANDIDATE**, never GO.
+Missing verdicts, missing source-line index or reviewer declaration produce **HOLD**. Invalid source line ranges are rejected. An incorrect RGP answer or missed call threshold produces **PIVOT**. Complete passing source judgments produce **REVIEW_CANDIDATE**, never GO.
 
-This checks consistency, not whether a reviewer is truly independent, whether cited source lines substantiate the verdict, or whether the recorded tool calls occurred. These must be checked by a maintainer before changing Gate B from HOLD. Unit-test reviews are synthetic and cannot serve as evidence.
+This checks consistency and source-line bounds, not whether a reviewer is truly independent, whether cited source lines substantiate the verdict, or whether the recorded tool calls occurred. These must be checked by a maintainer before changing Gate B from HOLD. Unit-test reviews are synthetic and cannot serve as evidence.
 
 See [Issue #25](https://github.com/iivkis/rgp/issues/25) for outstanding work.
+
+## Recompute the line-count table from pinned RGP snapshots
+
+To reauthenticate the 13 source files and recalculate their actual line
+counts, place the previously verified GitHub Actions artifacts in a folder
+as `rgp.rgp`, `serde_json.rgp` and `itsdangerous.rgp`, then run:
+
+```sh
+python3 scripts/gate_b_source_lines.py \
+  --rgp-dir /path/to/verified-rgp \
+  --check
+```
+
+This checks the independent corpus SHA-256 checkpoint before reading each
+archive with the trusted stdlib Reader. It then checks all 13 Git blob SHA-1
+values against the cached-source observations and compares the resulting
+line counts with `benchmarks/gate_b/source_line_counts.json`. No archive
+members or source code are executed. The default `review` checker uses
+this pinned table and corpus checkpoint to reject impossible line ranges,
+including a claimed citation far beyond the end of a file.
+
+**Limit:** a valid line number does not show that its content supports a
+reviewer's conclusion. Manual source inspection remains essential.
