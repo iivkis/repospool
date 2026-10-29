@@ -48,6 +48,14 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_gate_b*.py' -v
           python3 scripts/gate_b.py report > "$RUNNER_TEMP/hold.json"
           python3 -c 'import json,sys; assert json.load(open(sys.argv[1]))["status"] == "HOLD"' "$RUNNER_TEMP/hold.json"
+      - name: Arm-masked Gate B review stays HOLD without independent verdicts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/gate_b_review.py pack > "$RUNNER_TEMP/gate-b-packet.json"
+          python3 scripts/gate_b_review.py template --packet "$RUNNER_TEMP/gate-b-packet.json" > "$RUNNER_TEMP/gate-b-review.json"
+          python3 scripts/gate_b_review.py check --packet "$RUNNER_TEMP/gate-b-packet.json" --review "$RUNNER_TEMP/gate-b-review.json" > "$RUNNER_TEMP/gate-b-review-hold.json"
+          python3 -c 'import json,sys; v=json.load(open(sys.argv[1])); assert v["status"]=="HOLD" and v["missing"]==24' "$RUNNER_TEMP/gate-b-review-hold.json"
       - name: Immutable golden fixtures and Rust/Python verifier parity
         shell: bash
         run: |
