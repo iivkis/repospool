@@ -87,3 +87,19 @@ See [pilot_preflight_2026-10-29.json](benchmarks/gate_b/pilot_preflight_2026-10-
 This is a **transport/source-integrity preflight, not one of the 72 agent runs**.
 Provider model-token usage, full network time, connector byte telemetry and
 independent agent-answer evaluation are unavailable; Gate B remains HOLD.
+
+## Gate B executable diagnostic agent (not a scoring trial)
+
+The [agent pilot](docs/GATE_B_AGENT_DIAGNOSTIC.md) uses a real OpenAI
+Responses model and provider-reported tokens with two **non-scoring** adapters:
+GitHub REST over HTTPS and an already-verified local RGP Reader. It records
+source reads, model usage receipts, answer hashes and transport timing.
+It does not call the connected ChatGPT GitHub app and excludes artifact
+delivery costs, so it cannot replace the 72 registered Gate B trials.
+No model calls are made by CI; the eight offline harness tests check the
+function-call loop and fail-closed handling.
+
+```sh
+task benchmark:pilot:test
+# For a real diagnostic run, see docs/GATE_B_AGENT_DIAGNOSTIC.md
+```

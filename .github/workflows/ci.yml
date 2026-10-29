@@ -55,6 +55,8 @@ jobs:
           mkdir -p "$RUNNER_TEMP/gateb-empty"
           python3 scripts/gate_b_capture.py collect --sessions "$RUNNER_TEMP/gateb-empty" --output "$RUNNER_TEMP/gateb-trials.json" > "$RUNNER_TEMP/gateb-verdict.json"
           python3 -c 'import json,sys; x=json.load(open(sys.argv[1])); assert x["status"] == "HOLD" and x["received_trials"] == 0' "$RUNNER_TEMP/gateb-verdict.json"
+      - name: Non-scoring Gate B agent diagnostic test harness
+        run: python3 -m unittest discover -s tests -p 'test_gate_b_agent_pilot.py' -v
       - name: Immutable golden fixtures and Rust/Python verifier parity
         shell: bash
         run: |

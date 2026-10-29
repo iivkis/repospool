@@ -152,3 +152,8 @@ tasks:
       TRIALS_OUTPUT: '{{.TRIALS_OUTPUT | default "benchmarks/gate_b/trials.json"}}'
     cmds:
       - python3 scripts/gate_b_capture.py collect --sessions '{{.SESSIONS}}' --output '{{.TRIALS_OUTPUT}}'
+
+  benchmark:pilot:test:
+    desc: Offline tests for non-scoring GitHub REST vs RGP agent diagnostics
+    cmds:
+      - python3 -m unittest discover -s tests -p 'test_gate_b_agent_pilot.py' -v
