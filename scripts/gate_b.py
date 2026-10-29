@@ -59,23 +59,31 @@ def validate_plan(plan: dict) -> dict:
     require(isinstance(repos, list) and len(repos) >= 3, "missing repositories")
     require(isinstance(tasks, list) and len(tasks) >= limits["minimum_tasks"], "missing tasks")
     by_id = {}
+    github_repos = set()
     for repo in repos:
         require(isinstance(repo, dict) and isinstance(repo.get("id"), str)
                 and repo["id"] and repo["id"] not in by_id, "invalid/duplicate repository")
         require(valid_commit(repo.get("commit")), "unpinned commit")
-        require(isinstance(repo.get("github"), str) and repo["github"].count("/") == 1, "invalid repo name")
+        github = repo.get("github")
+        require(isinstance(github, str) and len(github.split("/")) == 2
+                and all(part and part not in (".", "..") for part in github.split("/")),
+                "invalid repo name")
+        require(github not in github_repos, "duplicate GitHub repository")
+        github_repos.add(github)
         by_id[repo["id"]] = repo
     ids = set()
     for task in tasks:
         require(isinstance(task, dict) and isinstance(task.get("id"), str)
                 and task["id"] and task["id"] not in ids, "invalid/duplicate task")
-        require(task.get("repository") in by_id, "unknown task repository")
+        require(isinstance(task.get("repository"), str)
+                and task["repository"] in by_id, "unknown task repository")
         require(isinstance(task.get("prompt"), str) and len(task["prompt"]) > 15, "invalid prompt")
         require(isinstance(task.get("rubric"), str) and len(task["rubric"]) > 15, "missing rubric")
         paths = task.get("reference_paths")
         require(isinstance(paths, list) and bool(paths) and all(isinstance(p, str) and p
                 and not p.startswith("/") and all(seg not in ("", ".", "..") for seg in p.split("/"))
                 for p in paths), "unsafe/missing source paths")
+        require(len(paths) == len(set(paths)), "duplicate source paths")
         ids.add(task["id"])
     require({t["repository"] for t in tasks} == set(by_id), "every repository must have tasks")
     return {"plan_sha256": digest_plan(plan), "repositories": len(repos), "tasks": len(tasks),
@@ -100,7 +108,9 @@ def evaluate(plan: dict, measurements: dict) -> dict:
     for i, row in enumerate(rows):
         require(isinstance(row, dict), f"observation {i} must be an object")
         tid, arm = row.get("task_id"), row.get("arm")
-        require(tid in tasks and arm in ARMS, f"observation {i}: invalid task/arm")
+        require(isinstance(tid, str) and tid in tasks
+                and isinstance(arm, str) and arm in ARMS,
+                f"observation {i}: invalid task/arm")
         key = (tid, arm)
         require(key not in seen, f"duplicate observation {key}")
         task = tasks[tid]
@@ -109,21 +119,25 @@ def evaluate(plan: dict, measurements: dict) -> dict:
         require(type(row.get("correct")) is bool, f"observation {i}: missing correctness assessment")
         require(type(row.get("connector_calls")) is int and row["connector_calls"] >= 0,
                 f"observation {i}: connector_calls must be measured")
+        require(arm != ARMS[0] or row["connector_calls"] >= 1,
+                f"observation {i}: GitHub arm must include a source retrieval call")
         require(isinstance(row.get("answer"), str) and len(row["answer"].strip()) >= 15,
                 f"observation {i}: answer missing")
         require(isinstance(row.get("evidence_url"), str) and row["evidence_url"].startswith("https://"),
                 f"observation {i}: missing external evidence reference")
         source_paths = row.get("source_paths")
         require(isinstance(source_paths, list) and bool(source_paths)
-                and all(isinstance(p, str) and p in task["reference_paths"] for p in source_paths),
-                f"observation {i}: source paths not tied to rubric")
+                and all(isinstance(p, str) and p in task["reference_paths"] for p in source_paths)
+                and len(source_paths) == len(task["reference_paths"])
+                and set(source_paths) == set(task["reference_paths"]),
+                f"observation {i}: source paths must cover each rubric reference exactly once")
         seen[key] = row
     if len(seen) != info["expected_observations"]:
         result["reasons"].append(f"{info['expected_observations'] - len(seen)} observations missing")
     preparation = measurements.get("rgp_preparation_calls")
     if not isinstance(preparation, dict) or set(preparation) != set(repos) or any(
-            type(n) is not int or n < 0 for n in preparation.values()):
-        result["reasons"].append("RGP artifact download/preparation connector calls are not accounted for")
+            type(n) is not int or n < 1 for n in preparation.values()):
+        result["reasons"].append("RGP artifact acquisition requires at least one counted connector call per repository")
     # No claimed savings from incomplete data or mismatched plan.
     if result["reasons"]:
         return result
@@ -137,6 +151,10 @@ def evaluate(plan: dict, measurements: dict) -> dict:
     result["correctness_regressions"] = regressions
     if regressions:
         result["reasons"].append("RGP correctness regressed")
+    incorrect = [tid for tid in tasks if not seen[(tid, ARMS[1])]["correct"]]
+    result["rgp_incorrect_tasks"] = incorrect
+    if incorrect:
+        result["reasons"].append("RGP answers did not meet all task rubrics")
     if result["call_reduction"] is None or result["call_reduction"] < 0.30:
         result["reasons"].append("connector-call reduction below 30%")
     # User-facing answers / tool logs still need inspection; a JSON file cannot attest itself.

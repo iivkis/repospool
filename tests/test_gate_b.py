@@ -30,7 +30,7 @@ def samples(base=4, local=1, base_correct=True, local_correct=True):
                 "connector_calls": base if is_base else local,
                 "answer": "Example answer derived from source files",
                 "evidence_url": "https://github.com/iivkis/rgp/blob/main/README.md",
-                "source_paths": task["reference_paths"],
+                "source_paths": list(task["reference_paths"]),
             })
     return result
 
@@ -120,6 +120,63 @@ class AssistantOnlyGateB(unittest.TestCase):
         x["observations"][0]["evidence_url"] = ""
         with self.assertRaisesRegex(ProtocolError, "evidence"):
             evaluate(PLAN, x)
+
+
+    def test_incorrect_answers_cannot_be_success_even_without_regression(self):
+        result = evaluate(PLAN, samples(base_correct=False, local_correct=False))
+        self.assertEqual(result["status"], "PIVOT")
+        self.assertEqual(result["correctness_regressions"], [])
+        self.assertEqual(len(result["rgp_incorrect_tasks"]), 12)
+
+    def test_all_reference_paths_must_be_cited_once(self):
+        x = samples()
+        x["observations"][0]["source_paths"] = [PLAN["tasks"][0]["reference_paths"][0]]
+        with self.assertRaisesRegex(ProtocolError, "cover each rubric reference"):
+            evaluate(PLAN, x)
+        x = samples()
+        x["observations"][0]["source_paths"].append(x["observations"][0]["source_paths"][0])
+        with self.assertRaisesRegex(ProtocolError, "cover each rubric reference"):
+            evaluate(PLAN, x)
+
+    def test_rgp_acquisition_cannot_be_reported_as_free(self):
+        x = samples()
+        x["rgp_preparation_calls"]["rgp"] = 0
+        result = evaluate(PLAN, x)
+        self.assertEqual(result["status"], "HOLD")
+        self.assertIn("at least one counted connector call", result["reasons"][0])
+
+    def test_github_source_retrieval_cannot_have_zero_calls(self):
+        x = samples()
+        x["observations"][0]["connector_calls"] = 0
+        with self.assertRaisesRegex(ProtocolError, "source retrieval call"):
+            evaluate(PLAN, x)
+
+    def test_unhashable_input_is_rejected_as_protocol_error(self):
+        for field, value in (("task_id", {}), ("arm", [])):
+            x = samples()
+            x["observations"][0][field] = value
+            with self.subTest(field=field), self.assertRaisesRegex(ProtocolError, "invalid task/arm"):
+                evaluate(PLAN, x)
+        p = copy.deepcopy(PLAN)
+        p["tasks"][0]["repository"] = []
+        with self.assertRaisesRegex(ProtocolError, "unknown task repository"):
+            validate_plan(p)
+
+    def test_plan_rejects_duplicate_or_empty_repository_names(self):
+        p = copy.deepcopy(PLAN)
+        p["repositories"][1]["github"] = p["repositories"][0]["github"]
+        with self.assertRaisesRegex(ProtocolError, "duplicate GitHub repository"):
+            validate_plan(p)
+        p = copy.deepcopy(PLAN)
+        p["repositories"][0]["github"] = "/rgp"
+        with self.assertRaisesRegex(ProtocolError, "invalid repo name"):
+            validate_plan(p)
+
+    def test_plan_rejects_duplicate_reference_paths(self):
+        p = copy.deepcopy(PLAN)
+        p["tasks"][0]["reference_paths"].append(p["tasks"][0]["reference_paths"][0])
+        with self.assertRaisesRegex(ProtocolError, "duplicate source paths"):
+            validate_plan(p)
 
 
 if __name__ == "__main__":
