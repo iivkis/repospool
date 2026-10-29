@@ -139,7 +139,7 @@ class ReaderApiTests(unittest.TestCase):
             obj = json.loads(result.stdout)
             self.assertEqual(len(obj["matches"]), 3)
             self.assertTrue(all(x["path"].startswith("src/") for x in obj["matches"]))
-            rejected = subprocess.run(cmd[:-2] + ["--prefix", "../"],
+            rejected = subprocess.run(cmd[:-4] + ["--prefix", "../"],
                                       capture_output=True, text=True)
             self.assertEqual(rejected.returncode, 2)
             self.assertIn("UNSUPPORTED_FORMAT", rejected.stderr)
