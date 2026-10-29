@@ -110,6 +110,73 @@ def validate_packet(plan: dict, observations: dict, packet: dict) -> None:
         require(original == received, f"review task {task['id']}: answer substitution")
 
 
+def validate_source_line_counts(plan: dict, observations: dict, source_lines: dict,
+                                checkpoint: dict | None = None) -> dict:
+    """Validate a pinned source line-count index against the planned Git blobs.
+
+    Manifest metadata does not alone prove the underlying source bytes. The
+    generator separately checks those bytes against independently pinned
+    RGP SHA-256 and Git blob SHA-1 values.
+    """
+    rows, _ = validate_observations(plan, observations)
+    require(isinstance(source_lines, dict) and
+            source_lines.get("schema_version") == "1.0" and
+            source_lines.get("method") == "verified_pinned_rgp_reader_plus_git_blob_sha1" and
+            source_lines.get("plan_sha256") == digest_plan(plan),
+            "invalid source-line index")
+    sha_map = source_lines.get("source_rgp_sha256")
+    require(isinstance(sha_map, dict), "missing source RGP SHA-256 anchors")
+    repos = {repo["id"]: repo for repo in plan["repositories"]}
+    require(set(sha_map) == set(repos) and
+            all(isinstance(s, str) and len(s) == 64 and all(c in HEX for c in s)
+                for s in sha_map.values()), "invalid source RGP SHA-256 anchors")
+    if checkpoint is not None:
+        require(isinstance(checkpoint, dict) and isinstance(checkpoint.get("artifacts"), list),
+                "invalid corpus checkpoint")
+        expected_shas = {
+            r["repository"]: r["sha256"] for r in checkpoint["artifacts"]
+            if isinstance(r, dict) and isinstance(r.get("repository"), str)
+        }
+        require(sha_map == expected_shas, "source-line RGP SHA-256 checkpoint mismatch")
+    files = source_lines.get("files")
+    require(isinstance(files, list), "source-line files must be a list")
+    expected = {}
+    for task in plan["tasks"]:
+        tid, rid = task["id"], task["repository"]
+        row = rows[(tid, ARMS[0])]
+        evidence = row.get("source_evidence")
+        require(isinstance(evidence, dict), f"task {tid}: source anchors missing")
+        for path in task["reference_paths"]:
+            require(path in evidence and isinstance(evidence[path], dict) and
+                    isinstance(evidence[path].get("git_blob_sha1"), str),
+                    f"task {tid}: source anchor missing for {path}")
+            key = (rid, path)
+            sha = evidence[path]["git_blob_sha1"]
+            require(key not in expected or expected[key] == sha,
+                    f"task {tid}: conflicting pinned blob SHA-1")
+            expected[key] = sha
+    require(len(files) == len(expected), "source-line index incomplete or has extra entries")
+    seen = {}
+    for i, entry in enumerate(files):
+        require(isinstance(entry, dict) and set(entry) ==
+                {"repository", "source_commit", "path", "git_blob_sha1", "line_count"},
+                f"source-line index entry {i}: malformed")
+        rid, path = entry["repository"], entry["path"]
+        require(isinstance(rid, str) and isinstance(path, str),
+                f"source-line index entry {i}: invalid repository/path")
+        key = (rid, path)
+        require(key in expected and key not in seen, "unknown/duplicate source-line entry")
+        require(entry["source_commit"] == repos[rid]["commit"] and
+                entry["git_blob_sha1"] == expected[key],
+                f"source-line index {rid}/{path}: wrong pinned source")
+        count = entry["line_count"]
+        require(type(count) is int and 1 <= count <= 10_000_000,
+                f"source-line index {rid}/{path}: invalid line count")
+        seen[key] = count
+    require(set(seen) == set(expected), "source-line index missing source")
+    return seen
+
+
 def blank_review(packet: dict) -> dict:
     return {"schema_version": PACKET_VERSION,
             "packet_sha256": digest_plan(packet),
@@ -122,9 +189,13 @@ def blank_review(packet: dict) -> dict:
             ]}
 
 
-def review_report(plan: dict, observations: dict, packet: dict, review: dict) -> dict:
+def review_report(plan: dict, observations: dict, packet: dict, review: dict,
+                  source_lines: dict | None = None,
+                  checkpoint: dict | None = None) -> dict:
     validate_packet(plan, observations, packet)
     rows, accounting = validate_observations(plan, observations)
+    line_bounds = (validate_source_line_counts(plan, observations, source_lines, checkpoint)
+                   if source_lines is not None else None)
     require(isinstance(review, dict) and review.get("schema_version") == PACKET_VERSION,
             "unsupported review")
     require(review.get("packet_sha256") == digest_plan(packet),
@@ -159,6 +230,10 @@ def review_report(plan: dict, observations: dict, packet: dict, review: dict) ->
                 require(isinstance(path, str) and path in allowed
                         and type(start) is int and type(end) is int
                         and 1 <= start <= end, f"judgment {i}: invalid source line evidence")
+                if line_bounds is not None:
+                    rid = tasks[tid]["repository"]
+                    require(end <= line_bounds[(rid, path)],
+                            f"judgment {i}: source line evidence out of bounds for {path}")
                 paths.add(path)
             require(paths == allowed, f"judgment {i}: not all required source paths cited")
             require(len(rationale.strip()) >= 15,
@@ -184,6 +259,8 @@ def review_report(plan: dict, observations: dict, packet: dict, review: dict) ->
         summary["reasons"].append("independent verdicts incomplete")
     if not identified or not independent:
         summary["reasons"].append("independent reviewer declaration or review record missing")
+    if line_bounds is None:
+        summary["reasons"].append("verified source-line index required before candidate review")
     if summary["reasons"]:
         return summary
 
@@ -222,6 +299,10 @@ def main() -> None:
         "benchmarks/gate_b/observations.cache_fair_2026-10-29.json"))
     parser.add_argument("--packet", type=Path)
     parser.add_argument("--review", type=Path)
+    parser.add_argument("--source-lines", type=Path,
+                        default=Path("benchmarks/gate_b/source_line_counts.json"))
+    parser.add_argument("--corpus-checkpoint", type=Path,
+                        default=Path("benchmarks/gate_b/corpus_preparation.json"))
     args = parser.parse_args()
     try:
         plan, observations = strict_json(args.plan), strict_json(args.observations)
@@ -235,7 +316,9 @@ def main() -> None:
                 result = blank_review(packet)
             else:
                 require(args.review is not None, "--review required")
-                result = review_report(plan, observations, packet, strict_json(args.review))
+                result = review_report(plan, observations, packet, strict_json(args.review),
+                                       strict_json(args.source_lines),
+                                       strict_json(args.corpus_checkpoint))
     except (ProtocolError, OSError, ValueError, KeyError, TypeError) as exc:
         parser.error(str(exc))
     print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
