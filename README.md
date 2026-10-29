@@ -16,6 +16,7 @@ cargo run -- verify --artifact REPO_CONTEXT.rgp --repo .
 python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp overview
 python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp tree
 python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp read --path README.md
+python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp search TODO --prefix src/
 ```
 
 The Git source is a **fixed commit** (default `HEAD` resolved before enumeration); modified and untracked working-tree files are never included. `REPO_CONTEXT.rgp` is excluded from input hashing, and potentially sensitive paths are conservatively excluded and reported. Raw blob bytes are not normalized. Symlinks are preserved as link text rather than followed; submodules are listed as exclusions. Git LFS pointers remain marked `pointer_only`. A partial snapshot **must not** be called complete.

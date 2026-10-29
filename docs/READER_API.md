@@ -17,6 +17,10 @@ reader.read("README.md", start_line=1, end_line=40)
 page = reader.search("TODO", paths=["README.md"], limit=10)
 while page["next_cursor"] is not None:
     page = reader.search("TODO", paths=["README.md"], limit=10, cursor=page["next_cursor"])
+# Search a whole directory without enumerating all files first:
+page = reader.search("TODO", prefix="src/", limit=10)
+while page["next_cursor"] is not None:
+    page = reader.search("TODO", prefix="src/", limit=10, cursor=page["next_cursor"])
 ```
 
 A search result contains its exact `path` and 1-based `line`, plus a
@@ -29,7 +33,11 @@ use `reader.read(path, start_line=line, end_line=line)`, subject to the
 independent 256 KiB read-response bound. Excerpts are display snippets,
 not complete source lines or trustworthy provenance evidence.
 
-CLI equivalents: `python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp coverage --scope snapshot`, `tree --prefix src/ --limit 20 --cursor TOKEN`, `search TODO --path README.md --limit 20 --cursor TOKEN`. A `next_cursor` is a *string*, not a numeric offset. Pass it back unchanged with the **same** query, path scope, prefix, and snapshot. It is bound to the `input_tree_digest` and query parameters; a mismatched or malformed cursor raises `UNSUPPORTED_FORMAT`. Cursors are stable for the same immutable snapshot, even after a different commit with identical snapshot contents. They do **not** authenticate the archive's origin.
+CLI equivalents: `python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp coverage --scope snapshot`, `tree --prefix src/ --limit 20 --cursor TOKEN`, `search TODO --path README.md --limit 20 --cursor TOKEN`, or `search TODO --prefix src/ --limit 20 --cursor TOKEN`.
+
+`search(prefix="src/")` matches a **lexical path prefix**. Include the trailing slash for a directory: `prefix="src"` also matches paths under `src2/`. An empty prefix preserves whole-snapshot search. When exact `paths` and `prefix` are both supplied, all explicitly requested paths must belong to that prefix; an inconsistent combination raises `UNSUPPORTED_FORMAT`. Missing exact paths still raise `PARTIAL_SNAPSHOT`. Empty results carry the snapshot's existing completeness status, not a promise that excluded files were searched. Unsafe or oversized prefixes are rejected.
+
+A `next_cursor` is a *string*, not a numeric offset. Pass it back unchanged with the **same** query, path scope, prefix, and snapshot. It is bound to the `input_tree_digest` and query parameters; a mismatched or malformed cursor raises `UNSUPPORTED_FORMAT`. Cursors are stable for the same immutable snapshot, even after a different commit with identical snapshot contents. They do **not** authenticate the archive's origin.
 
 ## Resource limits (v1.0 Reader)
 
