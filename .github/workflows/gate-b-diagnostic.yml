@@ -1,0 +1,142 @@
+name: Gate B paired diagnostic (manual; optional paid API)
+
+on:
+  workflow_dispatch:
+    inputs:
+      task_id:
+        description: Preregistered task (fixed source commit)
+        type: choice
+        required: true
+        options:
+          - rgp-transport-hash
+          - rgp-git-snapshot
+          - rgp-search-cursor
+          - rgp-trust-boundary
+          - serde-json-deserializer
+          - serde-json-serializer
+          - serde-json-error-position
+          - serde-json-ser-tests
+          - itsdangerous-timestamp
+          - itsdangerous-hmac
+          - itsdangerous-deserialization
+          - itsdangerous-expiry-tests
+      corpus_run_id:
+        description: Actions run containing the pinned corpus (default expires 4 Nov 2026)
+        type: string
+        required: true
+        default: '40767794459'
+      model:
+        description: Exact OpenAI API model ID (must be available to the API key)
+        type: string
+        required: true
+      execute_paid_run:
+        description: Explicitly authorize up to 8 billed Responses requests (4 per arm)
+        type: boolean
+        required: true
+        default: false
+      upload_raw_traces:
+        description: Upload potentially sensitive raw answers and tool traces for 1 day
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TASK_ID: ${{ inputs.task_id }}
+      MODEL_ID: ${{ inputs.model }}
+      GH_TOKEN: ${{ github.token }}
+      RUN_ID_PINNED_CORPUS: ${{ inputs.corpus_run_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Select externally anchored pinned artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/gate_b_workflow_preflight.py select \
+            --task "$TASK_ID" --github-env "$GITHUB_ENV"
+      - name: Fetch previously prepared Actions artifact (no model charges)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$RUN_ID_PINNED_CORPUS" =~ ^[0-9]{8,20}$ ]]; then
+            echo "invalid numeric corpus run ID" >&2; exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/rgp"
+          gh run download "$RUN_ID_PINNED_CORPUS" --repo iivkis/rgp \
+            --name "$GATE_B_ARTIFACT_NAME" --dir "$RUNNER_TEMP/rgp"
+          python3 scripts/gate_b_workflow_preflight.py verify \
+            --task "$TASK_ID" --download-dir "$RUNNER_TEMP/rgp"
+      - name: Safe preflight with exact model and pinned RGP
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/gate_b_paired_pilot.py \
+            --task "$TASK_ID" --model "$MODEL_ID" \
+            --rgp "$RUNNER_TEMP/rgp/REPO_CONTEXT.rgp" \
+            --trusted-rgp-sha256 "$GATE_B_RGP_SHA256" \
+            --token-budget 8000 --max-steps 4 \
+            --output-dir "$RUNNER_TEMP/gate-b-diagnostic" --dry-run
+      - name: Check explicit authorization and API secret before paid calls
+        if: ${{ inputs.execute_paid_run }}
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$OPENAI_API_KEY" ]]; then
+            echo 'OPENAI_API_KEY GitHub Actions repository secret is required' >&2
+            exit 1
+          fi
+      - name: Paid diagnostic pair (NOT eligible for Gate B)
+        if: ${{ inputs.execute_paid_run }}
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/gate_b_paired_pilot.py \
+            --task "$TASK_ID" --model "$MODEL_ID" \
+            --rgp "$RUNNER_TEMP/rgp/REPO_CONTEXT.rgp" \
+            --trusted-rgp-sha256 "$GATE_B_RGP_SHA256" \
+            --token-budget 8000 --max-steps 4 \
+            --output-dir "$RUNNER_TEMP/gate-b-diagnostic" \
+            --confirm-api-charges
+      - name: Summarize charges and diagnostic-only status without raw answers
+        if: ${{ always() && inputs.execute_paid_run }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          path = Path(os.environ['RUNNER_TEMP']) / 'gate-b-diagnostic' / 'paired-summary.json'
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as f:
+              f.write('### Gate B paired diagnostic (NOT a scored trial)\n\n')
+              if not path.is_file():
+                  f.write('No completed summary; inspect job error. API charges may still have occurred.\n')
+              else:
+                  report = json.loads(path.read_text())
+                  f.write(f"Status: `{report['status']}`; completed arms: {report['completed_arms']}/2\n\n")
+                  for arm, entry in report['results'].items():
+                      f.write(f"- {arm}: {entry['total_tokens']} provider-reported tokens; "
+                              f"{entry['tool_calls']} tool calls; {entry['elapsed_ms']} ms\n")
+                  f.write('\nThis pilot uses GitHub REST and a local RGP, not the official GitHub connector. Gate B remains HOLD.\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() && inputs.execute_paid_run && inputs.upload_raw_traces }}
+        with:
+          name: gate-b-diagnostic-raw-${{ github.run_id }}
+          path: ${{ runner.temp }}/gate-b-diagnostic/*.json
+          retention-days: 1
+          if-no-files-found: ignore
