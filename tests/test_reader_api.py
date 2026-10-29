@@ -1,16 +1,52 @@
 """MVP-A Reader bounds, pagination, completeness and cursor integrity."""
+import hashlib
+import io
+import json
 import os
 import sys
 import unittest
+import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
 from rgp_reader import Reader, RgpError, MAX_RESULT  # noqa: E402
-from test_manifest_contract import fake_artifact  # noqa: E402
+from test_manifest_contract import fake_artifact, rgp_from_zip  # noqa: E402
 
 MIXED = ROOT / "tests" / "fixtures" / "v1" / "valid-mixed.rgp"
+
+
+def three_scope_artifact():
+    """Independent ZIP/transport fixture with source and test directories."""
+    files = {
+        "src/a.py": b"needle from src A\nneedle again\n",
+        "src/sub/b.py": b"ignore\nneedle from sub B\n",
+        "src2/unrelated.py": b"needle from src2\n",
+        "tests/test_a.py": b"needle from tests\n",
+    }
+    records = []
+    input_digest = hashlib.sha256()
+    blobs = {}
+    for path, data in sorted(files.items()):
+        sha = hashlib.sha256(data).hexdigest()
+        blob = "files/" + sha
+        records.append({"path": path, "mode": "100644", "kind": "file",
+                        "size": len(data), "sha256": sha, "blob": blob,
+                        "status": "included"})
+        input_digest.update(path.encode() + b"\0" + b"100644" + b"\0"
+                            + bytes.fromhex(sha))
+        blobs[blob] = data
+    manifest = {"schema_version": "1.0", "source_commit": "a" * 40,
+                "input_tree_digest": input_digest.hexdigest(),
+                "files": records, "excluded": [],
+                "index_coverage": "not_indexed", "graph_coverage": "not_indexed"}
+    mem = io.BytesIO()
+    with zipfile.ZipFile(mem, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("manifest.json", json.dumps(manifest))
+        for name, data in sorted(blobs.items()):
+            archive.writestr(name, data)
+    return rgp_from_zip(mem.getvalue())
 
 
 class ReaderApiTests(unittest.TestCase):
@@ -36,6 +72,59 @@ class ReaderApiTests(unittest.TestCase):
         for kwargs in [{"query": "alpha"}, {"query": "beta", "paths": ["src/file.txt"]}]:
             with self.subTest(kwargs=kwargs), self.assertRaisesRegex(RgpError, "UNSUPPORTED_FORMAT"):
                 r.search(cursor=token, **kwargs)
+
+    def test_search_prefix_scopes_subtrees_not_siblings(self):
+        r = Reader(three_scope_artifact())
+        scoped = r.search("needle", prefix="src/")
+        self.assertEqual([(m["path"], m["line"]) for m in scoped["matches"]],
+                         [("src/a.py", 1), ("src/a.py", 2),
+                          ("src/sub/b.py", 2)])
+        self.assertEqual(len(r.search("needle", prefix="tests/")["matches"]), 1)
+        self.assertEqual(r.search("needle", prefix="missing/")["matches"], [])
+        # This is a *lexical* prefix: callers need a trailing slash to
+        # express a directory boundary.
+        self.assertEqual(len(r.search("needle", prefix="src")["matches"]), 4)
+        self.assertEqual(len(r.search("needle")["matches"]), 5)
+
+    def test_search_prefix_cursor_remains_bound_to_exact_scope(self):
+        r = Reader(three_scope_artifact())
+        first = r.search("needle", prefix="src/", limit=1)
+        token = first["next_cursor"]
+        self.assertIsInstance(token, str)
+        second = r.search("needle", prefix="src/", limit=1, cursor=token)
+        third = r.search("needle", prefix="src/", limit=1, cursor=second["next_cursor"])
+        self.assertEqual([(x["path"], x["line"]) for part in
+                          (first, second, third) for x in part["matches"]],
+                         [("src/a.py", 1), ("src/a.py", 2), ("src/sub/b.py", 2)])
+        self.assertIsNone(third["next_cursor"])
+        for bad in ("src", "src/a", "src/sub/", "", "tests/"):
+            with self.subTest(prefix=bad), self.assertRaisesRegex(
+                    RgpError, "cursor does not match"):
+                r.search("needle", prefix=bad, cursor=token)
+        # Preserve cursor compatibility for the original unscoped API.
+        old_token = r.search("needle", limit=1)["next_cursor"]
+        self.assertEqual(r.search("needle", cursor=old_token)["matches"][0]["line"], 2)
+        with self.assertRaisesRegex(RgpError, "cursor does not match"):
+            r.search("needle", prefix="src/", cursor=old_token)
+
+    def test_search_prefix_and_exact_paths_must_agree(self):
+        r = Reader(three_scope_artifact())
+        response = r.search("needle", prefix="src/", paths=["src/sub/b.py"])
+        self.assertEqual([m["path"] for m in response["matches"]], ["src/sub/b.py"])
+        with self.assertRaisesRegex(RgpError, "outside prefix"):
+            r.search("needle", prefix="src/", paths=["tests/test_a.py"])
+        with self.assertRaisesRegex(RgpError, "PARTIAL_SNAPSHOT"):
+            r.search("needle", prefix="src/", paths=["src/missing.py"])
+
+    def test_search_prefix_rejects_unsafe_or_invalid_scope(self):
+        r = Reader(three_scope_artifact())
+        for bad in (None, 1, True, "/src", "../", "src/../",
+                    "src//", "src\\file", "src/./", "src/\n",
+                    "あ" * 1500):
+            with self.subTest(prefix=str(bad)[:18]), self.assertRaisesRegex(
+                    RgpError, "invalid search prefix"):
+                r.search("needle", prefix=bad)
+        self.assertEqual(r.search("needle", prefix="src/")["snapshot_status"], "available")
 
     def test_cursor_rejected_on_other_snapshot(self):
         r = Reader(fake_artifact())
