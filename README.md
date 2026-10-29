@@ -81,7 +81,10 @@ made. Reuse of shared files was not enabled in the GitHub baseline.
 
 A [cache-fair acquisition replay](benchmarks/gate_b/CACHE_FAIR_2026-10-29.md)
 has now measured **13 unique GitHub source fetches versus 6 RGP acquisition/
-Reader setup calls**, a 53.85% reduction. It reuses the earlier pilot's
+Reader setup calls**, a 53.85% reduction.
+A separate [task-volume sensitivity analysis](benchmarks/gate_b/SENSITIVITY_2026-10-30.md)
+shows why this cannot be extrapolated to a single question: it enumerates
+4095 conditional workload subsets, with **zero additional experiments**. It reuses the earlier pilot's
 answers and correctness judgments; it is **not** a new independently graded
 run. A typed first-use source-cache ledger makes zero-call GitHub tasks
 explicit and rejects missing/mismatched Git blob anchors.

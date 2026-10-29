@@ -46,6 +46,8 @@ jobs:
           set -euo pipefail
           python3 scripts/gate_b.py plan
           python3 -m unittest discover -s tests -p 'test_gate_b*.py' -v
+          python3 scripts/gate_b_sensitivity.py > "$RUNNER_TEMP/sensitivity.json"
+          python3 -c 'import json,sys; v=json.load(open(sys.argv[1])); assert v["new_experimental_trials"] == 0 and v["total_nonempty_subsets"] == 4095 and v["full_run_measured_calls"] == {"github":13, "rgp":6} and v["decision"].startswith("HOLD")' "$RUNNER_TEMP/sensitivity.json"
           python3 scripts/gate_b.py report > "$RUNNER_TEMP/hold.json"
           python3 -c 'import json,sys; assert json.load(open(sys.argv[1]))["status"] == "HOLD"' "$RUNNER_TEMP/hold.json"
       - name: Prepare arm-masked Gate B reviewer handoff and assert HOLD
