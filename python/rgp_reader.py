@@ -51,6 +51,21 @@ def _safe_path(path: str) -> bool:
     )
 
 
+def _safe_prefix(prefix: str) -> bool:
+    """Validate a lexical path prefix, including an optional trailing slash."""
+    if prefix == "":
+        return True
+    if not isinstance(prefix, str) or len(prefix.encode("utf-8")) > MAX_PATH_BYTES:
+        return False
+    if prefix.startswith("/") or "\\" in prefix or any(
+        unicodedata.category(c) == "Cc" for c in prefix
+    ):
+        return False
+    segments = prefix.split("/")
+    return (all(segment not in ("", ".", "..") for segment in segments[:-1])
+            and segments[-1] not in (".", ".."))
+
+
 def _digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -317,14 +332,24 @@ class Reader:
         _require(len(content.encode("utf-8")) <= MAX_RESULT, "RESOURCE_LIMIT", "result too large")
         return {"path": path, "encoding": "utf-8", "content": content, "start_line": start, "end_line": end, "status": entry["status"]}
 
-    def search(self, query: str, paths: list[str] | None = None, limit: int = 50, cursor: str | None = None) -> dict:
+    def search(self, query: str, paths: list[str] | None = None, limit: int = 50,
+               cursor: str | None = None, *, prefix: str = "") -> dict:
+        """Find source lines, optionally restricted to a lexical path prefix."""
         _require(isinstance(query, str) and 0 < len(query.encode("utf-8")) <= 1024, "RESOURCE_LIMIT", "search query")
         _require(type(limit) is int and 0 < limit <= 100, "RESOURCE_LIMIT", "search limit")
+        _require(_safe_prefix(prefix), "UNSUPPORTED_FORMAT", "invalid search prefix")
         _require(paths is None or (isinstance(paths, list) and len(paths) <= MAX_ENTRIES and all(isinstance(p, str) for p in paths)), "UNSUPPORTED_FORMAT", "paths")
         if paths is not None:
             _require(all(p in self._files for p in paths), "PARTIAL_SNAPSHOT", "requested search path is not in snapshot")
-        selected = sorted(self._files) if paths is None else sorted(set(paths))
-        context = self._cursor_context("search", [query, selected if paths is not None else None])
+            _require(all(p.startswith(prefix) for p in paths), "UNSUPPORTED_FORMAT", "search paths outside prefix")
+        selected = (sorted(p for p in self._files if p.startswith(prefix))
+                    if paths is None else sorted(set(paths)))
+        # Preserve existing no-prefix cursor contracts. A scoped cursor also
+        # binds the literal prefix, even when two prefixes select the same set.
+        parameters = [query, selected if paths is not None else None]
+        if prefix:
+            parameters.append(prefix)
+        context = self._cursor_context("search", parameters)
         position = self._read_cursor(cursor, "search", context)
         _require(position is None or (position[0] in selected and position[1] >= 1), "UNSUPPORTED_FORMAT", "search cursor position")
         page = []
@@ -370,6 +395,7 @@ def main() -> None:
     search = commands.add_parser("search")
     search.add_argument("query")
     search.add_argument("--path", action="append", dest="paths")
+    search.add_argument("--prefix", default="")
     search.add_argument("--limit", type=int, default=50)
     search.add_argument("--cursor")
     args = parser.parse_args()
@@ -386,7 +412,7 @@ def main() -> None:
         elif args.command == "read":
             result = reader.read(args.path, args.start_line, args.end_line)
         else:
-            result = reader.search(args.query, args.paths, args.limit, args.cursor)
+            result = reader.search(args.query, args.paths, args.limit, args.cursor, prefix=args.prefix)
         print(json.dumps(result, ensure_ascii=False, indent=2))
     except RgpError as exc:
         parser.exit(2, f"{exc}\n")
