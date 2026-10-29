@@ -127,38 +127,18 @@ tasks:
       - nix flake check --no-update-lock-file --show-trace
 
   benchmark:plan:
-    desc: Validate pinned Gate B tasks and print preregistration SHA-256
+    desc: Validate assistant-only Gate B v2 tasks (no inference)
     cmds:
       - python3 scripts/gate_b.py plan
 
   benchmark:report:
-    desc: Evaluate actual paired agent trials; missing trials must remain HOLD
+    desc: Evaluate assistant-observed GitHub/RGP source checks; incomplete remains HOLD
     vars:
-      TRIALS: '{{.TRIALS | default "benchmarks/gate_b/trials.template.json"}}'
+      OBSERVATIONS: '{{.OBSERVATIONS | default "benchmarks/gate_b/observations.template.json"}}'
     cmds:
-      - python3 scripts/gate_b.py report --trials '{{.TRIALS}}'
+      - python3 scripts/gate_b.py report --observations '{{.OBSERVATIONS}}'
 
-  benchmark:trace-check:
-    desc: Validate one observed agent trial trace (SESSION=path/to/session.json)
-    vars:
-      SESSION: '{{.SESSION | default "benchmarks/gate_b/session.example.json"}}'
+  benchmark:test:
+    desc: Offline tests for assistant-only accounting and RGP source audit
     cmds:
-      - python3 scripts/gate_b_capture.py check-session --session '{{.SESSION}}'
-
-  benchmark:collect:
-    desc: Compile observed agent event traces and print the fail-closed Gate B verdict
-    vars:
-      SESSIONS: '{{.SESSIONS | default "benchmarks/gate_b/sessions"}}'
-      TRIALS_OUTPUT: '{{.TRIALS_OUTPUT | default "benchmarks/gate_b/trials.json"}}'
-    cmds:
-      - python3 scripts/gate_b_capture.py collect --sessions '{{.SESSIONS}}' --output '{{.TRIALS_OUTPUT}}'
-
-  benchmark:pilot:test:
-    desc: Offline tests for non-scoring GitHub REST vs RGP agent diagnostics
-    cmds:
-      - python3 -m unittest discover -s tests -p 'test_gate_b_agent_pilot.py' -v
-
-  benchmark:pilot:paired:test:
-    desc: Offline tests for paired diagnostic model runner, output safety and recovery
-    cmds:
-      - python3 -m unittest discover -s tests -p 'test_gate_b_*pilot.py' -v
+      - python3 -m unittest discover -s tests -p 'test_gate_b*.py' -v

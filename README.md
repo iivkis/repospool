@@ -46,71 +46,29 @@ python3 python/rgp_reader.py --artifact /tmp/REPO_CONTEXT.rgp overview
 
 Bootstrap refuses path traversal, duplicate/extra ZIP members, malformed manifests, resource-limit violations and hash mismatches; it does not execute ZIP content. The optional `expected.json` *inside* the ZIP is not an authenticity anchor. A SHA-256 supplied from the same untrusted download does not independently prove provenance.
 
-## Gate B: practical-value experiment (not yet passed)
+## Gate B: assistant-only source comparison (protocol v2)
 
-The [preregistered Gate B plan](benchmarks/gate_b/plan.json) pins **3 real
-repositories, 12 tasks, 3 repetitions per arm**, with separate ordinary GitHub
-connector and RGP Actions-artifact arms. The [evaluation protocol](docs/RGP_BENCHMARK_BASELINE.md)
-requires raw paired agent traces, correctness judgments, model/token usage,
-connector transfer metrics and full preparation costs. The new manual
-`Gate B pinned corpus preparation` Actions workflow produces pinned source
-packs; it does **not** run agents or claim savings.
+The **assistant in the active conversation** writes the code, checks the source
+and evaluates the results. The repository has no model runtime, inference API,
+API key, automated agent, or model-related CI dependency. This replaces an
+earlier, incorrect benchmark harness; see [correction](docs/GATE_B_CORRECTION.md).
 
-```sh
-task benchmark:plan       # validate task suite and print plan SHA-256
-task benchmark:report     # empty default results correctly report HOLD
-```
-
-No actual Gate B trials have been recorded. **Gate B status: HOLD.**
-
-The [Gate B corpus checkpoint](benchmarks/gate_b/corpus_preparation.json)
-records one verified connected-GitHub download for each of the three pinned
-repositories. The trusted `python/rgp_bootstrap.py` now recognizes either the
-legacy `expected.json` or the benchmark's `provenance.json` co-packed with one
-RGP. Neither co-packed metadata file proves authenticity without an external
-trust anchor. The 72 agent trials and Gate B decision are still outstanding.
-
-
-### Evidence capture (real trials only)
-
-Use `task benchmark:trace-check SESSION=/path/to/real-session.json` to validate one provider-instrumented event trace, then `task benchmark:collect SESSIONS=/path/to/traces TRIALS_OUTPUT=/path/to/trials.json` to compute a trial report. See [trace protocol](docs/GATE_B_TRACE_PROTOCOL.md). The collector does not run agents or invent unavailable provider metrics, and its session template is not a real measurement.
-
-## Gate B independent transport preflight (29 October 2026)
-
-The pinned `rgp` Actions artifact was downloaded via the connected GitHub
-app and opened by the stdlib Reader. Its 132,217-byte RGP matches independently
-recorded SHA-256 `8e5871336d1aaad32d89e6e1b0e581a836d608e7e3e453b10c32b6d586fcaa6f`.
-Twelve decoded Git blobs across three repositories were checked against the corresponding GitHub
-`fetch_file` blob identifiers at each repository's pinned commit: all twelve matched.
-See [pilot_preflight_2026-10-29.json](benchmarks/gate_b/pilot_preflight_2026-10-29.json).
-
-This is a **transport/source-integrity preflight, not one of the 72 agent runs**.
-Provider model-token usage, full network time, connector byte telemetry and
-independent agent-answer evaluation are unavailable; Gate B remains HOLD.
-
-## Gate B executable diagnostic agent (not a scoring trial)
-
-The [agent pilot](docs/GATE_B_AGENT_DIAGNOSTIC.md) uses a real OpenAI
-Responses model and provider-reported tokens with two **non-scoring** adapters:
-GitHub REST over HTTPS and an already-verified local RGP Reader. It records
-source reads, model usage receipts, answer hashes and transport timing.
-It does not call the connected ChatGPT GitHub app and excludes artifact
-delivery costs, so it cannot replace the 72 registered Gate B trials.
-No model calls are made by CI; the eight offline harness tests check the
-function-call loop and fail-closed handling.
+The [12-task plan](benchmarks/gate_b/plan.json) covers three pinned Git
+repositories. The assistant compares reading pinned code with the connected
+GitHub tools and reading identical source through the trusted RGP Reader.
+The [methodology](docs/RGP_BENCHMARK_BASELINE.md) counts actual connector
+operations, **including acquisition of the RGP**, and guards correctness.
+Unknown token counts are not reported as zero. No external models are started.
 
 ```sh
-task benchmark:pilot:test
-# For a real diagnostic run, see docs/GATE_B_AGENT_DIAGNOSTIC.md
+task benchmark:plan
+task benchmark:report     # no observations => HOLD
+task benchmark:test
+# after downloading the three already prepared RGP snapshots:
+python3 scripts/gate_b_rgp_audit.py --rgp-dir /path/to/pinned-rgp
 ```
 
-## Gate B paired diagnostic (not scoring)
-
-For a **matched**, non-scoring agent comparison using the Responses API, pinned
-GitHub REST and a locally verified RGP, see [paired diagnostic instructions](docs/GATE_B_AGENT_DIAGNOSTIC.md).
-The new `gate_b_paired_pilot.py` validates task/commit/RGP hash and output paths
-without API calls via `--dry-run`. Running a paid pair requires an independent
-API key and explicit `--confirm-api-charges`; it caps requests per arm and
-persists each finished run before attempting the second. Results are private
-by default and **never count toward the 72 official Gate B trials**.
-Run `task benchmark:pilot:paired:test` for the offline safety tests.
+[Source integrity audit](benchmarks/gate_b/source_audit_2026-10-29.json):
+3/3 complete RGP snapshots, 12/12 task reference sets present.
+This is **not** 24 completed source-answer comparisons.
+**Gate B status: HOLD** until the assistant completes the paired tasks.
