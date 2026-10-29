@@ -111,3 +111,45 @@ Results are not scored by the Gate B evaluator.
 
 For the original single-arm command above, also pass `--confirm-api-charges`.
 It refuses an existing output path **before** calling the model.
+
+## Manual GitHub Actions execution (PR #19)
+
+Use the repository's **Actions → Gate B paired diagnostic (manual; optional paid
+API) → Run workflow**. Choose one of the 12 frozen tasks and enter the exact
+OpenAI Responses model ID. By default `execute_paid_run=false`: the workflow
+only downloads the pinned `gate-b-*` Actions artifact, validates the original
+committed corpus SHA-256 and source commit, and performs `--dry-run` **without
+model API charges**. It needs no API secret for this preflight.
+
+For real, separately billed *diagnostic* agent calls, configure GitHub
+**Settings → Secrets and variables → Actions → New repository secret** named
+`OPENAI_API_KEY`, then re-run the manual workflow with
+`execute_paid_run=true`. That toggle authorizes up to **8 Responses
+requests** (4 per arm, up to 8,000 provider-reported tokens per arm as an
+application-level target). This is **not a currency ceiling**: provider input
+charges for an individual oversized or failed request may exceed the budget
+before the program can stop. Check account-level API usage/budget limits before
+turning it on. No workflow triggers it automatically on push or PR.
+
+The default corpus run ID `40767794459` has artifacts retained until
+**4 November 2026**. If they expire, manually run the separate *Gate B pinned
+corpus preparation* workflow and enter the replacement Actions run ID in the
+`corpus_run_id` field. The trusted SHA-256 and frozen commit in
+`corpus_preparation.json` remain mandatory: an unexpected regenerated archive
+will fail closed rather than silently changing the benchmark input.
+
+Raw answers and tool-call traces are **not uploaded by default**. Turning
+`upload_raw_traces=true` publishes them as an Actions artifact retained for
+one day; review that exposure carefully, especially in a public repository.
+Only non-sensitive totals (provider token counts, tool-call counts and elapsed
+time) are written to the job summary. Success is not a Gate B result: the two
+manual-workflow arms are GitHub REST and locally downloaded RGP, **not** the
+preregistered ChatGPT-connected GitHub workflow. Never import their traces
+into the 72 required Gate B sessions.
+
+To test the selection/verification script without any model or network access:
+
+```sh
+python3 -m unittest discover -s tests -p 'test_gate_b_workflow_preflight.py' -v
+python3 scripts/gate_b_workflow_preflight.py select --task rgp-transport-hash
+```
