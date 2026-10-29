@@ -26,10 +26,13 @@ started. Rubrics and the required source paths are unchanged.
 
 For each task and arm, record a short answer, which source paths support it,
 a link to inspectable evidence, whether the task rubric was met, and the
-**observed** number of GitHub connector calls. Do not infer or fabricate
-unavailable metrics. The RGP arm must include artifact retrieval and
+**observed** number of GitHub connector calls. Every planned reference path
+must appear exactly once in each observation's `source_paths`. The GitHub
+arm must record at least one actual source-retrieval call per task. Do not infer
+or fabricate unavailable metrics. The RGP arm must include artifact retrieval and
 preparation connector calls **once per repository** in the total, and must
-not omit failed retrievals. Zero network calls for an already downloaded RGP
+not omit failed retrievals. Each repository needs at least one acquisition
+connector call; zero network calls for an already downloaded RGP
 is not a zero-cost acquisition. Measure equivalent units and distinguish
 one-time preparation costs from per-task calls.
 
@@ -37,7 +40,9 @@ We can measure actual connector call counts from visible tool invocations.
 This chat does **not** expose authoritative model-token usage or comparable
 network timings, so neither is a Gate B metric. The previous 20% token target
 cannot be tested under this setup. The original 30% connector-call reduction
-threshold and no-correctness-regressions guardrail remain. The evaluator
+threshold and no-correctness-regressions guardrail remain. **Every RGP answer
+must also pass its rubric**: two incorrect answers do not constitute a product
+success merely because neither regressed from the other. The evaluator
 returns **GO_CANDIDATE**, not automatic GO, even if the reported counts meet
 the threshold; evidence and correctness judgments still need inspection.
 
@@ -72,9 +77,10 @@ It reports three intact RGP files and 12/12 valid reference-path sets.
 
 - `HOLD`: fewer than 24 task-arm observations, unobserved acquisition costs,
   or mismatched plan/evidence.
-- `PIVOT`: complete data, but any correctness regression or less than 30%
-  reduction in counted GitHub connector calls.
-- `GO_CANDIDATE`: complete data and threshold satisfied; the assistant must
+- `PIVOT`: complete data, but any incorrect RGP answer, correctness
+  regression, or less than 30% reduction in counted GitHub connector calls.
+- `GO_CANDIDATE`: complete data, all RGP answers correct and threshold
+  satisfied; the assistant must
   inspect actual source evidence and recorded tool calls before recommending
   GO.
 
