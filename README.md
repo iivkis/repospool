@@ -87,7 +87,8 @@ run. A typed first-use source-cache ledger makes zero-call GitHub tasks
 explicit and rejects missing/mismatched Git blob anchors.
 
 An [arm-masked independent review handoff](docs/GATE_B_REVIEW.md) is
-now available. It prepares randomly ordered A/B answers and refuses to
+now available. Source-line citations are checked against a 13-file index
+recomputed from pinned RGP snapshots and Git blob identifiers. It prepares randomly ordered A/B answers and refuses to
 treat absent independent judgments as success. Neither the masked-review
 utility nor a reviewer self-declaration alone can authenticate actual
 grading or turn the current diagnostic into GO.
