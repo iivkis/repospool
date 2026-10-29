@@ -54,6 +54,7 @@ jobs:
           set -euo pipefail
           handoff="$RUNNER_TEMP/gate-b-review-handoff"
           mkdir -p "$handoff"
+          python3 scripts/gate_b_source_lines.py --help > /dev/null
           python3 scripts/gate_b_review.py pack > "$handoff/packet.json"
           python3 scripts/gate_b_review.py template --packet "$handoff/packet.json" > "$handoff/review-template.json"
           python3 scripts/gate_b_review.py check --packet "$handoff/packet.json" --review "$handoff/review-template.json" > "$handoff/initial-status.json"
