@@ -11,3 +11,4 @@ REPO_CONTEXT.rgp
 # Agent traces and unsanitized token/cost telemetry are private by default.
 /benchmarks/gate_b/sessions/
 /benchmarks/gate_b/trials.json
+/benchmarks/gate_b/diagnostics/
