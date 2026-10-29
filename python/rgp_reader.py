@@ -66,6 +66,31 @@ def _tree_digest(files: list[dict]) -> str:
     return hasher.hexdigest()
 
 
+MAX_SEARCH_EXCERPT = 512
+
+
+def _matching_excerpt(line: str, query: str) -> str:
+    """Bound UTF-8 output while keeping the first matched term in view.
+
+    A query longer than the 512-byte excerpt cannot be shown in full;
+    include its beginning instead. The search result still names the full
+    file and line for a scoped Reader.read() follow-up.
+    """
+    data = line.encode("utf-8")
+    if len(data) <= MAX_SEARCH_EXCERPT:
+        return line
+    match_at = line.find(query)  # callers only pass lines containing query
+    match_byte = len(line[:match_at].encode("utf-8"))
+    match_size = len(query.encode("utf-8"))
+    # Reserve some left context, never at the expense of the full match
+    # when the query fits within the byte limit.
+    before = min(128, max(0, MAX_SEARCH_EXCERPT - match_size) // 2)
+    offset = max(0, match_byte - before)
+    # The slice may start/end inside a UTF-8 character. Dropping just the
+    # partial character is safe and keeps the matching text intact.
+    return data[offset:offset + MAX_SEARCH_EXCERPT].decode("utf-8", errors="ignore")
+
+
 def decode_transport(source: bytes) -> bytes:
     _require(len(source) <= 2 * MAX_ARTIFACT, "RESOURCE_LIMIT", "outer RGP too large")
     try:
@@ -318,8 +343,9 @@ class Reader:
                     continue
                 if len(page) >= limit:
                     return {"matches": page, "next_cursor": self._make_cursor("search", context, last[0], last[1]), "snapshot_status": self._snapshot_summary()["status"]}
-                # Excerpt is bounded in UTF-8 bytes, not Unicode code points.
-                excerpt = line.encode("utf-8")[:512].decode("utf-8", errors="ignore")
+                # Use a bounded match-aware window, not the first bytes of
+                # a potentially long minified/source line.
+                excerpt = _matching_excerpt(line, query)
                 page.append({"path": path, "line": number, "excerpt": excerpt})
                 last = (path, number)
         return {"matches": page, "next_cursor": None, "snapshot_status": self._snapshot_summary()["status"]}
