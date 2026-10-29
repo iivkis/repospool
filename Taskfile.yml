@@ -158,6 +158,11 @@ tasks:
     cmds:
       - python3 scripts/gate_b_review.py check --packet '{{.PACKET}}' --review '{{.REVIEW}}'
 
+  benchmark:sensitivity:
+    desc: Model Gate B task-volume break-even from pinned source references (no new trials)
+    cmds:
+      - python3 scripts/gate_b_sensitivity.py
+
   benchmark:test:
     desc: Offline tests for assistant-only accounting and RGP source audit
     cmds:
