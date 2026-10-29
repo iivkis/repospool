@@ -72,6 +72,50 @@ class ReaderApiTests(unittest.TestCase):
         with self.assertRaisesRegex(RgpError, "RESOURCE_LIMIT"):
             r.read("src/example.py")
 
+    def test_search_excerpt_includes_match_far_into_long_line(self):
+        from test_reader import fixture
+        source = ("prefix-" * 160 + "MATCH_HERE" + "-suffix" * 100 + "\n").encode()
+        r = Reader(fixture(content=source))
+        found = r.search("MATCH_HERE")["matches"]
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0]["line"], 1)
+        self.assertIn("MATCH_HERE", found[0]["excerpt"])
+        self.assertLessEqual(len(found[0]["excerpt"].encode("utf-8")), 512)
+        self.assertNotEqual(found[0]["excerpt"], source[:512].decode("utf-8"))
+
+    def test_search_excerpt_preserves_multibyte_match_across_window(self):
+        from test_reader import fixture
+        query = "совпадение🌿"
+        source = ("🌲" * 256 + query + "🌺" * 256 + "\n").encode("utf-8")
+        r = Reader(fixture(content=source))
+        first = r.search(query)["matches"][0]["excerpt"]
+        self.assertIn(query, first)
+        self.assertLessEqual(len(first.encode("utf-8")), 512)
+        # The result is valid UTF-8 and never leaks a partial code point.
+        self.assertEqual(first.encode("utf-8").decode("utf-8"), first)
+
+    def test_search_excerpt_handles_query_longer_than_excerpt(self):
+        from test_reader import fixture
+        query = "Ж" * 300  # 600 UTF-8 bytes; full query cannot fit in excerpt.
+        r = Reader(fixture(content=("a" * 1000 + query + "b" * 50 + "\n").encode()))
+        found = r.search(query)["matches"]
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0]["line"], 1)
+        self.assertTrue(found[0]["excerpt"].startswith("Ж"))
+        self.assertLessEqual(len(found[0]["excerpt"].encode("utf-8")), 512)
+
+    def test_search_excerpt_and_cursor_stay_consistent_for_long_lines(self):
+        from test_reader import fixture
+        line = "before" * 150 + "needle" + "after" * 150
+        r = Reader(fixture(content=(line + "\n" + line + "\n").encode()))
+        first = r.search("needle", limit=1)
+        self.assertIn("needle", first["matches"][0]["excerpt"])
+        self.assertTrue(first["next_cursor"])
+        second = r.search("needle", limit=1, cursor=first["next_cursor"])
+        self.assertEqual([x["line"] for x in second["matches"]], [2])
+        self.assertIn("needle", second["matches"][0]["excerpt"])
+        self.assertIsNone(second["next_cursor"])
+
     def test_bounded_utf8_search_excerpt(self):
         from test_reader import fixture
         # Non-ASCII input: excerpt cap must be encoded bytes, not code points.
