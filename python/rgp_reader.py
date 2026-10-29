@@ -55,7 +55,13 @@ def _safe_prefix(prefix: str) -> bool:
     """Validate a lexical path prefix, including an optional trailing slash."""
     if prefix == "":
         return True
-    if not isinstance(prefix, str) or len(prefix.encode("utf-8")) > MAX_PATH_BYTES:
+    if not isinstance(prefix, str):
+        return False
+    try:
+        encoded = prefix.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    if len(encoded) > MAX_PATH_BYTES:
         return False
     if prefix.startswith("/") or "\\" in prefix or any(
         unicodedata.category(c) == "Cc" for c in prefix
