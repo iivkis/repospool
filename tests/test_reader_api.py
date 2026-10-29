@@ -122,7 +122,7 @@ class ReaderApiTests(unittest.TestCase):
         r = Reader(three_scope_artifact())
         for bad in (None, 1, True, "/src", "../", "src/../",
                     "src//", "src\\file", "src/./", "src/\n",
-                    "\\ud800", "あ" * 1500):
+                    "\ud800", "あ" * 1500):
             with self.subTest(prefix=str(bad)[:18]), self.assertRaisesRegex(
                     RgpError, "invalid search prefix"):
                 r.search("needle", prefix=bad)
