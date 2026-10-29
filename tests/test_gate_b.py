@@ -30,7 +30,7 @@ def samples(base=4, local=1, base_correct=True, local_correct=True):
                 "connector_calls": base if is_base else local,
                 "answer": "Example answer derived from source files",
                 "evidence_url": "https://github.com/iivkis/rgp/blob/main/README.md",
-                "source_paths": task["reference_paths"],
+                "source_paths": list(task["reference_paths"]),
             })
     return result
 
