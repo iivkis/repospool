@@ -138,6 +138,26 @@ tasks:
     cmds:
       - python3 scripts/gate_b.py report --observations '{{.OBSERVATIONS}}'
 
+  benchmark:review:pack:
+    desc: Generate arm-masked Gate B source review packet on stdout
+    cmds:
+      - python3 scripts/gate_b_review.py pack
+
+  benchmark:review:template:
+    desc: Generate an empty independent review JSON from PACKET
+    vars:
+      PACKET: '{{.PACKET | default "/tmp/gate-b-packet.json"}}'
+    cmds:
+      - python3 scripts/gate_b_review.py template --packet '{{.PACKET}}'
+
+  benchmark:review:check:
+    desc: Validate completed independent review (never auto-promote Gate B to GO)
+    vars:
+      PACKET: '{{.PACKET | default "/tmp/gate-b-packet.json"}}'
+      REVIEW: '{{.REVIEW | default "/tmp/gate-b-review.json"}}'
+    cmds:
+      - python3 scripts/gate_b_review.py check --packet '{{.PACKET}}' --review '{{.REVIEW}}'
+
   benchmark:test:
     desc: Offline tests for assistant-only accounting and RGP source audit
     cmds:
