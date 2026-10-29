@@ -3,7 +3,7 @@
   "method": "assistant_in_chat",
   "plan_sha256": "26b1f3024542452ce1ab4ce3eb55174bfd4d67c85b08a001716c4bd7e0845ca7",
   "rgp_preparation_calls": {
-    "rgp": 3,
+    "rgp": 4,
     "serde_json": 1,
     "itsdangerous": 1
   },
@@ -12,8 +12,8 @@
     "kind": "single_session_unblinded_diagnostic",
     "status": "awaiting_independent_review",
     "github_arm_method": "18 per-task GitHub fetch_file calls at exact commit SHA; repeated source files were fetched again for task isolation",
-    "rgp_arm_method": "Three downloaded GitHub Actions artifact ZIPs; verified transport RGP SHA-256 against checked-in corpus and trusted stdlib Reader; Reader source authenticated against independently fetched Git blob SHA-1; 13 unique reference file blobs matched GitHub SHA-1; RGP arm read all source sets with Reader.read; no GitHub connector calls for in-memory reads",
-    "prep_accounting": "5 calls total: 1 corpus checkpoint fetch, 1 artifact listing, 3 artifact ZIP downloads. 2 shared preflight calls assigned to rgp for accounting; allocation does not change total.",
+    "rgp_arm_method": "Three downloaded GitHub Actions artifact ZIPs; verified transport RGP SHA-256 against checked-in corpus and trusted stdlib Reader; Reader source authenticated against independently fetched Git blob SHA-1; 13 unique reference file blobs matched GitHub SHA-1; RGP arm read all source sets with Reader.read; no GitHub connector calls for in-memory reads; separately re-fetched pinned Reader source from the GitHub connector for independent authentication, and charged that call to RGP preparation",
+    "prep_accounting": "6 connector calls total: 1 corpus checkpoint fetch, 1 artifact listing, 3 artifact ZIP downloads and 1 dedicated GitHub source fetch for independently authenticating the trusted Python Reader. 2 shared discovery calls and the Reader setup call assigned to rgp for accounting; allocation does not change total.",
     "limitations": [
       "This is not a blinded crossover or independent answer grading.",
       "GitHub files were re-fetched per task, even where caching would be possible. This maximizes the baseline calls relative to reuse.",
