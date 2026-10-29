@@ -157,3 +157,8 @@ tasks:
     desc: Offline tests for non-scoring GitHub REST vs RGP agent diagnostics
     cmds:
       - python3 -m unittest discover -s tests -p 'test_gate_b_agent_pilot.py' -v
+
+  benchmark:pilot:paired:test:
+    desc: Offline tests for paired diagnostic model runner, output safety and recovery
+    cmds:
+      - python3 -m unittest discover -s tests -p 'test_gate_b_*pilot.py' -v

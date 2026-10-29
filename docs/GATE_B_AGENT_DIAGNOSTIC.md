@@ -74,3 +74,40 @@ claiming that the live model adapter is validated.
 
 The production Gate B still requires an actual connected-app agent runtime,
 full telemetry, independent grading and 72 properly randomized paired runs.
+
+## Safer matched diagnostic pilot
+
+Use the new `scripts/gate_b_paired_pilot.py` when comparing the **same pinned
+commit, task, model, total token budget and tool semantics** in both diagnostic
+arms. It validates the downloaded RGP and checks that the output paths are
+unused **before making a paid model request**. Both arms are explicitly
+marked `diagnostic_not_gate_b` and can never count toward the official Gate B.
+
+Start with an **offline dry run** (no API key or API calls required):
+
+```sh
+python3 scripts/gate_b_paired_pilot.py \
+  --task rgp-transport-hash \
+  --rgp /tmp/REPO_CONTEXT.rgp \
+  --trusted-rgp-sha256 8e5871336d1aaad32d89e6e1b0e581a836d608e7e3e453b10c32b6d586fcaa6f \
+  --model YOUR_EXACT_API_MODEL_ID --token-budget 8000 --max-steps 4 \
+  --output-dir /tmp/rgp-paired-1 --dry-run
+```
+
+After inspecting the dry-run plan, configure `OPENAI_API_KEY` *only in your own
+shell/environment* and run the same command without `--dry-run`, **adding
+`--confirm-api-charges`**. This command can send up to eight Responses API
+requests (four per arm). The total token limit is enforced per arm, not a
+billing-currency cap. Pricing, cached input, and network costs are **not**
+automatically predicted. Running a second pair should use a fresh output
+directory and alternate the order with `--order rgp-first` to reduce drift.
+
+The runner stores `github-rest.json`, `rgp-local.json` and
+`paired-summary.json` with new-file-only semantics and restrictive file
+permissions. If the second arm fails, the successful first-arm record is
+retained and the summary is `INCOMPLETE`, never a misleading complete pair.
+Neither mode reproduces connected-app network behavior or its token accounting.
+Results are not scored by the Gate B evaluator.
+
+For the original single-arm command above, also pass `--confirm-api-charges`.
+It refuses an existing output path **before** calling the model.

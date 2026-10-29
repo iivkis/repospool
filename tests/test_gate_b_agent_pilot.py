@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -92,6 +93,20 @@ class PilotTest(unittest.TestCase):
             f.write_bytes(b'wrong')
             with self.assertRaisesRegex(PilotError, 'SHA-256 mismatch'):
                 RgpLocal(f, 'a'*40, '0'*64)
+
+    def test_existing_output_rejected_before_api_or_credentials(self):
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / 'existing.json'
+            target.write_text('do not replace')
+            proc = subprocess.run([
+                sys.executable, str(Path(__file__).resolve().parents[1]
+                                   / 'scripts/gate_b_agent_pilot.py'),
+                '--task', 'rgp-transport-hash', '--arm', 'github_rest_diagnostic',
+                '--model', 'test-model', '--output', str(target),
+            ], text=True, capture_output=True, check=False)
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertIn('refusing to overwrite', proc.stderr)
+            self.assertEqual(target.read_text(), 'do not replace')
 
     def test_output_for_diagnostic_is_never_gate_eligible(self):
         result = run_agent(self.task, Backend(), 'test-only', 2000, api=ResponseStub())

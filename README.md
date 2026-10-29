@@ -103,3 +103,14 @@ function-call loop and fail-closed handling.
 task benchmark:pilot:test
 # For a real diagnostic run, see docs/GATE_B_AGENT_DIAGNOSTIC.md
 ```
+
+## Gate B paired diagnostic (not scoring)
+
+For a **matched**, non-scoring agent comparison using the Responses API, pinned
+GitHub REST and a locally verified RGP, see [paired diagnostic instructions](docs/GATE_B_AGENT_DIAGNOSTIC.md).
+The new `gate_b_paired_pilot.py` validates task/commit/RGP hash and output paths
+without API calls via `--dry-run`. Running a paid pair requires an independent
+API key and explicit `--confirm-api-charges`; it caps requests per arm and
+persists each finished run before attempting the second. Results are private
+by default and **never count toward the 72 official Gate B trials**.
+Run `task benchmark:pilot:paired:test` for the offline safety tests.

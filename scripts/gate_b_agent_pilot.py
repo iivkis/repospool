@@ -235,7 +235,12 @@ def main() -> None:
     parser.add_argument('--rgp', type=Path)
     parser.add_argument('--trusted-rgp-sha256')
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--confirm-api-charges', action='store_true')
     args = parser.parse_args()
+    if args.output.exists():
+        parser.error('refusing to overwrite an existing diagnostic trace before model requests')
+    if not args.confirm_api_charges:
+        parser.error('real model requests require --confirm-api-charges')
     if not os.environ.get('OPENAI_API_KEY'):
         parser.error('OPENAI_API_KEY required for real diagnostic model runs')
     plan = json.loads(args.plan.read_text(encoding='utf-8'))
@@ -255,8 +260,6 @@ def main() -> None:
     outcome = run_agent(task, backend, args.model, args.token_budget, api=api)
     outcome.update({'arm': args.arm, 'repository': repo['github'], 'source_commit': repo['commit']})
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    if args.output.exists():
-        parser.error('refusing to overwrite an existing diagnostic trace')
     args.output.write_text(json.dumps(outcome, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
     print(f'diagnostic answer saved: {args.output}; provider tokens: {outcome["total_tokens"]}')
 
