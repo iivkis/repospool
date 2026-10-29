@@ -74,8 +74,8 @@ python3 scripts/gate_b_rgp_audit.py --rgp-dir /path/to/pinned-rgp
 A [single-session Gate B diagnostic](benchmarks/gate_b/PILOT_2026-10-29.md)
 now records 24 source-answer observations, anchored to 13 independently
 GitHub-verified source blobs. In this **unblinded, assistant-scored** run,
-18 GitHub source fetches were compared with 5 RGP acquisition/preparation
-calls (72.22% fewer connector calls); per-task local Reader operations
+18 GitHub source fetches were compared with 6 RGP acquisition/preparation
+calls including independent Reader setup (66.67% fewer connector calls); per-task local Reader operations
 required no GitHub calls. No token, timing or independent-quality claim is
 made. Reuse of shared files was not enabled in the GitHub baseline.
 
