@@ -13,12 +13,22 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from gate_b import ProtocolError, digest_plan  # noqa: E402
-from gate_b_review import (blank_review, make_packet, review_report,
-                           validate_packet)  # noqa: E402
+from gate_b_review import (blank_review, make_packet,
+                           review_report as _review_report,
+                           validate_packet, validate_source_line_counts)  # noqa: E402
 
 PLAN = json.loads((ROOT / "benchmarks/gate_b/plan.json").read_text(encoding="utf-8"))
 OBS = json.loads((ROOT / "benchmarks/gate_b/observations.cache_fair_2026-10-29.json")
                  .read_text(encoding="utf-8"))
+SOURCE_LINES = json.loads((ROOT / "benchmarks/gate_b/source_line_counts.json")
+                          .read_text(encoding="utf-8"))
+CHECKPOINT = json.loads((ROOT / "benchmarks/gate_b/corpus_preparation.json")
+                        .read_text(encoding="utf-8"))
+
+
+def review_report(plan, observations, packet, review):
+    return _review_report(plan, observations, packet, review, SOURCE_LINES, CHECKPOINT)
+
 
 
 def filled(packet):
@@ -159,6 +169,47 @@ class MaskedReview(unittest.TestCase):
         r["judgments"].append(copy.deepcopy(r["judgments"][0]))
         with self.assertRaisesRegex(ProtocolError, "unknown or duplicate case"):
             review_report(PLAN, OBS, self.packet, r)
+
+    def test_line_count_index_matches_pinned_corpus(self):
+        bounds = validate_source_line_counts(PLAN, OBS, SOURCE_LINES, CHECKPOINT)
+        self.assertEqual(len(bounds), 13)
+        self.assertEqual(bounds[("rgp", "src/main.rs")], 552)
+        self.assertEqual(bounds[("itsdangerous", "src/itsdangerous/timed.py")], 228)
+
+    def test_out_of_bounds_source_citations_are_rejected(self):
+        for row in self.review["judgments"]:
+            for entry in row["evidence"]:
+                entry["end_line"] = 999999
+        with self.assertRaisesRegex(ProtocolError, "out of bounds"):
+            review_report(PLAN, OBS, self.packet, self.review)
+
+    def test_source_manifest_can_not_change_commit_blob_or_line_count_type(self):
+        for field, bad, error in (
+            ("source_commit", "a" * 40, "wrong pinned source"),
+            ("git_blob_sha1", "b" * 40, "wrong pinned source"),
+            ("line_count", True, "invalid line count"),
+            ("line_count", 0, "invalid line count"),
+        ):
+            x = copy.deepcopy(SOURCE_LINES)
+            x["files"][0][field] = bad
+            with self.subTest(field=field, bad=bad), self.assertRaisesRegex(ProtocolError, error):
+                validate_source_line_counts(PLAN, OBS, x, CHECKPOINT)
+
+    def test_missing_and_forged_manifest_is_rejected(self):
+        x = copy.deepcopy(SOURCE_LINES)
+        x["files"].pop()
+        with self.assertRaisesRegex(ProtocolError, "index incomplete"):
+            validate_source_line_counts(PLAN, OBS, x, CHECKPOINT)
+        x = copy.deepcopy(SOURCE_LINES)
+        x["files"][0]["line_count"] = 4
+        x["source_rgp_sha256"]["rgp"] = "0" * 64
+        with self.assertRaisesRegex(ProtocolError, "SHA-256 checkpoint mismatch"):
+            validate_source_line_counts(PLAN, OBS, x, CHECKPOINT)
+        # Without pinned source bounds even a complete synthetic reviewer
+        # declaration is not sufficient for a review candidate.
+        result = _review_report(PLAN, OBS, self.packet, self.review)
+        self.assertEqual(result["status"], "HOLD")
+        self.assertTrue(any("source-line index required" in msg for msg in result["reasons"]))
 
     def test_inconsistent_verdicts_for_identical_answers_rejected(self):
         duplicate = copy.deepcopy(OBS)
