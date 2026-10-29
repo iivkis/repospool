@@ -187,7 +187,8 @@ def compile_sessions(plan: dict, session_paths: list[Path]) -> dict:
         raise ProtocolError("sessions use different model identities or token budgets")
     return {
         "schema_version": "1.0", "experiment_kind": "real_agent",
-        "protocol_version": "1.0", "plan_sha256": digest_plan(plan),
+        "protocol_version": "1.0", "collector": "gate_b_capture/1.0",
+        "plan_sha256": digest_plan(plan),
         "model_id": next(iter(models), None),
         "token_budget": next(iter(budgets), None),
         "transport_verified": bool(rows) and delivered and any(r["arm"] == "rgp_actions_artifact" for r in rows),

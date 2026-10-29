@@ -1,0 +1,130 @@
+{
+  "schema_version": "1.0",
+  "kind": "gate_b_transport_preflight_not_agent_trial",
+  "status": "PASS_TRANSPORT_ONLY",
+  "measured_date_utc": "2026-10-29",
+  "repository": "iivkis/rgp",
+  "source_commit": "95963a23e2fd1e5eb68a72db3bde849ed7119a7c",
+  "workflow_run_url": "https://github.com/iivkis/rgp/actions/runs/40767794459",
+  "actions_artifact_id": 12850617584,
+  "rgp_bytes": 132217,
+  "rgp_sha256": "8e5871336d1aaad32d89e6e1b0e581a836d608e7e3e453b10c32b6d586fcaa6f",
+  "input_tree_digest": "b75e29c63295b66570e750595d12ff02ae9cae614eb9cf20cc0ca989365d2862",
+  "snapshot_complete": true,
+  "included_files": 46,
+  "independent_git_blob_checks": [
+    {
+      "path": "src/main.rs",
+      "sha1": "3022324de8b533dfc8927029e9cfc3dba286714f",
+      "bytes": 18103,
+      "match": true
+    },
+    {
+      "path": "python/rgp_reader.py",
+      "sha1": "cb11bd04c346309c038c38e3e5accb540c341139",
+      "bytes": 20515,
+      "match": true
+    },
+    {
+      "path": "README.md",
+      "sha1": "879b1ed75c06070b65b340822c1e94367a247a2a",
+      "bytes": 4915,
+      "match": true
+    },
+    {
+      "path": "python/rgp_bootstrap.py",
+      "sha1": "c27ccb09546489da7dca16413c86590a0ca16bee",
+      "bytes": 5253,
+      "match": true
+    }
+  ],
+  "result_note": "Git blob SHA-1 computed over 'blob <length>\\0' + recovered raw bytes; independently compared against pinned GitHub fetch_file blob SHAs.",
+  "scoring": {
+    "eligible_agent_trials": 0,
+    "total_required_agent_trials": 72,
+    "model_tokens": null,
+    "connector_network_latency_ms": null,
+    "independent_answer_grades": null
+  },
+  "caveats": "No isolated model run. Download and source fetch are not paired trials; no efficiency, answer accuracy, or token reductions claimed. Hashes from the user-controlled GitHub repo are integrity anchors, not cryptographic author signatures.",
+  "additional_repositories": [
+    {
+      "repository": "serde-rs/json",
+      "source_commit": "8c535a260ce561eaab4111aafc29038eb9f77ff3",
+      "actions_artifact_id": 12851041881,
+      "rgp_bytes": 260958,
+      "rgp_sha256": "7802be3b67bfab094518c76f87f0baec749f4a40dd4458dd14fcc7f3de588a6a",
+      "included_files": 93,
+      "snapshot_complete": true,
+      "independent_git_blob_checks": [
+        {
+          "path": "src/de.rs",
+          "sha1": "d353b2d3ecb3146ef7f3ceb5a05a8d3a47144ea9",
+          "bytes": 86855,
+          "match": true
+        },
+        {
+          "path": "src/ser.rs",
+          "sha1": "053f95a29080e58316d7d52011f97fe02424387f",
+          "bytes": 63877,
+          "match": true
+        },
+        {
+          "path": "src/error.rs",
+          "sha1": "b74f4449eff68917bf2f4149e4cb971ce48b8df0",
+          "bytes": 17221,
+          "match": true
+        },
+        {
+          "path": "tests/test.rs",
+          "sha1": "b8b084e7597404f536b3d04d17bfec7070be24ec",
+          "bytes": 79904,
+          "match": true
+        }
+      ]
+    },
+    {
+      "repository": "pallets/itsdangerous",
+      "source_commit": "672971d66a2ef9f85151e53283113f33d642dabd",
+      "actions_artifact_id": 12851291291,
+      "rgp_bytes": 143569,
+      "rgp_sha256": "c4f60f1b6231df092d60df440f7b8e7f6bcf3d8c9af6672fee656110f5183446",
+      "included_files": 50,
+      "snapshot_complete": true,
+      "independent_git_blob_checks": [
+        {
+          "path": "src/itsdangerous/timed.py",
+          "sha1": "52deeeab44f09c1c7f54438c9f48f54d61366085",
+          "bytes": 8087,
+          "match": true
+        },
+        {
+          "path": "src/itsdangerous/signer.py",
+          "sha1": "e324dc03da90d9002200b68088f501df62777cd6",
+          "bytes": 9647,
+          "match": true
+        },
+        {
+          "path": "src/itsdangerous/serializer.py",
+          "sha1": "5ed949cabed57d878d13917ab1e0ae7d05ae15fc",
+          "bytes": 15563,
+          "match": true
+        },
+        {
+          "path": "tests/test_itsdangerous/test_timed.py",
+          "sha1": "a4c1741f96536d6d6e0aa9b6670e8b61a98190b3",
+          "bytes": 3807,
+          "match": true
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "repositories_verified": 3,
+    "git_blobs_verified": 12,
+    "git_blob_mismatches": 0,
+    "verified_via": "GitHub Actions artifact downloads, Python stdlib Reader, pinned GitHub fetch_file blob SHAs",
+    "gate_b_status": "HOLD",
+    "eligible_agent_trials": 0
+  }
+}

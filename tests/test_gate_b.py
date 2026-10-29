@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import sys
 import unittest
@@ -20,13 +21,18 @@ def make_trials(*, baseline_calls=10, rgp_calls=6, baseline_tokens=1000,
         "schema_version": "1.0", "experiment_kind": "real_agent", "protocol_version": "1.0",
         "plan_sha256": digest_plan(PLAN), "model_id": "test-model-not-real",
         "token_budget": 20000, "transport_verified": True, "trials": [],
+        "collector": "gate_b_capture/1.0", "trace_sha256_by_filename": {},
     }
     commits = {r["id"]: r["commit"] for r in PLAN["repositories"]}
     for task in PLAN["tasks"]:
         for rep in range(1, 4):
             for arm in ("github_connector", "rgp_actions_artifact"):
                 baseline = arm == "github_connector"
+                name = f'{task["id"]}-{rep}-{arm}.json'
+                trace_sha = hashlib.sha256(name.encode("utf-8")).hexdigest()
+                result["trace_sha256_by_filename"][name] = trace_sha
                 result["trials"].append({
+                    "trace_sha256": trace_sha,
                     "task_id": task["id"], "repository": task["repository"],
                     "source_commit": commits[task["repository"]], "repetition": rep,
                     "arm": arm, "model_id": result["model_id"], "token_budget": 20000,
@@ -106,6 +112,31 @@ class GateBTest(unittest.TestCase):
         trials["trials"].append(copy.deepcopy(trials["trials"][0]))
         with self.assertRaisesRegex(ProtocolError, "duplicate trial"):
             evaluate(PLAN, trials)
+
+    def test_raw_table_without_collector_cannot_go(self):
+        trials = make_trials()
+        trials.pop("collector")
+        self.assertEqual(evaluate(PLAN, trials)["status"], "HOLD")
+
+    def test_missing_trace_map_cannot_go(self):
+        trials = make_trials()
+        trials.pop("trace_sha256_by_filename")
+        self.assertEqual(evaluate(PLAN, trials)["status"], "HOLD")
+
+    def test_mismatched_trace_checksum_cannot_go(self):
+        trials = make_trials()
+        trials["trials"][0]["trace_sha256"] = "f" * 64
+        self.assertEqual(evaluate(PLAN, trials)["status"], "HOLD")
+
+    def test_reused_trace_checksum_cannot_go(self):
+        trials = make_trials()
+        trials["trials"][0]["trace_sha256"] = trials["trials"][1]["trace_sha256"]
+        self.assertEqual(evaluate(PLAN, trials)["status"], "HOLD")
+
+    def test_malformed_trace_digest_type_cannot_go(self):
+        trials = make_trials()
+        trials["trials"][0]["trace_sha256"] = ["not-a-digest"]
+        self.assertEqual(evaluate(PLAN, trials)["status"], "HOLD")
 
     def test_wrong_model_rejected(self):
         trials = make_trials()

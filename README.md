@@ -74,3 +74,16 @@ trust anchor. The 72 agent trials and Gate B decision are still outstanding.
 ### Evidence capture (real trials only)
 
 Use `task benchmark:trace-check SESSION=/path/to/real-session.json` to validate one provider-instrumented event trace, then `task benchmark:collect SESSIONS=/path/to/traces TRIALS_OUTPUT=/path/to/trials.json` to compute a trial report. See [trace protocol](docs/GATE_B_TRACE_PROTOCOL.md). The collector does not run agents or invent unavailable provider metrics, and its session template is not a real measurement.
+
+## Gate B independent transport preflight (29 October 2026)
+
+The pinned `rgp` Actions artifact was downloaded via the connected GitHub
+app and opened by the stdlib Reader. Its 132,217-byte RGP matches independently
+recorded SHA-256 `8e5871336d1aaad32d89e6e1b0e581a836d608e7e3e453b10c32b6d586fcaa6f`.
+Twelve decoded Git blobs across three repositories were checked against the corresponding GitHub
+`fetch_file` blob identifiers at each repository's pinned commit: all twelve matched.
+See [pilot_preflight_2026-10-29.json](benchmarks/gate_b/pilot_preflight_2026-10-29.json).
+
+This is a **transport/source-integrity preflight, not one of the 72 agent runs**.
+Provider model-token usage, full network time, connector byte telemetry and
+independent agent-answer evaluation are unavailable; Gate B remains HOLD.
