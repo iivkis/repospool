@@ -28,7 +28,9 @@ For each task and arm, record a short answer, which source paths support it,
 a link to inspectable evidence, whether the task rubric was met, and the
 **observed** number of GitHub connector calls. Every planned reference path
 must appear exactly once in each observation's `source_paths`. The GitHub
-arm must record at least one actual source-retrieval call per task. Do not infer
+arm normally records at least one source-retrieval call per task; with a
+complete, validated first-use cache ledger a task may record zero **new**
+connector calls for files fetched earlier in the same workload. Do not infer
 or fabricate unavailable metrics. The RGP arm must include artifact retrieval and
 preparation connector calls **once per repository** in the total, and must
 not omit failed retrievals. Each repository needs at least one acquisition
