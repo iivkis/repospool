@@ -3,7 +3,9 @@ import hashlib
 import io
 import json
 import os
+import subprocess
 import sys
+import tempfile
 import unittest
 import zipfile
 from pathlib import Path
@@ -125,6 +127,22 @@ class ReaderApiTests(unittest.TestCase):
                     RgpError, "invalid search prefix"):
                 r.search("needle", prefix=bad)
         self.assertEqual(r.search("needle", prefix="src/")["snapshot_status"], "available")
+
+    def test_search_prefix_cli_includes_only_requested_directory(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact = Path(tmpdir) / "source.rgp"
+            artifact.write_bytes(three_scope_artifact())
+            cmd = [sys.executable, str(ROOT / "python/rgp_reader.py"),
+                   "--artifact", str(artifact), "search", "needle",
+                   "--prefix", "src/", "--limit", "10"]
+            result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+            obj = json.loads(result.stdout)
+            self.assertEqual(len(obj["matches"]), 3)
+            self.assertTrue(all(x["path"].startswith("src/") for x in obj["matches"]))
+            rejected = subprocess.run(cmd[:-2] + ["--prefix", "../"],
+                                      capture_output=True, text=True)
+            self.assertEqual(rejected.returncode, 2)
+            self.assertIn("UNSUPPORTED_FORMAT", rejected.stderr)
 
     def test_cursor_rejected_on_other_snapshot(self):
         r = Reader(fake_artifact())
