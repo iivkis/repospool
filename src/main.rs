@@ -824,7 +824,9 @@ mod tests {
         let rebuilt = build_zip(Cursor::new(Vec::new()), b"{}", &blobs, &outliers)
             .unwrap()
             .into_inner();
-        assert!(excessive_compression(Cursor::new(&rebuilt)).unwrap().is_empty());
+        assert!(excessive_compression(Cursor::new(&rebuilt))
+            .unwrap()
+            .is_empty());
         let mut zip = ZipArchive::new(Cursor::new(rebuilt)).unwrap();
         assert_eq!(
             zip.by_name(&key).unwrap().compression(),
