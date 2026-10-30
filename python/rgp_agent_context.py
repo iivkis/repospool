@@ -132,6 +132,20 @@ def context(reader: Reader, terms: list[str], *, prefix: str = "",
     while len(compact_json(response).encode("utf-8")) > max_bytes and response["sources"]:
         response["sources"].pop()
         response["selection_truncated"] = True
+    # Source-coverage is a separate dimension from query match count.
+    # A search term may match a file yet have no *selected* source in
+    # the agent prompt. Never present that as a grounded answer.
+    selected = {source["match_term"] for source in response["sources"]}
+    response["terms_without_source"] = [
+        term for term in response["terms"] if term not in selected
+    ]
+    while len(compact_json(response).encode("utf-8")) > max_bytes and response["sources"]:
+        response["sources"].pop()
+        response["selection_truncated"] = True
+        selected = {source["match_term"] for source in response["sources"]}
+        response["terms_without_source"] = [
+            term for term in response["terms"] if term not in selected
+        ]
     # No answer correctness is inferred from a successful lexical hit.
     # Never label a no-match or truncated search 'source absent'.
     return response
