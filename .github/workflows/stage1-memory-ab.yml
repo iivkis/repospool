@@ -48,7 +48,7 @@ jobs:
           from pathlib import Path
           x=json.loads((Path(os.environ["RUNNER_TEMP"]) / "stage1-memory-ab.json").read_text())
           assert x["status"] == "PASS" and x["gate_b"] == "HOLD"
-          assert len(x["profiles"]) == 4
+          assert len(x["profiles"]) == 5
           assert x["profiles"][-1]["included_files"] == 49999
           assert all(i["same_artifact_sha256"] for i in x["profiles"])
           PY

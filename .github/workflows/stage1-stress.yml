@@ -33,7 +33,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        profile: [many-files, incompressible, compressible, oversized]
+        profile: [many-files, incompressible, compressible, disk-fallback, oversized]
     steps:
       - uses: actions/checkout@v4
         with:

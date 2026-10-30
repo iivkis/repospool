@@ -49,3 +49,14 @@ the measured JSON is uploaded. The 50k acceptance workflow separately
 covers the full 250-page Reader path traversal.
 
 Gate B **HOLD** persists independently of memory improvements.
+
+## Follow-up: faster adaptive ZIP (PR #41)
+
+[Adaptive ZIP selection](STAGE1_ADAPTIVE_ZIP.md) trades a conservative
+32 MiB *estimated* ZIP memory budget for fewer disk seeks in small-blob
+source trees. The [paired five-profile evidence](../benchmarks/stage1/ADAPTIVE_ZIP_2026-10-31.md)
+reports a 50k-file speed improvement with a measured **16.65%**
+peak RSS increase relative to the previous disk-backed baseline.
+The earlier measurements above are retained for their actual
+historical A/B context, not overwritten or treated as identical
+runs.

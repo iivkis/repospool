@@ -22,7 +22,7 @@ from stage1_corpus import measured  # noqa: E402
 from stage1_stress import make_source  # noqa: E402
 from stage1_scale import FILES, CAP, SAMPLE, commit_many, path_for  # noqa: E402
 
-PROFILES = ("many-files", "incompressible", "compressible", "scale-50k")
+PROFILES = ("many-files", "incompressible", "compressible", "disk-fallback", "scale-50k")
 
 
 def main() -> int:
@@ -99,11 +99,18 @@ def main() -> int:
                         100 * (candidate_rss - baseline_rss) / baseline_rss, 2),
                 }
                 report["profiles"].append(profile_report)
-        # Synthetic large data and the maximum ZIP member count must benefit in RSS.
+        # The current disk-backed baseline already saves RAM. This change
+        # deliberately spends a bounded amount of memory to avoid 50k ZIP
+        # filesystem seeks. Reject unbounded RSS increases and a large-tree
+        # slowdown; report observed memory/latency for every profile.
         for item in report["profiles"]:
-            if item["profile"] in ("incompressible", "compressible", "scale-50k"):
-                if item["candidate"]["peak_rss_kib"] >= item["baseline"]["peak_rss_kib"]:
-                    raise AssertionError(f"no demonstrated memory gain on {item['profile']}")
+            if item["candidate"]["peak_rss_kib"] > 1.5 * item["baseline"]["peak_rss_kib"]:
+                raise AssertionError(f"more than 50% peak-RSS regression: {item['profile']}")
+            if item["profile"] == "scale-50k":
+                before = item["baseline"]["elapsed_ms"]
+                after = item["candidate"]["elapsed_ms"]
+                if after > 1.1 * before:
+                    raise AssertionError("50k-member latency regressed more than 10%")
         report["status"] = "PASS"
     except Exception as exc:
         report["error"] = str(exc)

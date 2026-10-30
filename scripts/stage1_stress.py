@@ -26,7 +26,7 @@ from rgp_reader import Reader, RgpError, decode_transport  # noqa: E402
 from stage1_corpus import measured  # noqa: E402
 
 MIB = 1024 * 1024
-PROFILES = ("many-files", "incompressible", "compressible", "oversized")
+PROFILES = ("many-files", "incompressible", "compressible", "disk-fallback", "oversized")
 
 
 def insist(ok: bool, detail: str) -> None:
@@ -57,6 +57,12 @@ def make_source(repo: Path, profile: str) -> tuple[str, dict[str, bytes]]:
             b"RGP-incompressible-12MiB").digest(12 * MIB)
     elif profile == "compressible":
         originals["data/compressible.txt"] = (b"A" * 4095 + bytes([10])) * 3072
+    elif profile == "disk-fallback":
+        # 36 MiB of uncompressible real Git blobs necessarily exceeds the
+        # 32 MiB bounded in-memory ZIP budget and exercises file staging.
+        for index in range(3):
+            originals[f"data/disk-{index}.bin"] = hashlib.shake_256(
+                f"RGP-disk-fallback-{index}".encode()).digest(12 * MIB)
     else:
         # Exceed the documented per-file cap by one byte: must be EXCLUDED,
         # not mislabeled as a complete snapshot or a successful read.
@@ -140,9 +146,12 @@ def run(profile: str, binary: Path) -> dict:
         if profile == "compressible":
             insist(len(stored) == 1, "highly compressible blob not stored safely")
             insist(overview["snapshot_complete"], "compressible valid source marked partial")
-        if profile == "incompressible":
+        if profile in ("incompressible", "disk-fallback"):
             insist(not stored, "incompressible data unnecessarily stored")
             insist(overview["snapshot_complete"], "incompressible valid source marked partial")
+        if profile == "disk-fallback":
+            insist(overview["file_count"] == 3, "disk fallback lost source files")
+            insist(len(first_bytes) > 32 * MIB, "did not exercise large ZIP transport")
         if profile == "oversized":
             insist(not overview["snapshot_complete"], "oversized source misrepresented as complete")
             insist(overview["excluded_by_reason"].get("size_limit") == 1,
