@@ -778,6 +778,36 @@ mod tests {
     }
 
     #[test]
+    fn streamed_transport_matches_original_in_memory_bytes_at_line_boundaries() -> Result<()> {
+        for length in [1usize, 56, 57, 58, 114, 115, 4097, 65539] {
+            let bytes: Vec<u8> = (0..length).map(|n| ((n * 131) % 251) as u8).collect();
+            let (source, mut source_file) = StagedOutput::create(Path::new("stream-test.rgp"))?;
+            source_file.write_all(&bytes)?;
+            source_file.sync_all()?;
+            drop(source_file);
+            let (destination, mut destination_file) =
+                StagedOutput::create(Path::new("stream-test.rgp"))?;
+            let written = stream_transport(&source.path, &mut destination_file)?;
+            drop(destination_file);
+            let actual = fs::read(&destination.path)?;
+            let encoded = STANDARD.encode(&bytes);
+            let mut expected = format!(
+                "RGP/1.0\\npayload_length={}\\npayload_sha256={}\\nbase64_line_width=76\\n--\\n",
+                length,
+                sha(&bytes)
+            );
+            for line in encoded.as_bytes().chunks(76) {
+                expected.push_str(std::str::from_utf8(line)?);
+                expected.push('\\n');
+            }
+            expected.push_str("END RGP\\n");
+            assert_eq!(actual, expected.as_bytes());
+            assert_eq!(written, actual.len());
+        }
+        Ok(())
+    }
+
+    #[test]
     fn high_compression_blob_uses_stored_without_disabling_reader_limits() {
         let mut blobs = BTreeMap::new();
         let repeated = vec![0u8; 1024 * 1024];
