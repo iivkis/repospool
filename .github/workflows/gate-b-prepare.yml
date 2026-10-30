@@ -191,9 +191,14 @@ jobs:
           from pathlib import Path
           x = json.loads((Path(os.environ["RUNNER_TEMP"]) / "agent-task-pilot.json").read_text())
           assert x["status"] == "PASS" and x["gate_b"] == "HOLD"
-          assert x["source_passages_compared_to_pinned_git"] >= 2
-          assert x["model_answer"] == "NOT_EXECUTED_IN_THIS_TEST"
+          assert x["task_count"] == 4 and len(x["tasks"]) == 4
+          assert x["source_passages_compared_to_pinned_git"] >= 8
+          assert all(t["source_navigation"] == "PASS" for t in x["tasks"])
+          assert all(t["answer_correctness"] == "NOT_INDEPENDENTLY_GRADED"
+                     for t in x["tasks"])
+          assert x["model_inference"] == "NOT_RUN_BY_CI"
           assert x["independent_answer_grading"] == "NOT_RUN"
+          assert x["provider_connector_calls"] == "NOT_MEASURED_BY_LOCAL_GIT"
           PY
       - name: Upload metadata-only question-context results
         uses: actions/upload-artifact@v4
