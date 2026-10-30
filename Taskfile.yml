@@ -83,6 +83,14 @@ tasks:
       - cargo build --locked
       - python3 scripts/stage1_acceptance.py --rust-cli target/debug/rgp
 
+  stage1:corpus:
+    desc: Run pinned corpus source acceptance and resource diagnostic (REPOSITORY=rgp|serde_json|itsdangerous)
+    vars:
+      REPOSITORY: '{{.REPOSITORY | default "rgp"}}'
+    cmds:
+      - cargo build --locked --release
+      - python3 scripts/stage1_corpus.py --repository '{{.REPOSITORY}}' --rust-cli target/release/rgp --report /tmp/rgp-stage1-corpus-{{.REPOSITORY}}.json
+
   check:
     desc: Run all checks, deterministic snapshot smoke and goal-level RGP acceptance
     cmds:
