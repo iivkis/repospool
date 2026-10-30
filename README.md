@@ -136,7 +136,7 @@ no change to RGP/1.0 output bytes. [Actual paired same-runner
 measurements](benchmarks/stage1/MEMORY_AB_2026-10-31.md) show
 about **52% lower peak generator RSS** for 12MiB blobs and the
 50k-member workload, but **large-tree generation is slower**
-(3.67s vs 1.70s in the paired test). The gain is in memory,
+(5.46s vs 2.49s in the paired test). The gain is in memory,
 not proven universal runtime speed. Gate B remains HOLD.
 
 ## Gate B: assistant-only source comparison (protocol v2)

@@ -24,7 +24,7 @@ generator peak RSS was **38% lower** for 2,000 files and **about 52%
 lower** for both 12MiB blobs and the 50k member case.
 
 This is a **memory-for-I/O tradeoff**. At 50k members, paired
-generation time was **1.70 s before / 3.67 s after**, so the large-tree
+generation time was **2.49 s before / 5.46 s after**, so the large-tree
 case is materially slower. The implementation makes no general speedup
 claim. Source checkout, connector delivery and inference tokens were
 not measured. Temporary ZIP files require disk space and increase

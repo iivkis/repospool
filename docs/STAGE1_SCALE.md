@@ -90,9 +90,9 @@ Observed first-generation time: **2.71 s**; peak Rust memory:
 
 The later [paired-memory optimization](STAGE1_MEMORY.md)
 retains the **exact** SHA-256 of this report's 50k RGP,
-reducing observed paired generator peak RSS from **187,196 KiB
-to 90,648 KiB**, while increasing generation time from
-**1,700 to 3,670 ms** on the same runner. See
+reducing observed paired generator peak RSS from **187,052 KiB
+to 90,468 KiB**, while increasing generation time from
+**2,490 to 5,460 ms** on the same runner. See
 [full A/B](../benchmarks/stage1/MEMORY_AB_2026-10-31.md).
 The earlier standalone numbers above are preserved as historical
 measurements on a different runner.
