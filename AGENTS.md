@@ -59,6 +59,56 @@ MCP is optional: a sandbox process running an MCP server does **not**
 automatically register those tools with this ChatGPT session.
 Direct Reader access in Python is the default when it is simpler.
 
+## Mandatory in-repository RGP dogfooding
+
+**The root `REPO_CONTEXT.rgp` is a first-class, Git-tracked development
+input to this very project.** On each RGP feature, bugfix or refactoring
+task, Kira must **check and inspect the project's own .rgp before editing**
+rather than treating an Actions download or raw GitHub file fetching as
+the normal first step:
+
+```sh
+python3 scripts/repo_dogfood.py check --repo .
+python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp overview
+python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp tree --prefix python/
+python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp search 'def read' --prefix python/
+# For ordinary local file inspection without executing the source:
+python3 scripts/repo_dogfood.py export --repo . --output /tmp/rgp-own-context
+```
+
+The same flow works with Kira's Python sandbox after downloading the
+tracked `REPO_CONTEXT.rgp` via connected GitHub. The read-only snapshot
+is *context for planning*, never a substitute for editing a live Git
+checkout or rechecking GitHub `main` before writing.
+
+**Self-snapshot paradox resolved explicitly:** generation excludes
+`REPO_CONTEXT.rgp`. Publishing the archive creates a new Git commit,
+so `source_commit` in its manifest normally identifies the **previous
+code commit**, *not* literal current HEAD. `repo_dogfood.py check`
+accepts this difference **only when `git diff` confirms all tracked
+paths other than `REPO_CONTEXT.rgp` are unchanged** and the source
+commit is an ancestor. A stale snapshot, tampered/untracked RGP, partial
+source or non-ancestor must **fail closed**. Never weaken this to a
+comparison of the archive's internal checksum with itself.
+
+[The main-branch snapshot workflow](.github/workflows/kira-sandbox-rgp.yml)
+updates the tracked file when code changes, while also publishing the
+usual Actions ZIP and independent SHA. Locally use `task rgp:check`,
+`task rgp:context`, `task rgp:refresh` as appropriate. A pull request
+may intentionally carry the older main snapshot while its source is
+being edited; use the verified base snapshot for discovery, then inspect
+the changed PR files directly and generate/verify an updated snapshot
+from the new Git commit for acceptance. Do **not** call the old
+artifact fresh for the modified branch.
+
+**Every development PR reports actual dogfooding evidence:** which
+snapshot/source commit was used, the `tree/search/read` queries used
+to find code and affected tests, any stale/missing-file fallback, and
+one concrete friction or automation opportunity discovered (or
+explicitly "none observed"). Prefer fixing real friction to new
+synthetic throughput benchmarks. Do not invent a cost reduction or
+silently relabel GitHub-only reading as RGP use.
+
 ## Engineering defaults
 
 - **Pragmatic engineering:** make the smallest change that demonstrably meets a

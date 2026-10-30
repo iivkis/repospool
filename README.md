@@ -4,6 +4,30 @@ Reproducible, versioned **single-file repository snapshots** designed to be read
 
 > **Status: v0.1 / transport PoC.** 12 independent connector downloads of GitHub Actions artifacts (100 KiB–50 MiB outer RGP) passed byte-level verification in the Python sandbox. This is **conditional Gate A success for the Actions-artifact adapter only**, not proof that `fetch_file` delivers the canonical root file. Syntax/semantic indexing is intentionally not claimed.
 
+## RGP изучает собственный код через собственный `.rgp`
+
+**`REPO_CONTEXT.rgp` отслеживается в Git и автоматически обновляется
+после изменений `main`.** Это рабочий контекст Киры при разработке
+самого RGP, а не просто Actions-artifact или набор benchmark fixtures.
+Перед изменениями проекта Кира использует:
+
+```sh
+task rgp:check      # проверяет подлинность Git-версии и актуальность исходников
+task rgp:context    # обзор и дерево исходников из самого REPO_CONTEXT.rgp
+python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp search 'read_bytes'
+python3 scripts/repo_dogfood.py export --repo . --output /tmp/rgp-own-context
+```
+
+Архив **исключает сам себя**, поэтому его `source_commit` может быть
+на один служебный коммит позади `HEAD`. Проверка допускает это
+**только если остальные исходники побайтно не изменились по Git**;
+обычные правки после генерации превращают архив в `STALE_SNAPSHOT`.
+[Правила self-dogfooding](AGENTS.md) и
+[подробный протокол](docs/IN_REPO_DOGFOOD.md). Цель:
+обнаруживать при собственной разработке проблемы поиска, контекста,
+обновления и автоматизировать реальные неудобства. Никаких
+автоматических обещаний о снижении ошибок модели: Gate B = HOLD.
+
 ## Получение свежего контекста для работы Киры
 
 [Workflow `Kira sandbox RGP snapshot`](.github/workflows/kira-sandbox-rgp.yml)

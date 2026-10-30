@@ -3,7 +3,7 @@
 /.venv/
 __pycache__/
 *.pyc
-REPO_CONTEXT.rgp
+# REPO_CONTEXT.rgp is tracked and refreshed by the first-party dogfood workflow.
 *.rgp.tmp
 /result
 /result-*

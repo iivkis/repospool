@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: kira-sandbox-rgp-${{ github.ref }}
@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          persist-credentials: false
+          persist-credentials: true
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Build release generator and produce exactly the triggering commit
@@ -119,3 +119,30 @@ jobs:
             ${{ runner.temp }}/snapshot-provenance.json
           retention-days: 7
           if-no-files-found: error
+      - name: Keep REPO_CONTEXT.rgp in main for normal agent development
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          # Avoid a commit on an artifact-only run. Compare source data,
+          # never rely on the embedded commit hash matching HEAD literally.
+          if test -f REPO_CONTEXT.rgp && python3 scripts/repo_dogfood.py check --repo .; then
+            echo "Tracked RGP already represents this exact source tree"
+            exit 0
+          fi
+          cp "$RUNNER_TEMP/REPO_CONTEXT.rgp" REPO_CONTEXT.rgp
+          git add -- REPO_CONTEXT.rgp
+          if git diff --cached --quiet; then
+            echo "Tracked RGP bytes unchanged"
+            python3 scripts/repo_dogfood.py check --repo .
+            exit 0
+          fi
+          test "$(git diff --cached --name-only)" = "REPO_CONTEXT.rgp"
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -m "chore(rgp): refresh tracked source context for $GITHUB_SHA"
+          python3 scripts/repo_dogfood.py check --repo .
+          # Never force a concurrent user's change; a newer push will
+          # trigger its own snapshot workflow and eventually supersede this.
+          git push origin HEAD:main
