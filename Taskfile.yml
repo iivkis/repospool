@@ -123,6 +123,24 @@ tasks:
       - task: smoke
       - task: stage1:acceptance
 
+  rgp:check:
+    desc: Verify the Git-tracked RGP is complete and source-equivalent to current checkout
+    cmds:
+      - python3 scripts/repo_dogfood.py check --repo .
+
+  rgp:context:
+    desc: Read own RGP overview and navigate common Python sources before a change
+    cmds:
+      - task: rgp:check
+      - python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp overview
+      - python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp tree --prefix python/
+
+  rgp:refresh:
+    desc: Regenerate tracked RGP at this Git commit; commit only REPO_CONTEXT.rgp separately
+    cmds:
+      - cargo run --locked -- generate --repo . --rev HEAD --output REPO_CONTEXT.rgp
+      - python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp validate
+
   generate:
     desc: Generate a snapshot (override REPO and ARTIFACT as needed)
     cmds:
