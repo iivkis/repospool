@@ -105,6 +105,11 @@ pinned Git data and publishes a metadata-only test report. The agent
 still must retrieve and test the actual connected-app artifact separately.
 Source-byte integrity is not proof of independent answer grading.
 
+The [observed connected-delivery audit](benchmarks/stage1/CONNECTED_DELIVERY_2026-10-31.md)
+records three real GitHub app ZIP downloads, independent RGP checksums
+and 13 pinned Git blob-identity comparisons; the operation history
+belongs to this Stage 1 delivery check, **not** the earlier Gate B pilot.
+
 ## Gate B: assistant-only source comparison (protocol v2)
 
 The **assistant in the active conversation** writes the code, checks the source
