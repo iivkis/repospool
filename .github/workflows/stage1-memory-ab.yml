@@ -1,0 +1,80 @@
+name: Stage 1 paired memory comparison
+
+on:
+  pull_request:
+    paths:
+      - src/main.rs
+      - scripts/stage1_memory_ab.py
+      - .github/workflows/stage1-memory-ab.yml
+
+permissions:
+  contents: read
+
+jobs:
+  paired-memory:
+    name: Baseline vs candidate (identical pinned Git and RGP bytes)
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Compile candidate generator
+        run: cargo build --locked --release
+      - name: Compile independently checked out base revision
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          test -n "$BASE_SHA"
+          git worktree add --detach "$RUNNER_TEMP/rgp-baseline" "$BASE_SHA"
+          CARGO_TARGET_DIR="$RUNNER_TEMP/rgp-baseline-target" \
+            cargo build --locked --release --manifest-path "$RUNNER_TEMP/rgp-baseline/Cargo.toml"
+          echo "RGP_BASELINE_SHA=$BASE_SHA" >> "$GITHUB_ENV"
+      - name: Paired memory and exact-RGP-byte acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/stage1_memory_ab.py \
+            --baseline "$RUNNER_TEMP/rgp-baseline-target/release/rgp" \
+            --candidate target/release/rgp \
+            --report "$RUNNER_TEMP/stage1-memory-ab.json"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          x=json.loads((Path(os.environ["RUNNER_TEMP"]) / "stage1-memory-ab.json").read_text())
+          assert x["status"] == "PASS" and x["gate_b"] == "HOLD"
+          assert len(x["profiles"]) == 3
+          assert all(i["same_artifact_sha256"] for i in x["profiles"])
+          PY
+      - name: Summarize observed paired run
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          path = Path(os.environ["RUNNER_TEMP"]) / "stage1-memory-ab.json"
+          if path.exists():
+              r = json.loads(path.read_text())
+              with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+                  f.write(f"## Paired A/B memory: {r['status']}\n\n")
+                  f.write(f"Baseline: `{os.environ.get('RGP_BASELINE_SHA', 'unknown')}`\n\n")
+                  if "error" in r:
+                      f.write(f"Failure: `{r['error']}`\n\n")
+                  for item in r["profiles"]:
+                      f.write(f"- {item['profile']}: baseline {item['baseline']['peak_rss_kib']} KiB, candidate {item['candidate']['peak_rss_kib']} KiB, change {item['peak_rss_change_percent']}%; artifact SHA-256 `{item['same_artifact_sha256']}`\n")
+                  f.write("\nSame ephemeral runner; no model, GitHub connector or token-performance claims.\n")
+          PY
+      - name: Upload measured metadata only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage1-memory-ab
+          path: ${{ runner.temp }}/stage1-memory-ab.json
+          retention-days: 14
+          if-no-files-found: warn
