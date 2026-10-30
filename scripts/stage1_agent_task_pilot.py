@@ -96,7 +96,7 @@ def run(artifact: Path, source_repo: Path, repository: str,
                 "path": path, "start_line": start, "end_line": end,
                 "match_line": matched, "term": source["match_term"],
                 "git_blob_sha1": hashlib.sha1(
-                    b"blob " + str(len(original)).encode() + b"\\0" + original
+                    b"blob " + str(len(original)).encode() + b"\0" + original
                 ).hexdigest(),
             })
         rows.append({
