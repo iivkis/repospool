@@ -71,6 +71,20 @@ def check(repo: Path, artifact: Path | None = None) -> dict:
                "--", ".", f":(exclude){NAME}")
     _require(diff.returncode == 0, "STALE_SNAPSHOT",
              "source files differ from the RGP commit; refresh the snapshot")
+    # Local working-tree modifications are not represented by a pinned Git
+    # snapshot, even when committed HEAD is source-equivalent. Refuse to
+    # present the snapshot as a complete view of modified agent work.
+    worktree = git(repo, "diff", "--quiet", "HEAD",
+                   "--", ".", f":(exclude){NAME}")
+    _require(worktree.returncode == 0, "STALE_SNAPSHOT",
+             "tracked working-tree files differ from HEAD")
+    staged = git(repo, "diff", "--cached", "--quiet", "HEAD",
+                 "--", ".", f":(exclude){NAME}")
+    _require(staged.returncode == 0, "STALE_SNAPSHOT",
+             "staged source changes are not in the RGP")
+    untracked = checked_git(repo, "ls-files", "--others", "--exclude-standard", "-z")
+    _require(not untracked, "STALE_SNAPSHOT",
+             "untracked source files are absent from the Git-pinned RGP")
     digest = hashlib.sha256(actual).hexdigest()
     return {
         "status": "PASS",
