@@ -14,6 +14,9 @@ on:
       - python/rgp_agent_context.py
       - scripts/stage1_agent_task_pilot.py
       - tests/test_rgpp_agent_context.py
+      - python/rgp_mcp.py
+      - tests/test_rgp_mcp.py
+      - scripts/stage1_mcp_agent_trial.py
   push:
     branches: [main]
     paths:
@@ -27,6 +30,9 @@ on:
       - python/rgp_agent_context.py
       - scripts/stage1_agent_task_pilot.py
       - tests/test_rgpp_agent_context.py
+      - python/rgp_mcp.py
+      - tests/test_rgp_mcp.py
+      - scripts/stage1_mcp_agent_trial.py
 
 permissions:
   contents: read
@@ -205,6 +211,35 @@ jobs:
         with:
           name: stage1-agent-context-${{ matrix.repository }}
           path: ${{ runner.temp }}/agent-task-pilot.json
+          retention-days: 14
+          if-no-files-found: error
+      - name: Real MCP client solves 4 pinned source tasks
+        env:
+          SRC_REPO: ${{ matrix.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_rgp_mcp.py' -q
+          python3 scripts/stage1_mcp_agent_trial.py \
+            --repository "$SRC_REPO" \
+            --artifact "$RUNNER_TEMP/REPO_CONTEXT.rgp" \
+            --source-repo "$RUNNER_TEMP/source" \
+            --report "$RUNNER_TEMP/mcp-agent-trial.json"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          x = json.loads((Path(os.environ["RUNNER_TEMP"]) / "mcp-agent-trial.json").read_text())
+          assert x["status"] == "PASS" and x["gate_b"] == "HOLD"
+          assert x["task_count"] == 4 and x["verified_source_passages"] >= 8
+          assert x["mcp_tool_calls"] >= 12 and x["negative_read_rejected"]
+          assert x["model_inference"] == "NOT_RUN"
+          assert x["independent_answer_grading"] == "NOT_RUN"
+          PY
+      - name: Publish metadata-only MCP coding-agent evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage1-mcp-agent-${{ matrix.repository }}
+          path: ${{ runner.temp }}/mcp-agent-trial.json
           retention-days: 14
           if-no-files-found: error
       - name: Publish metadata-only delivery evidence
