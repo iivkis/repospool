@@ -85,6 +85,16 @@ nonzero. The Rust generator, independent Python Reader and ZIP
 bootstrap stay separate; there is no new inference runtime or API
 dependency.
 
+## Real connected-tool verification
+
+The implementing agent also downloaded **the actual three GitHub
+Actions artifact ZIPs** through the connected GitHub app, verified
+their RGP SHA-256 against the committed checkpoint, and independently
+matched all 13 frozen reference Git blob identifiers. The observed
+artifact IDs, hashes, source commitments, limits and run links are
+in [CONNECTED_DELIVERY_2026-10-31.md](../benchmarks/stage1/CONNECTED_DELIVERY_2026-10-31.md).
+This is distinct from the workflow's simulated local ZIP replay.
+
 ## Gate B cannot be auto-approved
 
 A successful ZIP replay and a SHA-pinned connector download establish
