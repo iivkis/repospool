@@ -25,7 +25,7 @@ MAX_PATH_BYTES = 4096
 MAX_OVERVIEW_EXCLUSIONS = 100
 HEX = re.compile(r"[0-9a-f]{64}\Z")
 COMMIT = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
-EXCLUSION_REASONS = frozenset({"self_artifact", "sensitive_path", "submodule_unavailable", "size_limit"})
+EXCLUSION_REASONS = frozenset({"self_artifact", "sensitive_path", "submodule_unavailable", "size_limit", "entry_limit"})
 
 
 class RgpError(ValueError):

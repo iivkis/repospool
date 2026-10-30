@@ -117,6 +117,17 @@ alongside the 24-answer masked reviewer packet. The original pilot's
 reported 53.85% call reduction is still an unauthenticated claim,
 not a licensed GO decision; see [Issue #25](https://github.com/iivkis/rgp/issues/25).
 
+## Stage 1 high-cardinality source trees
+
+The [50k-member capacity contract](docs/STAGE1_SCALE.md) now ensures
+the generator never produces RGPs that its own 50,000-ZIP-member
+verifier refuses: **49,999 tracked files plus the manifest** are the
+maximum included paths, with later paths explicitly recorded as
+`entry_limit` exclusions in a **partial** snapshot. A reproducible
+real Git→RGP→Reader stress test commits 50,005 unique blobs and checks
+full pagination, exact source reads, negative cases, determinism and
+observed resource cost. This is not Gate B GO.
+
 ## Gate B: assistant-only source comparison (protocol v2)
 
 The **assistant in the active conversation** writes the code, checks the source

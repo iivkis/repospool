@@ -66,7 +66,17 @@ performance improvements.
   ledger: **HOLD**. A self-scored result cannot serve as independent audit.
 - Real GitHub connector delivery with independently anchored authenticity:
   only the previously verified Actions-artifact channel has limited proof.
-- Truly large enterprise repositories / 50k-member and 128 MiB ceiling
-  boundary checks require separate controlled resources.
+- Truly large enterprise repositories / the 128 MiB expanded-size ceiling
+  boundary still require separate controlled resources; see 50k-member evidence above.
 - Stress runs must be inspected and documented with exact SHA and
   pass/fail evidence before marking this work completed.
+
+## 50k-member boundary now tested
+
+The previously outstanding high-cardinality ZIP member limit is
+now covered by a separate [50,005-file Git fixture, 50,000-member
+acceptance test](STAGE1_SCALE.md) with an actual passing CI run and
+[measured result](../benchmarks/stage1/SCALE_50K_2026-10-31.md).
+This **does not** establish the 128 MiB expanded-byte exhaustion
+boundary for arbitrary content, all enterprise workloads or future
+GitHub connection transports.

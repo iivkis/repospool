@@ -261,6 +261,17 @@ fn snapshot(repo: &Path, rev: &str) -> Result<(Manifest, BTreeMap<String, Vec<u8
         }
         ensure!(kind == "blob", "unsupported Git object: {kind}");
         let object_size: usize = size.parse().context("invalid blob size")?;
+        // Reserve one ZIP member for manifest.json. Even if Git contains
+        // more than 49,999 distinct blobs, the emitted RGP must remain
+        // readable under the fixed RGP/1.0 50,000-member ceiling.
+        // Exclusions are recorded explicitly, never silently dropped.
+        if manifest.files.len() >= MAX_ENTRIES - 1 {
+            manifest.excluded.push(Exclusion {
+                path: path.into(),
+                reason: "entry_limit".into(),
+            });
+            continue;
+        }
         if object_size > MAX_FILE || total.saturating_add(object_size) > MAX_TOTAL {
             manifest.excluded.push(Exclusion {
                 path: path.into(),
@@ -272,17 +283,20 @@ fn snapshot(repo: &Path, rev: &str) -> Result<(Manifest, BTreeMap<String, Vec<u8
         total += bytes.len();
         let digest = sha(&bytes);
         let blob = format!("files/{digest}");
-        blobs.entry(blob.clone()).or_insert(bytes.clone());
         let status = if bytes.starts_with(b"version https://git-lfs.github.com/spec/v1\n") {
             "pointer_only"
         } else {
             "included"
         };
+        let size = bytes.len() as u64;
+        // Moving, rather than cloning, the first occurrence of a Git blob
+        // avoids an unnecessary 16 MiB allocation for large source files.
+        blobs.entry(blob.clone()).or_insert(bytes);
         manifest.files.push(FileEntry {
             path: path.into(),
             mode: mode.into(),
             kind: if mode == "120000" { "symlink" } else { "file" }.into(),
-            size: bytes.len() as u64,
+            size,
             sha256: digest,
             blob,
             status: status.into(),
@@ -402,6 +416,10 @@ fn excessive_compression(payload: &[u8]) -> Result<HashSet<String>> {
 fn generate(repo: &Path, output: &Path, rev: &str) -> Result<()> {
     let (manifest, blobs) = snapshot(repo, rev)?;
     let manifest_data = serde_json::to_vec(&manifest)?;
+    ensure!(
+        manifest_data.len() <= MAX_MANIFEST,
+        "RESOURCE_LIMIT: manifest exceeds 16 MiB"
+    );
     let compressed_first = build_zip(&manifest_data, &blobs, &HashSet::new())?;
     let outliers = excessive_compression(&compressed_first)?;
     let compressed = if outliers.is_empty() {
@@ -580,8 +598,8 @@ fn verify(path: &Path) -> Result<Manifest> {
         "UNSUPPORTED_FORMAT: manifest version"
     );
     ensure!(
-        manifest.files.len() <= MAX_ENTRIES,
-        "RESOURCE_LIMIT: manifest entries"
+        manifest.files.len() < MAX_ENTRIES && manifest.excluded.len() <= MAX_ENTRIES,
+        "RESOURCE_LIMIT: manifest entry/exclusion count"
     );
     let mut previous = None::<&str>;
     let mut referenced = HashSet::new();
@@ -631,8 +649,27 @@ fn verify(path: &Path) -> Result<Manifest> {
         tree_digest(&manifest.files)? == manifest.input_tree_digest,
         "HASH_MISMATCH: input tree digest"
     );
+    let mut previous_exclusion = None::<&str>;
     for e in &manifest.excluded {
         validate_path(&e.path)?;
+        ensure!(
+            matches!(
+                e.reason.as_str(),
+                "self_artifact"
+                    | "sensitive_path"
+                    | "submodule_unavailable"
+                    | "size_limit"
+                    | "entry_limit"
+            ),
+            "UNSUPPORTED_FORMAT: exclusion reason"
+        );
+        if let Some(previous) = previous_exclusion {
+            ensure!(
+                previous < e.path.as_str(),
+                "UNSUPPORTED_FORMAT: exclusion ordering"
+            );
+        }
+        previous_exclusion = Some(&e.path);
         ensure!(
             file_names.insert(e.path.to_lowercase()),
             "UNSAFE_PATH: file/exclusion collision"
