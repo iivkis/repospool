@@ -653,7 +653,10 @@ mod tests {
         let output = std::env::temp_dir().join(format!(
             "rgp-staging-{}-{}",
             std::process::id(),
-            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
         ));
         let (a, a_file) = StagedOutput::create(&output).unwrap();
         let (b, b_file) = StagedOutput::create(&output).unwrap();
