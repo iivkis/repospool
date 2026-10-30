@@ -22,7 +22,7 @@ from stage1_corpus import measured  # noqa: E402
 from stage1_stress import make_source  # noqa: E402
 from stage1_scale import FILES, CAP, SAMPLE, commit_many, path_for  # noqa: E402
 
-PROFILES = ("many-files", "incompressible", "compressible", "scale-50k")
+PROFILES = ("many-files", "incompressible", "compressible", "disk-fallback", "scale-50k")
 
 
 def main() -> int:
