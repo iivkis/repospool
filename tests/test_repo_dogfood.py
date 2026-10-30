@@ -1,6 +1,4 @@
 """End-to-end dogfood freshness against real temporary Git history (no Rust needed)."""
-import hashlib
-import os
 import subprocess
 import sys
 import tempfile
@@ -56,6 +54,19 @@ class RepoDogfoodTests(unittest.TestCase):
         with self.assertRaisesRegex(RgpError, "STALE_SNAPSHOT"):
             check(self.repo)
 
+    def test_dirty_tracked_worktree_is_not_accepted_as_fresh(self):
+        (self.repo / "src/file.txt").write_text("local edit not yet in Git\n")
+        with self.assertRaisesRegex(RgpError, "STALE_SNAPSHOT"):
+            check(self.repo)
+        self.call("add", "src/file.txt")
+        with self.assertRaisesRegex(RgpError, "STALE_SNAPSHOT"):
+            check(self.repo)
+
+    def test_untracked_source_is_not_in_rgp(self):
+        (self.repo / "src/new.py").write_text("new function\n")
+        with self.assertRaisesRegex(RgpError, "STALE_SNAPSHOT"):
+            check(self.repo)
+
     def test_non_source_git_commit_does_not_magically_refresh_source(self):
         (self.repo / "AGENTS.md").write_text("New agent contract\n")
         self.call("add", "AGENTS.md")
@@ -79,7 +90,6 @@ class RepoDogfoodTests(unittest.TestCase):
         self.call("checkout", "-qb", "unrelated", original)
         self.call("commit", "--allow-empty", "-qm", "different unrelated HEAD")
         other = self.call("rev-parse", "HEAD").stdout.decode().strip()
-        self.call("checkout", "-q", "master" if self.call("branch", "--show-current").stdout.decode().strip() == "master" else "main") if False else None
         # Explicitly use commit data from a diverged branch, then return.
         self.call("checkout", "-q", self.publish_commit)
         self.snapshot.write_bytes(fake_artifact(
