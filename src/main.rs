@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashSet};
 use std::fs::{self, OpenOptions};
-use std::io::{BufRead, BufReader, Cursor, Read, Write};
+use std::io::{BufRead, BufReader, BufWriter, Cursor, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -372,12 +372,13 @@ impl Drop for StagedOutput {
 // by guessing compressibility from samples. A valid, repetitive source file
 // must not be rejected as a ZIP bomb by our own independent readers.
 // Ordinary archives retain their original compression and byte format.
-fn build_zip(
+fn build_zip<W: Write + Seek>(
+    writer: W,
     manifest_data: &[u8],
     blobs: &BTreeMap<String, Vec<u8>>,
     stored: &HashSet<String>,
-) -> Result<Vec<u8>> {
-    let mut zip = ZipWriter::new(Cursor::new(Vec::new()));
+) -> Result<W> {
+    let mut zip = ZipWriter::new(writer);
     let options = FileOptions::default()
         .compression_method(CompressionMethod::Deflated)
         .last_modified_time(DateTime::default())
@@ -398,11 +399,11 @@ fn build_zip(
         zip.start_file(name, options.compression_method(method))?;
         zip.write_all(contents)?;
     }
-    Ok(zip.finish()?.into_inner())
+    Ok(zip.finish()?)
 }
 
-fn excessive_compression(payload: &[u8]) -> Result<HashSet<String>> {
-    let mut archive = ZipArchive::new(Cursor::new(payload))?;
+fn excessive_compression<R: Read + Seek>(reader: R) -> Result<HashSet<String>> {
+    let mut archive = ZipArchive::new(reader)?;
     let mut out = HashSet::new();
     for index in 0..archive.len() {
         let member = archive.by_index(index)?;
@@ -413,6 +414,60 @@ fn excessive_compression(payload: &[u8]) -> Result<HashSet<String>> {
     Ok(out)
 }
 
+// SHA is calculated over the finished ZIP bytes; the transport is emitted
+// directly to a unique staging file. Exactly 57 source bytes produce
+// one 76-character Base64 line. Neither the ZIP nor its Base64 text needs
+// to be retained in memory, and the original RGP/1.0 bytes are unchanged.
+fn stream_transport(source: &Path, destination: &mut fs::File) -> Result<usize> {
+    let size = fs::metadata(source)?.len();
+    ensure!(
+        size <= MAX_ARTIFACT as u64,
+        "RESOURCE_LIMIT: ZIP payload too large"
+    );
+    let mut zip = BufReader::new(fs::File::open(source)?);
+    let mut hasher = Sha256::new();
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        let n = zip.read(&mut buffer)?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buffer[..n]);
+    }
+    let mut output = BufWriter::with_capacity(64 * 1024, &mut *destination);
+    writeln!(
+        output,
+        "RGP/1.0\npayload_length={}\npayload_sha256={}\nbase64_line_width=76\n--",
+        size,
+        hex::encode(hasher.finalize())
+    )?;
+    let mut zip = BufReader::new(fs::File::open(source)?);
+    let mut raw = [0u8; 57];
+    let mut encoded = [0u8; 76];
+    loop {
+        let mut n = 0;
+        while n < raw.len() {
+            let read = zip.read(&mut raw[n..])?;
+            if read == 0 {
+                break;
+            }
+            n += read;
+        }
+        if n == 0 {
+            break;
+        }
+        let encoded_size = STANDARD
+            .encode_slice(&raw[..n], &mut encoded)
+            .map_err(|_| anyhow!("Base64 output buffer insufficient"))?;
+        output.write_all(&encoded[..encoded_size])?;
+        output.write_all(b"\n")?;
+    }
+    output.write_all(b"END RGP\n")?;
+    output.flush()?;
+    drop(output);
+    Ok(destination.metadata()?.len() as usize)
+}
+
 fn generate(repo: &Path, output: &Path, rev: &str) -> Result<()> {
     let (manifest, blobs) = snapshot(repo, rev)?;
     let manifest_data = serde_json::to_vec(&manifest)?;
@@ -420,44 +475,36 @@ fn generate(repo: &Path, output: &Path, rev: &str) -> Result<()> {
         manifest_data.len() <= MAX_MANIFEST,
         "RESOURCE_LIMIT: manifest exceeds 16 MiB"
     );
-    let compressed_first = build_zip(&manifest_data, &blobs, &HashSet::new())?;
-    let outliers = excessive_compression(&compressed_first)?;
-    let compressed = if outliers.is_empty() {
-        compressed_first
+
+    // File-backed ZIP staging means a large ZIP does not share process
+    // memory with the source blob map. Both stages are create_new() and
+    // cleaned by Drop even when compression or verification fails.
+    let (first_zip, file) = StagedOutput::create(output)?;
+    drop(build_zip(file, &manifest_data, &blobs, &HashSet::new())?);
+    let outliers = excessive_compression(fs::File::open(&first_zip.path)?)?;
+    let archive = if outliers.is_empty() {
+        first_zip
     } else {
-        // At most one bounded retry. Stored entries cannot exceed the ZIP
-        // compression-ratio ceiling; never turn off anti-bomb checks.
-        let safe = build_zip(&manifest_data, &blobs, &outliers)?;
+        let (fallback, file) = StagedOutput::create(output)?;
+        drop(build_zip(file, &manifest_data, &blobs, &outliers)?);
         ensure!(
-            excessive_compression(&safe)?.is_empty(),
+            excessive_compression(fs::File::open(&fallback.path)?)?.is_empty(),
             "RESOURCE_LIMIT: unsafe compression ratio after fallback"
         );
-        safe
+        fallback
     };
-    ensure!(
-        compressed.len() <= MAX_ARTIFACT,
-        "RESOURCE_LIMIT: ZIP payload too large"
-    );
-    let encoded = STANDARD.encode(&compressed);
-    let mut artifact = format!(
-        "RGP/1.0\npayload_length={}\npayload_sha256={}\nbase64_line_width=76\n--\n",
-        compressed.len(),
-        sha(&compressed)
-    );
-    for line in encoded.as_bytes().chunks(76) {
-        artifact.push_str(std::str::from_utf8(line)?);
-        artifact.push('\n');
-    }
-    artifact.push_str("END RGP\n");
-    // Verify before replacing the destination, without sharing a temporary
-    // pathname with any concurrent generator.
+    drop(blobs);
+    drop(manifest_data);
+    drop(manifest);
+
+    // Validate the complete artifact before the final atomic rename.
     let (staged, mut file) = StagedOutput::create(output)?;
-    file.write_all(artifact.as_bytes())?;
+    let artifact_size = stream_transport(&archive.path, &mut file)?;
     file.sync_all()?;
     drop(file);
     verify(&staged.path)?;
     fs::rename(&staged.path, output)?;
-    println!("generated {} ({} bytes)", output.display(), artifact.len());
+    println!("generated {} ({} bytes)", output.display(), artifact_size);
     Ok(())
 }
 
@@ -734,16 +781,52 @@ mod tests {
     }
 
     #[test]
+    fn streamed_transport_matches_original_in_memory_bytes_at_line_boundaries() -> Result<()> {
+        for length in [1usize, 56, 57, 58, 114, 115, 4097, 65539] {
+            let bytes: Vec<u8> = (0..length).map(|n| ((n * 131) % 251) as u8).collect();
+            let (source, mut source_file) = StagedOutput::create(Path::new("stream-test.rgp"))?;
+            source_file.write_all(&bytes)?;
+            source_file.sync_all()?;
+            drop(source_file);
+            let (destination, mut destination_file) =
+                StagedOutput::create(Path::new("stream-test.rgp"))?;
+            let written = stream_transport(&source.path, &mut destination_file)?;
+            drop(destination_file);
+            let actual = fs::read(&destination.path)?;
+            let encoded = STANDARD.encode(&bytes);
+            let mut expected = format!(
+                "RGP/1.0\npayload_length={}\npayload_sha256={}\nbase64_line_width=76\n--\n",
+                length,
+                sha(&bytes)
+            );
+            for line in encoded.as_bytes().chunks(76) {
+                expected.push_str(std::str::from_utf8(line)?);
+                expected.push('\n');
+            }
+            expected.push_str("END RGP\n");
+            assert_eq!(actual, expected.as_bytes());
+            assert_eq!(written, actual.len());
+        }
+        Ok(())
+    }
+
+    #[test]
     fn high_compression_blob_uses_stored_without_disabling_reader_limits() {
         let mut blobs = BTreeMap::new();
         let repeated = vec![0u8; 1024 * 1024];
         let key = format!("files/{}", sha(&repeated));
         blobs.insert(key.clone(), repeated);
-        let first = build_zip(b"{}", &blobs, &HashSet::new()).unwrap();
-        let outliers = excessive_compression(&first).unwrap();
+        let first = build_zip(Cursor::new(Vec::new()), b"{}", &blobs, &HashSet::new())
+            .unwrap()
+            .into_inner();
+        let outliers = excessive_compression(Cursor::new(&first)).unwrap();
         assert!(outliers.contains(&key));
-        let rebuilt = build_zip(b"{}", &blobs, &outliers).unwrap();
-        assert!(excessive_compression(&rebuilt).unwrap().is_empty());
+        let rebuilt = build_zip(Cursor::new(Vec::new()), b"{}", &blobs, &outliers)
+            .unwrap()
+            .into_inner();
+        assert!(excessive_compression(Cursor::new(&rebuilt))
+            .unwrap()
+            .is_empty());
         let mut zip = ZipArchive::new(Cursor::new(rebuilt)).unwrap();
         assert_eq!(
             zip.by_name(&key).unwrap().compression(),

@@ -80,3 +80,11 @@ acceptance test](STAGE1_SCALE.md) with an actual passing CI run and
 This **does not** establish the 128 MiB expanded-byte exhaustion
 boundary for arbitrary content, all enterprise workloads or future
 GitHub connection transports.
+
+## Bounded-memory generation A/B
+
+The generator's temporary ZIP and streaming Base64 memory optimization
+has a [four-profile, same-runner A/B report](../benchmarks/stage1/MEMORY_AB_2026-10-31.md).
+Memory gains are measured (about 52% peak RSS for 12MiB and 50k
+cases), but 50k generation latency **increases substantially**.
+Do not claim pure performance improvement.
