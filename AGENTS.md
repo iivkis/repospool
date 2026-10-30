@@ -4,6 +4,42 @@ These instructions apply to AI agents changing this repository. The project is
 an RGP generator, verifier and trusted Reader, **not** an embedded LLM runtime.
 The agent doing development is responsible for verifying its own work.
 
+## Primary user and first-class sandbox workflow
+
+**RGP is built by this assistant for this assistant.** The primary
+user is Kira, the ChatGPT coding assistant working with GitHub
+repositories inside its own Python sandbox. Its purpose is to help
+the assistant understand source context, choose the correct changes
+and tests, avoid mistakes, and complete real development tasks
+more effectively. This overrides treating ZIP throughput, 50k
+synthetic files, a standalone MCP adapter, or a generic third-party
+agent as the product goal.
+
+The canonical [sandbox-first product north star](docs/PRODUCT_NORTH_STAR.md)
+defines the priority and evaluation criteria. During actual
+GitHub coding work, when an authenticated RGP is available, the
+developing assistant should **dogfood the snapshot inside its own
+sandbox**, using the trusted Python stdlib Reader to identify
+relevant source paths, behavior and likely impact **before changing code**.
+Then implement with GitHub/Git working-copy tools, run relevant
+tests, and verify the result. Source commit and snapshot completeness
+must be explicit. The agent must not claim to have used RGP when it
+actually relied only on GitHub. If RGP is missing/stale/unverifiable,
+use direct GitHub and disclose the fallback.
+
+For feature work, prefer a *real change task* and evidence of correct
+edits, test selection, avoided errors and unexpected side effects
+over toy questions with oracle-selected search terms. If relevant,
+compare against direct GitHub with caching and count total RGP
+acquisition costs. The primary result is a successful, less
+error-prone implementation, not a number of blobs read or a passing
+parser test. Independent evaluation is still needed for broad
+model-improvement or Gate B claims.
+
+MCP is optional: a sandbox process running an MCP server does **not**
+automatically register those tools with this ChatGPT session.
+Direct Reader access in Python is the default when it is simpler.
+
 ## Engineering defaults
 
 - **Pragmatic engineering:** make the smallest change that demonstrably meets a
