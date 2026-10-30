@@ -53,6 +53,13 @@ def run(artifact: Path, source_repo: Path, repository: str) -> dict:
     observed_paths = {x["path"] for x in result["sources"]}
     for required in selected["required_paths"]:
         assert required in observed_paths, f"not enough source evidence: {required}"
+    if repository == "serde_json":
+        # A model needs all three scalar operations, not three i64
+        # implementations selected because of lexical frequency.
+        present = {s["match_term"] for s in result["sources"]
+                   if s["path"] == "src/ser.rs"}
+        assert {"fn serialize_i64", "fn serialize_f64", "fn serialize_str"} <= present, (
+            "scalar serializer context is biased toward a repeated term")
     assert not result["search_capped_terms"], "source search was truncated"
     checked = []
     for source in result["sources"]:
