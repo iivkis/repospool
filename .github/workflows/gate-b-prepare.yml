@@ -17,6 +17,9 @@ on:
       - python/rgp_mcp.py
       - tests/test_rgp_mcp.py
       - scripts/stage1_mcp_agent_trial.py
+      - python/rgp_sandbox.py
+      - tests/test_rgp_sandbox.py
+      - scripts/stage1_sandbox_task_trial.py
   push:
     branches: [main]
     paths:
@@ -33,6 +36,9 @@ on:
       - python/rgp_mcp.py
       - tests/test_rgp_mcp.py
       - scripts/stage1_mcp_agent_trial.py
+      - python/rgp_sandbox.py
+      - tests/test_rgp_sandbox.py
+      - scripts/stage1_sandbox_task_trial.py
 
 permissions:
   contents: read
@@ -240,6 +246,37 @@ jobs:
         with:
           name: stage1-mcp-agent-${{ matrix.repository }}
           path: ${{ runner.temp }}/mcp-agent-trial.json
+          retention-days: 14
+          if-no-files-found: error
+      - name: Export independently pinned RGP into a sandbox source workspace
+        env:
+          SRC_REPO: ${{ matrix.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_rgp_sandbox.py' -q
+          python3 scripts/stage1_sandbox_task_trial.py \
+            --repository "$SRC_REPO" \
+            --artifact "$RUNNER_TEMP/REPO_CONTEXT.rgp" \
+            --source-repo "$RUNNER_TEMP/source" \
+            --output "$RUNNER_TEMP/agent-sandbox-workspace" \
+            --report "$RUNNER_TEMP/sandbox-workspace-trial.json"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          value = json.loads((Path(os.environ["RUNNER_TEMP"]) / "sandbox-workspace-trial.json").read_text())
+          assert value["status"] == "PASS" and value["gate_b"] == "HOLD"
+          assert value["files_exported"] == value["source_files_compared_byte_for_byte_to_git"]
+          assert value["artifact_sha256_matched_committed_external_checkpoint"]
+          assert value["all_file_executable_bits_cleared"]
+          assert value["source_code_execution"] == "NONE"
+          assert value["model_task_quality"] == "NOT_MEASURED_BY_THIS_SCRIPT"
+          PY
+      - name: Publish metadata-only sandbox workspace evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage1-sandbox-workspace-${{ matrix.repository }}
+          path: ${{ runner.temp }}/sandbox-workspace-trial.json
           retention-days: 14
           if-no-files-found: error
       - name: Publish metadata-only delivery evidence
