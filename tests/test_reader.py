@@ -49,6 +49,16 @@ class ReaderTest(unittest.TestCase):
         self.assertEqual(r.search("world")["matches"][0]["line"], 2)
         self.assertTrue(r.overview()["snapshot_complete"])
 
+    def test_read_bytes_preserves_exact_git_blob_bytes(self):
+        original = bytes([255, 0, 13, 10]) + b"raw" + bytes([10])
+        r = Reader(fixture(content=original))
+        self.assertEqual(r.read_bytes("src/example.py"), original)
+        self.assertEqual(r.read_bytes("src/example.py"), original)
+        with self.assertRaisesRegex(RgpError, "PARTIAL_SNAPSHOT"):
+            r.read_bytes("missing.txt")
+        with self.assertRaisesRegex(RgpError, "PARTIAL_SNAPSHOT"):
+            r.read_bytes(None)
+
     def test_truncation(self):
         with self.assertRaisesRegex(RgpError, "TRUNCATED_ARTIFACT"):
             decode_transport(fixture()[:-12])

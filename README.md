@@ -4,6 +4,31 @@ Reproducible, versioned **single-file repository snapshots** designed to be read
 
 > **Status: v0.1 / transport PoC.** 12 independent connector downloads of GitHub Actions artifacts (100 KiB–50 MiB outer RGP) passed byte-level verification in the Python sandbox. This is **conditional Gate A success for the Actions-artifact adapter only**, not proof that `fetch_file` delivers the canonical root file. Syntax/semantic indexing is intentionally not claimed.
 
+## Практический инструмент для песочницы Киры: локальные исходники
+
+[Новый безопасный экспорт](docs/SANDBOX_SOURCE_WORKSPACE.md)
+превращает независимо проверенный RGP в **обычную локальную папку
+с исходниками**, доступную стандартным файловым инструментам Python.
+Это позволяет Кире быстро изучать GitHub-репозиторий в своей
+песочнице без `git clone`, без обязательного MCP и без
+извлечения каждого файла отдельным вызовом Reader.
+
+```sh
+python3 python/rgp_sandbox.py \
+  --artifact /path/to/REPO_CONTEXT.rgp \
+  --trusted-sha256 <trusted-sha256-from-separate-source> \
+  --output /tmp/rgp-source-workspace
+```
+
+Пределы по умолчанию: 1000 исходных файлов / 32 MiB.
+Данные неисполняемые, Git-симлинки создаются обычным текстом,
+неполные снимки требуют явного согласия. Экспортированная папка
+**не является Git-репозиторием**; реальные правки делаются через GitHub.
+[Реальная проверка файлов на трёх Git-коммитах](scripts/stage1_sandbox_task_trial.py)
+проверяет все файлы байт-в-байт, а не только цитаты.
+Это инфраструктура для снижения ошибок Киры, не доказательство
+снижения самих ошибок. Gate B = HOLD.
+
 ## Главная цель: Кира разрабатывает RGP для самой себя
 
 **Основной пользователь RGP — Кира, ChatGPT coding-ассистент, работающий

@@ -27,6 +27,15 @@ must be explicit. The agent must not claim to have used RGP when it
 actually relied only on GitHub. If RGP is missing/stale/unverifiable,
 use direct GitHub and disclose the fallback.
 
+For sandbox-based understanding, when a verified RGP is available, an
+inert source workspace can now be exported using
+`python/rgp_sandbox.py --artifact ... --trusted-sha256 ... --output ...`.
+This enables ordinary Python file inspection without clone, interpreter
+imports of repository code, or MCP setup. Never infer the trusted SHA
+from the downloaded RGP itself. The export is **not** a Git checkout:
+do not claim it can be committed or pushed directly. See
+[docs/SANDBOX_SOURCE_WORKSPACE.md](docs/SANDBOX_SOURCE_WORKSPACE.md).
+
 For feature work, prefer a *real change task* and evidence of correct
 edits, test selection, avoided errors and unexpected side effects
 over toy questions with oracle-selected search terms. If relevant,
