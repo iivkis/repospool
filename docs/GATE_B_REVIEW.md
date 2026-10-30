@@ -55,7 +55,9 @@ The handoff now includes `tool-receipt-template.json` and
 packet. The ledger is generated from the **existing** cache-fair
 observations, with 13 frozen first-use GitHub source requests and
 6 RGP preparation/acquisition call slots (4 for rgp, 1 for serde_json,
-1 for itsdangerous). All **19 receipt fields are initially null**.
+1 for itsdangerous). The RGP preparation slots specifically bind one
+checkpoint fetch, one Actions listing, one RGP download, and one trusted
+Reader source fetch; the other two repos require one RGP download each. All **19 receipt fields are initially null**.
 This is deliberate: the existing observation JSON never authenticated
 the provider's historical tool invocation IDs, responses or URLs.
 
