@@ -107,6 +107,12 @@ tasks:
     cmds:
       - python3 scripts/stage1_delivery.py --repository '{{.REPOSITORY}}' --actions-zip '{{.ZIP}}' --output /tmp/rgp-stage1-delivery-{{.REPOSITORY}}.rgp --report /tmp/rgp-stage1-delivery-{{.REPOSITORY}}.json
 
+  stage1:scale:
+    desc: Run real Git 50k-member capacity and partial-snapshot acceptance
+    cmds:
+      - cargo build --locked --release
+      - python3 scripts/stage1_scale.py --rust-cli target/release/rgp --report /tmp/rgp-stage1-scale.json
+
   check:
     desc: Run all checks, deterministic snapshot smoke and goal-level RGP acceptance
     cmds:
