@@ -48,6 +48,22 @@ class Stage1CorpusTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unknown repository"):
             corpus.tasks_for(PLAN, "unknown")
 
+    def test_existing_corpus_checkpoint_requires_exact_bytes_and_commit(self):
+        checkpoints = json.loads(
+            (ROOT / "benchmarks/gate_b/corpus_preparation.json").read_text()
+        )
+        for item in checkpoints["artifacts"]:
+            summary = {"repository": item["repository"],
+                       "source_commit": item["source_commit"],
+                       "rgp_sha256": item["sha256"],
+                       "rgp_bytes": item["rgp_bytes"],
+                       "included_files": item["included_files"]}
+            corpus.match_checkpoint(checkpoints, summary)
+            damaged = dict(summary)
+            damaged["rgp_sha256"] = "0" * 64
+            with self.assertRaisesRegex(ValueError, "compatibility regression"):
+                corpus.match_checkpoint(checkpoints, damaged)
+
     def test_generator_failure_is_a_failure_not_success(self):
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "invalid-time"
