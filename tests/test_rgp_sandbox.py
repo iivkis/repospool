@@ -40,7 +40,7 @@ class SandboxWorkspaceTests(unittest.TestCase):
         r = Reader(self.artifact)
         for item in r.manifest["files"]:
             path = output / item["path"]
-            self.assertEqual(path.read_bytes(), r._blob(item["path"]))
+            self.assertEqual(path.read_bytes(), r.read_bytes(item["path"]))
             self.assertTrue(stat.S_ISREG(path.lstat().st_mode))
             self.assertEqual(path.stat().st_mode & 0o111, 0)
         self.assertEqual(json.loads((output / METADATA).read_text()), report)
