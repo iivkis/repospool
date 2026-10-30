@@ -2,12 +2,25 @@ name: Gate B pinned corpus preparation
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/gate-b-prepare.yml
+      - benchmarks/gate_b/plan.json
+      - benchmarks/gate_b/corpus_preparation.json
+      - scripts/gate_b.py
+      - scripts/stage1_delivery.py
+      - tests/test_stage1_delivery.py
+      - python/rgp_bootstrap.py
   push:
     branches: [main]
     paths:
       - .github/workflows/gate-b-prepare.yml
       - benchmarks/gate_b/plan.json
+      - benchmarks/gate_b/corpus_preparation.json
       - scripts/gate_b.py
+      - scripts/stage1_delivery.py
+      - tests/test_stage1_delivery.py
+      - python/rgp_bootstrap.py
 
 permissions:
   contents: read
@@ -120,6 +133,48 @@ jobs:
               summary.write(f"RGP bytes: {report['rgp_bytes']}\n\n")
               summary.write(f"Snapshot complete: {report['reader_overview']['snapshot_complete']}\n")
           PY
+      - name: Verify local Actions-style ZIP against committed checkpoint and independent Git
+        shell: bash
+        env:
+          SRC_REPO: ${{ matrix.repository }}
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_stage1_delivery.py' -q
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          from zipfile import ZipFile, ZIP_STORED
+          folder = Path(os.environ["RUNNER_TEMP"])
+          with ZipFile(folder / "local-actions-wrapper.zip", "w", ZIP_STORED) as archive:
+              archive.write(folder / "REPO_CONTEXT.rgp", "REPO_CONTEXT.rgp")
+              archive.write(folder / "provenance.json", "provenance.json")
+          PY
+          python3 scripts/stage1_delivery.py \
+            --actions-zip "$RUNNER_TEMP/local-actions-wrapper.zip" \
+            --repository "$SRC_REPO" \
+            --source-repo "$RUNNER_TEMP/source" \
+            --output "$RUNNER_TEMP/recovered.rgp" \
+            --report "$RUNNER_TEMP/delivery-check.json"
+          cmp "$RUNNER_TEMP/recovered.rgp" "$RUNNER_TEMP/REPO_CONTEXT.rgp"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          report = json.loads((Path(os.environ["RUNNER_TEMP"]) / "delivery-check.json").read_text())
+          assert (report["status"] == "PASS" and
+                  report["task_reference_sets"] == 4 and
+                  report["source_comparison"] == "PASS" and
+                  report["gate_b"] == "HOLD")
+          print("STAGE1_DELIVERY_SHA256=" + report["rgp_sha256"])
+          print("STAGE1_DELIVERY_PINNED_SOURCE=" + report["source_commit"])
+          print("STAGE1_DELIVERY_RESULT=PASS")
+          PY
+      - name: Publish metadata-only delivery evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage1-delivery-${{ matrix.repository }}
+          path: ${{ runner.temp }}/delivery-check.json
+          retention-days: 14
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: gate-b-${{ matrix.repository }}
