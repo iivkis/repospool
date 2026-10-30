@@ -34,6 +34,14 @@ after building). CI uploads sanitized metadata for this acceptance.
 This verifies functional source tasks, **not** a Gate B decision or
 connector transport claim. Gate B remains **HOLD**.
 
+The [Stage 1 stress suite](docs/STAGE1_STRESS.md) also exercises 2,000
+small source files, 12 MiB compressible/incompressible files and a
+16 MiB-per-file boundary using temporary pinned Git commits.
+When a valid source blob compresses beyond the Reader's anti-zip-bomb
+ratio, the generator now uses deterministic ZIP_STORED for that member,
+without weakening validation. See the separate CI stress matrix for
+actual evidence and resource measurements.
+
 For the next large Stage 1 diagnostic, the
 [three-repository frozen corpus protocol](docs/STAGE1_CORPUS_DIAGNOSTIC.md)
 exercises all 12 preregistered task reference sets across pinned
