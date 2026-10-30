@@ -17,10 +17,16 @@ Reproducible, versioned **single-file repository snapshots** designed to be read
 python3 python/rgp_sandbox.py \
   --artifact /path/to/REPO_CONTEXT.rgp \
   --trusted-sha256 <trusted-sha256-from-separate-source> \
+  --expected-commit <GitHub-commit-SHA> \
   --output /tmp/rgp-source-workspace
 ```
 
 Пределы по умолчанию: 1000 исходных файлов / 32 MiB.
+Проверка внешнего SHA-256 сама по себе не доказывает, что исходники
+актуальны для задачи. Если commit внутри RGP не совпадает с
+`--expected-commit`, утилита возвращает `STALE_SNAPSHOT`
+и не создаёт локальную папку. SHA целевой ревизии Кира должна
+получить из GitHub отдельно; сама утилита не делает сетевых вызовов.
 Данные неисполняемые, Git-симлинки создаются обычным текстом,
 неполные снимки требуют явного согласия. Экспортированная папка
 **не является Git-репозиторием**; реальные правки делаются через GitHub.

@@ -29,10 +29,13 @@ use direct GitHub and disclose the fallback.
 
 For sandbox-based understanding, when a verified RGP is available, an
 inert source workspace can now be exported using
-`python/rgp_sandbox.py --artifact ... --trusted-sha256 ... --output ...`.
+`python/rgp_sandbox.py --artifact ... --trusted-sha256 ... --expected-commit <GitHub_SHA> --output ...`.
 This enables ordinary Python file inspection without clone, interpreter
 imports of repository code, or MCP setup. Never infer the trusted SHA
-from the downloaded RGP itself. The export is **not** a Git checkout:
+from the downloaded RGP itself. Also obtain the **intended commit**
+from the live GitHub project separately, reject a valid-but-stale RGP,
+and recheck branch HEAD before sending the final code edit. The exporter
+compares the caller-provided commit; it does not independently fetch HEAD. The export is **not** a Git checkout:
 do not claim it can be committed or pushed directly. See
 [docs/SANDBOX_SOURCE_WORKSPACE.md](docs/SANDBOX_SOURCE_WORKSPACE.md).
 
