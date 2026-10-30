@@ -70,9 +70,9 @@ jobs:
                   out.write(f"Status: **{r['status']}**; Gate B: HOLD\n\n")
                   if r["status"] == "PASS":
                       out.write(f"RGP bytes: {r['rgp_bytes']}; files: {r['file_count']}; complete: {r['snapshot_complete']}\n\n")
-                      out.write(f"Observed resources: \`{r['timings']}\`\n\n")
+                      out.write(f"Observed resources: `{r['timings']}`\n\n")
                   else:
-                      out.write(f"Failure: \`{r.get('reason', 'unknown')}\`\n\n")
+                      out.write(f"Failure: `{r.get('reason', 'unknown')}`\n\n")
                   out.write("Local synthetic Git only; no connector throughput, tokens or performance improvement claim.\n")
           PY
       - name: Upload metadata only, never source or RGP
