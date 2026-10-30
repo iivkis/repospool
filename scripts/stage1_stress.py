@@ -56,7 +56,7 @@ def make_source(repo: Path, profile: str) -> tuple[str, dict[str, bytes]]:
         originals["data/incompressible.bin"] = hashlib.shake_256(
             b"RGP-incompressible-12MiB").digest(12 * MIB)
     elif profile == "compressible":
-        originals["data/compressible.txt"] = b"A" * (12 * MIB)
+        originals["data/compressible.txt"] = (b"A" * 4095 + bytes([10])) * 3072
     else:
         # Exceed the documented per-file cap by one byte: must be EXCLUDED,
         # not mislabeled as a complete snapshot or a successful read.
