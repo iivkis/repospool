@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -71,7 +72,15 @@ def check(repo: Path, rust_cli: Path) -> dict:
 
         # Exercise tree, whole-file reads and line search through the RGP,
         # comparing their actual answers with Git at the *same pinned commit*.
-        paths = set(reader.tree(limit=200)["paths"])
+        paths = set()
+        cursor = None
+        while True:
+            page = reader.tree(limit=20, cursor=cursor)
+            paths.update(page["paths"])
+            cursor = page["next_cursor"]
+            if cursor is None:
+                break
+        assert len(paths) == reader.overview()["file_count"], "tree pagination lost paths"
         for title, path, needle in TASKS:
             assert path in paths, f"source absent from snapshot: {path}"
             original = git(repo, "show", f"{commit}:{path}")
@@ -91,12 +100,16 @@ def check(repo: Path, rust_cli: Path) -> dict:
         evidence["checks"].append("three predefined source tasks matched independent Git source")
 
         # Negative cases on the *actual* generated output, not only fixtures.
+        bad_hash = re.sub(
+            rb"(payload_sha256=)[0-9a-f]{64}",
+            lambda match: match.group(1) + b"0" * 64,
+            data, count=1,
+        )
+        assert bad_hash != data
         for label, bad, code in (
             ("truncation", data[:-10], "TRUNCATED_ARTIFACT"),
             ("unknown version", data.replace(b"RGP/1.0", b"RGP/9.0", 1), "UNSUPPORTED_FORMAT"),
-            ("modified payload hash",
-             data.replace(b"payload_sha256=", b"payload_sha256=" + b"0" * 64 + b"\nignored=", 1),
-             "UNSUPPORTED_FORMAT"),
+            ("modified payload hash", bad_hash, "HASH_MISMATCH"),
         ):
             try:
                 Reader(bad)
@@ -110,7 +123,7 @@ def check(repo: Path, rust_cli: Path) -> dict:
             assert exc.code == "PARTIAL_SNAPSHOT"
         else:
             raise AssertionError("missing source unexpectedly readable")
-        evidence["checks"].append("truncation, unsupported version, malformed hash and absent file rejected")
+        evidence["checks"].append("truncation, unsupported version, invalid payload hash and absent file rejected")
 
         # Concurrent writers to the *same* destination must not share a
         # temporary filename. The published artifact must stay verifiable.
