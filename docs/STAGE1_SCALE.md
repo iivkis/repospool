@@ -75,3 +75,13 @@ or independent answer quality.
 **Gate B is HOLD** until the historical original source-tool receipts
 and independent review of the 24 source answers are verified. Capacity
 success does not satisfy those conditions.
+
+## Recorded real result
+
+The first full actual CI run passed, with **50,005** distinct pinned Git
+paths, **49,999** included, **6** `entry_limit` exclusions,
+**250** complete public `tree` pages and **50,000** ZIP entries.
+Observed first-generation time: **2.71 s**; peak Rust memory:
+**186,980 KiB**; Reader validation: **1.83 s**; full tree paging:
+**2.82 s**. Full SHA-256, pinned commit, evidence and limitations:
+[actual 50k-member test report](../benchmarks/stage1/SCALE_50K_2026-10-31.md).
