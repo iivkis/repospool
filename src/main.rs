@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashSet};
 use std::fs::{self, OpenOptions};
-use std::io::{BufRead, BufReader, BufWriter, Cursor, Read, Seek, Write};
+use std::io::{BufRead, BufReader, BufWriter, Cursor, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -414,17 +414,94 @@ fn excessive_compression<R: Read + Seek>(reader: R) -> Result<HashSet<String>> {
     Ok(out)
 }
 
-// SHA is calculated over the finished ZIP bytes; the transport is emitted
-// directly to a unique staging file. Exactly 57 source bytes produce
-// one 76-character Base64 line. Neither the ZIP nor its Base64 text needs
-// to be retained in memory, and the original RGP/1.0 bytes are unchanged.
-fn stream_transport(source: &Path, destination: &mut fs::File) -> Result<usize> {
-    let size = fs::metadata(source)?.len();
+// ZIP/1.0 memory budget: tiny-member archives make disk seeks expensive.
+// Conservatively estimate a worst-case noncompressed archive, including
+// local and central ZIP records. A 32 MiB bound avoids unbounded memory
+// growth while making high-cardinality source trees fast again. Anything
+// larger continues using the file-backed safety path.
+const ZIP_MEMORY_BUDGET: usize = 32 * 1024 * 1024;
+
+fn cache_zip_in_memory(manifest_data: &[u8], blobs: &BTreeMap<String, Vec<u8>>) -> bool {
+    let raw = blobs
+        .values()
+        .fold(manifest_data.len(), |total, blob| total.saturating_add(blob.len()));
+    // All ZIP member names are fixed 70-byte content hashes, except the
+    // manifest. 256 bytes/member reserves ample header and DEFLATE slack.
+    raw.saturating_add((blobs.len() + 1).saturating_mul(256)) <= ZIP_MEMORY_BUDGET
+}
+
+enum PreparedZip {
+    Memory(Vec<u8>),
+    File(StagedOutput),
+}
+
+fn prepare_zip(
+    output: &Path,
+    manifest_data: &[u8],
+    blobs: &BTreeMap<String, Vec<u8>>,
+) -> Result<PreparedZip> {
+    if cache_zip_in_memory(manifest_data, blobs) {
+        let first = build_zip(Cursor::new(Vec::new()), manifest_data, blobs, &HashSet::new())?
+            .into_inner();
+        let outliers = excessive_compression(Cursor::new(&first))?;
+        if outliers.is_empty() {
+            return Ok(PreparedZip::Memory(first));
+        }
+        let safe = build_zip(Cursor::new(Vec::new()), manifest_data, blobs, &outliers)?
+            .into_inner();
+        ensure!(
+            excessive_compression(Cursor::new(&safe))?.is_empty(),
+            "RESOURCE_LIMIT: unsafe compression ratio after fallback"
+        );
+        Ok(PreparedZip::Memory(safe))
+    } else {
+        let (first_zip, file) = StagedOutput::create(output)?;
+        // Seekable buffering eliminates thousands of tiny ZIP header
+        // writes. The buffer is flushed before validation or opening.
+        drop(
+            build_zip(
+                BufWriter::with_capacity(256 * 1024, file),
+                manifest_data,
+                blobs,
+                &HashSet::new(),
+            )?
+            .into_inner()
+            .map_err(|error| anyhow!("cannot flush staged ZIP: {error}"))?,
+        );
+        let outliers = excessive_compression(fs::File::open(&first_zip.path)?)?;
+        if outliers.is_empty() {
+            return Ok(PreparedZip::File(first_zip));
+        }
+        let (fallback, file) = StagedOutput::create(output)?;
+        drop(
+            build_zip(
+                BufWriter::with_capacity(256 * 1024, file),
+                manifest_data,
+                blobs,
+                &outliers,
+            )?
+            .into_inner()
+            .map_err(|error| anyhow!("cannot flush staged ZIP: {error}"))?,
+        );
+        ensure!(
+            excessive_compression(fs::File::open(&fallback.path)?)?.is_empty(),
+            "RESOURCE_LIMIT: unsafe compression ratio after fallback"
+        );
+        Ok(PreparedZip::File(fallback))
+    }
+}
+
+// SHA is calculated over completed ZIP bytes, from memory or a seekable
+// file. 57 source bytes make one canonical 76-character Base64 line.
+// The encoded transport is never stored as one large String.
+fn stream_transport<R: Read + Seek>(mut source: R, destination: &mut fs::File) -> Result<usize> {
+    let size = source.seek(SeekFrom::End(0))?;
     ensure!(
         size <= MAX_ARTIFACT as u64,
         "RESOURCE_LIMIT: ZIP payload too large"
     );
-    let mut zip = BufReader::new(fs::File::open(source)?);
+    source.seek(SeekFrom::Start(0))?;
+    let mut zip = BufReader::new(&mut source);
     let mut hasher = Sha256::new();
     let mut buffer = [0u8; 64 * 1024];
     loop {
@@ -441,7 +518,9 @@ fn stream_transport(source: &Path, destination: &mut fs::File) -> Result<usize> 
         size,
         hex::encode(hasher.finalize())
     )?;
-    let mut zip = BufReader::new(fs::File::open(source)?);
+    drop(zip);
+    source.seek(SeekFrom::Start(0))?;
+    let mut zip = BufReader::new(&mut source);
     let mut raw = [0u8; 57];
     let mut encoded = [0u8; 76];
     loop {
@@ -476,30 +555,20 @@ fn generate(repo: &Path, output: &Path, rev: &str) -> Result<()> {
         "RESOURCE_LIMIT: manifest exceeds 16 MiB"
     );
 
-    // File-backed ZIP staging means a large ZIP does not share process
-    // memory with the source blob map. Both stages are create_new() and
-    // cleaned by Drop even when compression or verification fails.
-    let (first_zip, file) = StagedOutput::create(output)?;
-    drop(build_zip(file, &manifest_data, &blobs, &HashSet::new())?);
-    let outliers = excessive_compression(fs::File::open(&first_zip.path)?)?;
-    let archive = if outliers.is_empty() {
-        first_zip
-    } else {
-        let (fallback, file) = StagedOutput::create(output)?;
-        drop(build_zip(file, &manifest_data, &blobs, &outliers)?);
-        ensure!(
-            excessive_compression(fs::File::open(&fallback.path)?)?.is_empty(),
-            "RESOURCE_LIMIT: unsafe compression ratio after fallback"
-        );
-        fallback
-    };
+    // Small bounded archives use seekable memory: no per-member disk seeks.
+    // Large archives stay file-backed to keep peak memory predictable.
+    let prepared = prepare_zip(output, &manifest_data, &blobs)?;
     drop(blobs);
     drop(manifest_data);
     drop(manifest);
 
-    // Validate the complete artifact before the final atomic rename.
     let (staged, mut file) = StagedOutput::create(output)?;
-    let artifact_size = stream_transport(&archive.path, &mut file)?;
+    let artifact_size = match &prepared {
+        PreparedZip::Memory(bytes) => stream_transport(Cursor::new(bytes.as_slice()), &mut file)?,
+        PreparedZip::File(archive) => {
+            stream_transport(fs::File::open(&archive.path)?, &mut file)?
+        }
+    };
     file.sync_all()?;
     drop(file);
     verify(&staged.path)?;
@@ -781,6 +850,34 @@ mod tests {
     }
 
     #[test]
+    fn zip_strategy_has_explicit_memory_ceiling() {
+        let mut blobs = BTreeMap::new();
+        blobs.insert("files/small".to_owned(), vec![1u8; 1024]);
+        assert!(cache_zip_in_memory(b"{}", &blobs));
+        blobs.insert(
+            "files/large".to_owned(),
+            vec![1u8; ZIP_MEMORY_BUDGET],
+        );
+        assert!(!cache_zip_in_memory(b"{}", &blobs));
+    }
+
+    #[test]
+    fn in_memory_and_disk_zip_are_byte_identical() -> Result<()> {
+        let mut blobs = BTreeMap::new();
+        blobs.insert("files/example".to_owned(), b"repeat-test-data".to_vec());
+        let memory = build_zip(
+            Cursor::new(Vec::new()), b"{}", &blobs, &HashSet::new(),
+        )?.into_inner();
+        let (stage, file) = StagedOutput::create(Path::new("strategy-unit-test.rgp"))?;
+        let file = build_zip(
+            BufWriter::with_capacity(1024, file), b"{}", &blobs, &HashSet::new(),
+        )?;
+        drop(file.into_inner()?);
+        assert_eq!(memory, fs::read(&stage.path)?);
+        Ok(())
+    }
+
+    #[test]
     fn streamed_transport_matches_original_in_memory_bytes_at_line_boundaries() -> Result<()> {
         for length in [1usize, 56, 57, 58, 114, 115, 4097, 65539] {
             let bytes: Vec<u8> = (0..length).map(|n| ((n * 131) % 251) as u8).collect();
@@ -790,7 +887,7 @@ mod tests {
             drop(source_file);
             let (destination, mut destination_file) =
                 StagedOutput::create(Path::new("stream-test.rgp"))?;
-            let written = stream_transport(&source.path, &mut destination_file)?;
+            let written = stream_transport(fs::File::open(&source.path)?, &mut destination_file)?;
             drop(destination_file);
             let actual = fs::read(&destination.path)?;
             let encoded = STANDARD.encode(&bytes);
