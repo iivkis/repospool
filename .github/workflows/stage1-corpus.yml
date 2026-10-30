@@ -9,6 +9,7 @@ on:
       - src/main.rs
       - python/rgp_reader.py
       - benchmarks/gate_b/plan.json
+      - benchmarks/gate_b/corpus_preparation.json
   push:
     branches: [main]
     paths:
@@ -18,6 +19,7 @@ on:
       - src/main.rs
       - python/rgp_reader.py
       - benchmarks/gate_b/plan.json
+      - benchmarks/gate_b/corpus_preparation.json
   workflow_dispatch:
 
 permissions:
@@ -73,12 +75,12 @@ jobs:
               out.write(f"### Stage 1: {os.environ['CORPUS_REPOSITORY']}\n\n")
               out.write(f"Status: **{data['status']}** · Gate B: **HOLD**\n\n")
               if data['status'] == "PASS":
-                  out.write(f"Pinned SHA: \`{data['source_commit']}\`\n\n")
-                  out.write(f"RGP SHA-256: \`{data['rgp_sha256']}\`\n\n")
+                  out.write(f"Pinned SHA: `{data['source_commit']}`\n\n")
+                  out.write(f"RGP SHA-256: `{data['rgp_sha256']}`\n\n")
                   out.write(f"RGP: {data['rgp_bytes']} bytes; {len(data['tasks'])} source tasks verified\n\n")
-                  out.write(f"Measured resources: \`{data['timings']}\`\n\n")
+                  out.write(f"Measured resources: `{data['timings']}`\n\n")
               else:
-                  out.write(f"Failure: \`{data.get('reason', 'unknown')}\`\n\n")
+                  out.write(f"Failure: `{data.get('reason', 'unknown')}`\n\n")
               out.write("Not a connector transport test or independent Gate B answer grade.\n")
           PY
           fi
