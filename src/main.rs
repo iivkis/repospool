@@ -655,12 +655,19 @@ fn verify(path: &Path) -> Result<Manifest> {
         ensure!(
             matches!(
                 e.reason.as_str(),
-                "self_artifact" | "sensitive_path" | "submodule_unavailable" | "size_limit" | "entry_limit"
+                "self_artifact"
+                    | "sensitive_path"
+                    | "submodule_unavailable"
+                    | "size_limit"
+                    | "entry_limit"
             ),
             "UNSUPPORTED_FORMAT: exclusion reason"
         );
         if let Some(previous) = previous_exclusion {
-            ensure!(previous < e.path.as_str(), "UNSUPPORTED_FORMAT: exclusion ordering");
+            ensure!(
+                previous < e.path.as_str(),
+                "UNSUPPORTED_FORMAT: exclusion ordering"
+            );
         }
         previous_exclusion = Some(&e.path);
         ensure!(
