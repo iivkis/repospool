@@ -136,6 +136,44 @@ class ProtocolTests(unittest.TestCase):
                 self.assertEqual(process.wait(timeout=10), 0)
                 self.assertEqual(process.stderr.read(), b"")
 
+    def test_bad_model_unicode_is_recoverable_via_mcp(self):
+        self.initialize()
+        for name, arguments in (
+            ("rgp_tree", {"prefix": chr(0xD800)}),
+            ("rgp_search", {"query": chr(0xD800)}),
+            ("rgp_context", {"terms": [chr(0xD800)]}),
+        ):
+            with self.subTest(name=name):
+                result = self.tool(name, arguments)
+                self.assertTrue(result["isError"])
+        self.assertEqual(self.tool("rgp_search", {"query": "needle"})
+                         ["matches"][0]["path"], "src/a.py")
+
+    def test_escaped_surrogate_rpc_id_does_not_terminate_stdio(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artifact = Path(directory) / "pinned.rgp"
+            artifact.write_bytes(three_scope_artifact())
+            with subprocess.Popen(
+                [sys.executable, "-u", str(ROOT / "python/rgp_mcp.py"),
+                 "--artifact", str(artifact)],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            ) as process:
+                assert process.stdin and process.stdout
+                def send_bytes(raw):
+                    process.stdin.write(raw + b"\\n")
+                    process.stdin.flush()
+                    return json.loads(process.stdout.readline())
+                send_bytes(b'{"jsonrpc":"2.0","id":1,"method":"initialize"}')
+                reply = send_bytes(b'{"jsonrpc":"2.0","id":"\\\\ud800","method":"ping"}')
+                self.assertEqual(reply["id"], chr(0xD800))
+                self.assertEqual(reply["result"], {})
+                valid = send_bytes(b'{"jsonrpc":"2.0","id":3,"method":"tools/list"}')
+                self.assertEqual(len(valid["result"]["tools"]), 5)
+                process.stdin.close()
+                self.assertEqual(process.wait(timeout=10), 0)
+                self.assertEqual(process.stderr.read(), b"")
+
     def test_invalid_archive_cannot_start_mcp(self):
         with tempfile.TemporaryDirectory() as directory:
             invalid = Path(directory) / "broken.rgp"

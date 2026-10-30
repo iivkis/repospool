@@ -67,6 +67,12 @@ class AgentContextTests(unittest.TestCase):
             with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
                 context(self.reader, ["needle"], **kwargs)
 
+    def test_bad_model_search_term_is_a_recoverable_argument_error(self):
+        with self.assertRaisesRegex(ValueError, "UTF-8 bytes"):
+            context(self.reader, ["needle", chr(0xD800)])
+        self.assertEqual(context(self.reader, ["needle"])["terms"],
+                         ["needle"])
+
     def test_no_code_executed_in_a_source_context(self):
         result = context(self.reader, ["needle"], prefix="tests/")
         self.assertEqual(result["candidate_paths"], 1)

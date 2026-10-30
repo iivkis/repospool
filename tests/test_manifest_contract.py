@@ -95,6 +95,32 @@ class ManifestContractTest(unittest.TestCase):
         with self.assertRaisesRegex(RgpError, "UNSUPPORTED_FORMAT"):
             r.search("beta", paths=[17])
 
+    def test_unpaired_unicode_in_manifest_paths_fails_closed(self):
+        # json.dumps intentionally encodes these as valid ASCII escape
+        # sequences. The JSON is parseable, but paths are not UTF-8.
+        bad = "src/" + chr(0xD800) + ".py"
+        for mutate in (
+            lambda m: m["files"][0].update(path=bad),
+            lambda m: m["excluded"].append(
+                {"path": bad, "reason": "size_limit"}),
+        ):
+            with self.subTest(mutate=mutate), self.assertRaisesRegex(
+                    RgpError, "UNSAFE_PATH"):
+                Reader(fake_artifact(mutate))
+
+    def test_invalid_unicode_reader_queries_are_recoverable(self):
+        reader = Reader(fake_artifact())
+        invalid = "src/" + chr(0xD800)
+        for query in (invalid, "../bad", "/etc/passwd"):
+            with self.subTest(query=query), self.assertRaisesRegex(
+                    RgpError, "UNSUPPORTED_FORMAT"):
+                reader.tree(prefix=query)
+        with self.assertRaisesRegex(RgpError, "UNSUPPORTED_FORMAT"):
+            reader.search(chr(0xD800))
+        # An invalid agent-generated query must not poison later reads.
+        self.assertEqual(reader.read("src/file.txt")["content"],
+                         "alpha\\nbeta\\nbeta\\n")
+
     def test_canonical_base64_newline(self):
         original = fake_artifact()
         tampered = original.replace(b"\nEND RGP\n", b"\n\nEND RGP\n")

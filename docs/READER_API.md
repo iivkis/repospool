@@ -48,6 +48,15 @@ CLI equivalents: `python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp cover
 
 A `next_cursor` is a *string*, not a numeric offset. Pass it back unchanged with the **same** query, path scope, prefix, and snapshot. It is bound to the `input_tree_digest` and query parameters; a mismatched or malformed cursor raises `UNSUPPORTED_FORMAT`. Cursors are stable for the same immutable snapshot, even after a different commit with identical snapshot contents. They do **not** authenticate the archive's origin.
 
+Malformed Unicode from a model's search/tool arguments must be a
+**recoverable, typed error**, not an uncaught Python exception. In particular,
+unpaired UTF-16 surrogate code units do not represent valid UTF-8 Git
+paths or search terms. The Reader returns `UNSAFE_PATH` for such
+manifest paths, `UNSUPPORTED_FORMAT` for invalid `tree` prefixes
+and `search` terms, and the context CLI reports invalid term arguments.
+MCP keeps answering subsequent tool requests, including after a
+surrogate-containing JSON-RPC request identifier.
+
 ## Resource limits (v1.0 Reader)
 
 | Boundary | Maximum |

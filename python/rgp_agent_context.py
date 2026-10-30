@@ -27,10 +27,14 @@ def compact_json(value: dict) -> str:
 
 def context(reader: Reader, terms: list[str], *, prefix: str = "",
             max_files: int = 4, max_bytes: int = 12_000) -> dict:
-    if not 1 <= len(terms) <= MAX_TERMS or any(
-        not isinstance(term, str) or not 1 <= len(term.encode("utf-8")) <= 128
-        for term in terms
-    ):
+    try:
+        invalid_terms = not 1 <= len(terms) <= MAX_TERMS or any(
+            not isinstance(term, str) or not 1 <= len(term.encode("utf-8")) <= 128
+            for term in terms
+        )
+    except UnicodeEncodeError:
+        invalid_terms = True
+    if invalid_terms:
         raise ValueError("give 1-6 literal search terms, each 1-128 UTF-8 bytes")
     if not isinstance(max_files, int) or not 1 <= max_files <= MAX_FILES:
         raise ValueError("max_files must be within 1..6")

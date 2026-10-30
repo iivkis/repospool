@@ -70,7 +70,10 @@ TOOLS = [
 
 
 def _json(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+    # A JSON-RPC id may legally be a JSON string containing escaped
+    # surrogate code units. Re-escape them in replies so one bad id
+    # cannot crash the stdio server during UTF-8 output encoding.
+    return json.dumps(value, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
 
 
 def _error(request_id: Any, code: int, message: str) -> dict:
