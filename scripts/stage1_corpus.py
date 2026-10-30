@@ -204,7 +204,23 @@ def inspect(repo: dict, tasks: list[dict], source: Path, binary: Path, work: Pat
     }
 
 
-def run(repository: str, binary: Path, plan_file: Path) -> dict:
+def match_checkpoint(corpus: dict, result: dict) -> None:
+    """Fail if generation silently changes the old pinned RGP/1.0 bytes."""
+    rows = corpus.get("artifacts")
+    require(isinstance(rows, list), "missing pinned checkpoint artifacts")
+    checkpoints = [r for r in rows if r.get("repository") == result["repository"]]
+    require(len(checkpoints) == 1, "missing or duplicate RGP checkpoint")
+    expected = checkpoints[0]
+    for key, current in (
+        ("source_commit", result["source_commit"]),
+        ("sha256", result["rgp_sha256"]),
+        ("rgp_bytes", result["rgp_bytes"]),
+        ("included_files", result["included_files"]),
+    ):
+        require(expected.get(key) == current, f"pinned compatibility regression: {key}")
+
+
+def run(repository: str, binary: Path, plan_file: Path, checkpoint_file: Path) -> dict:
     plan = strict_json(plan_file)
     repo, tasks = tasks_for(plan, repository)
     from gate_b import digest_plan
@@ -213,6 +229,8 @@ def run(repository: str, binary: Path, plan_file: Path) -> dict:
         source = work / "source"
         obtain_pinned_repo(repo, source)
         result = inspect(repo, tasks, source, binary.resolve(), work)
+    match_checkpoint(strict_json(checkpoint_file), result)
+    result["pinned_v1_format_compatibility"] = "PASS"
     result.update({
         "kind": "stage1_corpus_source_functional_and_resource_diagnostic",
         "plan_sha256": digest_plan(plan),
@@ -229,10 +247,11 @@ def main() -> int:
     p.add_argument("--repository", choices=("rgp", "serde_json", "itsdangerous"), required=True)
     p.add_argument("--rust-cli", type=Path, default=ROOT / "target/release/rgp")
     p.add_argument("--plan", type=Path, default=ROOT / "benchmarks/gate_b/plan.json")
+    p.add_argument("--checkpoint", type=Path, default=ROOT / "benchmarks/gate_b/corpus_preparation.json")
     p.add_argument("--report", type=Path, required=True)
     args = p.parse_args()
     try:
-        result = run(args.repository, args.rust_cli, args.plan)
+        result = run(args.repository, args.rust_cli, args.plan, args.checkpoint)
     except Exception as exc:
         result = {"kind": "stage1_corpus_source_functional_and_resource_diagnostic",
                   "repository": args.repository, "status": "FAIL",
