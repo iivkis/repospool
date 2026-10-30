@@ -161,11 +161,11 @@ class ProtocolTests(unittest.TestCase):
             ) as process:
                 assert process.stdin and process.stdout
                 def send_bytes(raw):
-                    process.stdin.write(raw + b"\\n")
+                    process.stdin.write(raw + b"\n")
                     process.stdin.flush()
                     return json.loads(process.stdout.readline())
                 send_bytes(b'{"jsonrpc":"2.0","id":1,"method":"initialize"}')
-                reply = send_bytes(b'{"jsonrpc":"2.0","id":"\\\\ud800","method":"ping"}')
+                reply = send_bytes(b'{"jsonrpc":"2.0","id":"\\ud800","method":"ping"}')
                 self.assertEqual(reply["id"], chr(0xD800))
                 self.assertEqual(reply["result"], {})
                 valid = send_bytes(b'{"jsonrpc":"2.0","id":3,"method":"tools/list"}')
