@@ -4,6 +4,23 @@ Reproducible, versioned **single-file repository snapshots** designed to be read
 
 > **Status: v0.1 / transport PoC.** 12 independent connector downloads of GitHub Actions artifacts (100 KiB–50 MiB outer RGP) passed byte-level verification in the Python sandbox. This is **conditional Gate A success for the Actions-artifact adapter only**, not proof that `fetch_file` delivers the canonical root file. Syntax/semantic indexing is intentionally not claimed.
 
+## Product direction and agent accountability
+
+The canonical [three-stage product roadmap](docs/PRODUCT_ROADMAP.md)
+tracks the path from the transport PoC through useful indexed context
+to product v1.0. The detailed [v1.1 technical plan](docs/ROADMAP_v1.1.md)
+remains background, not an alternative product release checklist.
+
+All contributors and coding agents follow
+[Pragmatic Engineering, KISS and DRY](docs/ENGINEERING_PRINCIPLES.md).
+Under the [agent contract](AGENTS.md), the agent implementing an RGP
+change must also generate, verify and **use the resulting RGP** to
+complete and check predefined repository tasks, recording observable
+evidence. Passing archive validation alone is not goal-level success;
+independent reviews can audit claims but do not replace agent testing.
+See the [31 Oct 2026 review](docs/REVIEW_2026-10-31.md) for findings,
+limitations and priorities.
+
 ## Development
 
 The primary implementation is **Rust**. The trusted Reader and bootstrap interface use **Python stdlib only**. `uv` is for developer tooling, never a runtime dependency of the agent.
