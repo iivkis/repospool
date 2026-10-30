@@ -21,6 +21,36 @@ independent reviews can audit claims but do not replace agent testing.
 See the [31 Oct 2026 review](docs/REVIEW_2026-10-31.md) for findings,
 limitations and priorities.
 
+## Try RGP as an agent, not a ZIP benchmark
+
+The [small-repository agent-first pilot](docs/AGENT_FIRST_PILOT.md)
+uses **three actual public repos with 46, 93 and 50 source files**:
+an LLM located search-cursor guards, JSON serializer/tests and
+timestamp expiry logic using the downloaded RGP source, then
+cross-checked the exact coordinates with pinned GitHub source.
+This shows that RGP can supply useful evidence for an answer;
+**it does not yet prove the answer is better than direct GitHub**.
+
+With a separately verified RGP in hand, let the model choose a few
+search terms and retrieve bounded, citable source context in one
+command, using the trusted project Reader:
+
+```sh
+python3 python/rgp_agent_context.py \
+  --artifact /path/to/REPO_CONTEXT.rgp \
+  --term '_read_cursor' --term 'test_search_keyset_cursor_scope_and_exhaustion' \
+  --max-files 4 --max-bytes 12000
+```
+
+The returned JSON preserves source commit, paths and line ranges,
+honestly reports lexical-only retrieval, partial snapshots and
+missing semantic coverage. Archived code is never executed. The
+[three-repository agent-context CI walkthrough](scripts/stage1_agent_task_pilot.py)
+checks the answer-ready passages against original pinned Git.
+
+**Product priority: real LLM use and independent A/B, not more
+50,000-file optimization. Stage 1 Gate B stays HOLD.**
+
 ## Stage 1 implementation and functional acceptance
 
 [Stage 1 implementation notes](docs/STAGE1_IMPLEMENTATION.md) describe

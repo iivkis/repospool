@@ -11,6 +11,9 @@ on:
       - scripts/stage1_delivery.py
       - tests/test_stage1_delivery.py
       - python/rgp_bootstrap.py
+      - python/rgp_agent_context.py
+      - scripts/stage1_agent_task_pilot.py
+      - tests/test_rgpp_agent_context.py
   push:
     branches: [main]
     paths:
@@ -21,6 +24,9 @@ on:
       - scripts/stage1_delivery.py
       - tests/test_stage1_delivery.py
       - python/rgp_bootstrap.py
+      - python/rgp_agent_context.py
+      - scripts/stage1_agent_task_pilot.py
+      - tests/test_rgpp_agent_context.py
 
 permissions:
   contents: read
@@ -168,6 +174,34 @@ jobs:
           print("STAGE1_DELIVERY_PINNED_SOURCE=" + report["source_commit"])
           print("STAGE1_DELIVERY_RESULT=PASS")
           PY
+      - name: Agent question to source-context to pinned-Git evidence
+        env:
+          SRC_REPO: ${{ matrix.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_rgpp_agent_context.py' -q
+          python3 scripts/stage1_agent_task_pilot.py \
+            --repository "$SRC_REPO" \
+            --artifact "$RUNNER_TEMP/REPO_CONTEXT.rgp" \
+            --source-repo "$RUNNER_TEMP/source" \
+            --report "$RUNNER_TEMP/agent-task-pilot.json"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          x = json.loads((Path(os.environ["RUNNER_TEMP"]) / "agent-task-pilot.json").read_text())
+          assert x["status"] == "PASS" and x["gate_b"] == "HOLD"
+          assert x["source_passages_compared_to_pinned_git"] >= 2
+          assert x["model_answer"] == "NOT_EXECUTED_IN_THIS_TEST"
+          assert x["independent_answer_grading"] == "NOT_RUN"
+          PY
+      - name: Upload metadata-only question-context results
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage1-agent-context-${{ matrix.repository }}
+          path: ${{ runner.temp }}/agent-task-pilot.json
+          retention-days: 14
+          if-no-files-found: error
       - name: Publish metadata-only delivery evidence
         uses: actions/upload-artifact@v4
         with:
