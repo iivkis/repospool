@@ -792,15 +792,15 @@ mod tests {
             let actual = fs::read(&destination.path)?;
             let encoded = STANDARD.encode(&bytes);
             let mut expected = format!(
-                "RGP/1.0\\npayload_length={}\\npayload_sha256={}\\nbase64_line_width=76\\n--\\n",
+                "RGP/1.0\npayload_length={}\npayload_sha256={}\nbase64_line_width=76\n--\n",
                 length,
                 sha(&bytes)
             );
             for line in encoded.as_bytes().chunks(76) {
                 expected.push_str(std::str::from_utf8(line)?);
-                expected.push('\\n');
+                expected.push('\n');
             }
-            expected.push_str("END RGP\\n");
+            expected.push_str("END RGP\n");
             assert_eq!(actual, expected.as_bytes());
             assert_eq!(written, actual.len());
         }
