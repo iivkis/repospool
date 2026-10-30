@@ -59,7 +59,7 @@ class ReaderApiTests(unittest.TestCase):
         self.assertIsInstance(reader._blobs, frozenset)
         self.assertEqual(len(reader._blobs), 4)
         first = reader.read("src/a.py")["content"]
-        self.assertEqual(first, "needle from src A\\nneedle again\\n".replace("\\\\n", "\\n"))
+        self.assertEqual(first.splitlines(), ["needle from src A", "needle again"])
         self.assertEqual(reader.read("src/a.py")["content"], first)
         self.assertEqual(len(reader.search("needle")["matches"]), 5)
 
