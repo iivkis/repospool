@@ -21,6 +21,28 @@ independent reviews can audit claims but do not replace agent testing.
 See the [31 Oct 2026 review](docs/REVIEW_2026-10-31.md) for findings,
 limitations and priorities.
 
+## Подключить RGP как настоящие инструменты coding-агента
+
+Экспериментальная [интеграция MCP](docs/RGP_MCP_AGENT.md)
+позволяет модели напрямую вызывать read-only `rgp_status`,
+`rgp_tree`, `rgp_search`, `rgp_read` и `rgp_context`
+через локальный stdio-сервер. Никаких импортов Python со стороны
+модели или исполнения кода из снимка.
+
+```sh
+python3 python/rgp_mcp.py --artifact /path/to/verified/REPO_CONTEXT.rgp
+```
+
+Команда запускается **MCP-клиентом**, который говорит с ней через
+JSON-RPC. Подключение и ограничения доверия в документации.
+[Реальный MCP E2E на трёх репозиториях](scripts/stage1_mcp_agent_trial.py)
+проверяет полный цикл запросов и сверяет каждую цитату с pinned Git.
+[Фактический результат 12/12, 72/72 фрагмента](benchmarks/gate_b/MCP_AGENT_TRIAL_2026-10-31.md)
+зафиксирован с отдельными локальными MCP-вызовами/байтами, без
+выдуманного модельного A/B.
+Это проверка **работоспособности инструментов**, а не независимый
+LLM A/B или доказательство экономии токенов. Gate B пока HOLD.
+
 ## Try RGP as an agent, not a ZIP benchmark
 
 The [small-repository agent-first pilot](docs/AGENT_FIRST_PILOT.md)
