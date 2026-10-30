@@ -151,7 +151,9 @@ def main() -> None:
                          max_bytes=args.max_bytes)
     except (RgpError, ValueError) as exc:
         parser.exit(2, f"{exc}\n")
-    print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+    # Emit exactly the budgeted JSON bytes: pretty-printing would
+    # silently exceed --max-bytes even when source selection did not.
+    print(compact_json(result), end="")
 
 
 if __name__ == "__main__":
