@@ -50,7 +50,7 @@ class ReaderTest(unittest.TestCase):
         self.assertTrue(r.overview()["snapshot_complete"])
 
     def test_read_bytes_preserves_exact_git_blob_bytes(self):
-        original = b"binary\\xff\\x00\\r\\nraw\\n".decode("unicode_escape").encode("latin-1")
+        original = bytes([255, 0, 13, 10]) + b"raw" + bytes([10])
         r = Reader(fixture(content=original))
         self.assertEqual(r.read_bytes("src/example.py"), original)
         self.assertEqual(r.read_bytes("src/example.py"), original)
