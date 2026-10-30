@@ -82,6 +82,10 @@ def commit_many(repo: Path, count: int) -> str:
         if process.poll() is None:
             process.kill()
             process.wait()
+    # A new Git repository may have HEAD on master while fast-import
+    # committed refs/heads/main. Rust verify --repo checks HEAD.
+    subprocess.run(["git", "-C", str(repo), "symbolic-ref",
+                    "HEAD", "refs/heads/main"], check=True)
     return subprocess.check_output(
         ["git", "-C", str(repo), "rev-parse", "refs/heads/main"], text=True
     ).strip()
