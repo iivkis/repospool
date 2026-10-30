@@ -37,10 +37,23 @@ def populated() -> dict:
     for entry in ledger["github_source_calls"]:
         n += 1
         entry["receipt"] = fake_receipt(n, entry["source_url"], "source")
+    urls = {
+        "corpus_checkpoint": "https://github.com/iivkis/rgp/blob/main/benchmarks/gate_b/corpus_preparation.json",
+        "artifact_listing": "https://github.com/iivkis/rgp/actions/runs/40767794459",
+        "artifact_download": "https://github.com/iivkis/rgp/actions/runs/40767794459",
+        "reader_source": "https://github.com/iivkis/rgp/blob/main/python/rgp_reader.py",
+    }
+    names = {
+        "corpus_checkpoint": "mcp__GitHub__fetch_file",
+        "artifact_listing": "mcp__GitHub__fetch_workflow_run_artifacts",
+        "artifact_download": "mcp__GitHub__download_workflow_artifact",
+        "reader_source": "mcp__GitHub__fetch_file",
+    }
     for entry in ledger["rgp_acquisition_calls"]:
         n += 1
-        entry["receipt"] = fake_receipt(
-            n, "https://github.com/iivkis/rgp/actions/runs/40767794459", "rgp")
+        purpose = entry["purpose"]
+        entry["receipt"] = fake_receipt(n, urls[purpose], "rgp")
+        entry["receipt"]["tool_name"] = names[purpose]
     return ledger
 
 
@@ -123,12 +136,12 @@ class GateBCallAuditTests(unittest.TestCase):
 
     def test_rejects_unpinned_rgp_setup_and_tool_swap(self):
         ledger = populated()
-        ledger["rgp_acquisition_calls"][0]["receipt"]["request_url"] = (
+        ledger["rgp_acquisition_calls"][2]["receipt"]["request_url"] = (
             "https://github.com/serde-rs/json/actions/runs/40767794459")
-        with self.assertRaisesRegex(ProtocolError, "approved repository Actions"):
+        with self.assertRaisesRegex(ProtocolError, "approved repository"):
             audit(PLAN, OBS, ledger)
         ledger = populated()
-        ledger["rgp_acquisition_calls"][0]["receipt"]["tool_name"] = "mcp__GitHub__fetch_blob"
+        ledger["rgp_acquisition_calls"][2]["receipt"]["tool_name"] = "mcp__GitHub__fetch_blob"
         with self.assertRaisesRegex(ProtocolError, "unexpected tool"):
             audit(PLAN, OBS, ledger)
 
