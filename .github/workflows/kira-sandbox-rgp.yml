@@ -1,0 +1,121 @@
+name: Kira sandbox RGP snapshot
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kira-sandbox-rgp-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  snapshot:
+    name: Verified snapshot at current GitHub SHA
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build release generator and produce exactly the triggering commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          cargo build --locked --release
+          target/release/rgp generate \
+            --repo . --rev "$GITHUB_SHA" \
+            --output "$RUNNER_TEMP/REPO_CONTEXT.rgp"
+          target/release/rgp verify \
+            --artifact "$RUNNER_TEMP/REPO_CONTEXT.rgp" --repo .
+          python3 python/rgp_reader.py \
+            --artifact "$RUNNER_TEMP/REPO_CONTEXT.rgp" validate
+      - name: Publish out-of-band source SHA and digest to Actions job summary
+        id: attest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import sys
+          sys.path.insert(0, "python")
+          from rgp_reader import Reader
+
+          path = Path(os.environ["RUNNER_TEMP"]) / "REPO_CONTEXT.rgp"
+          reader = Reader(path)
+          overview = reader.overview()
+          commit = os.environ["GITHUB_SHA"]
+          assert overview["source_commit"] == commit
+          assert overview["snapshot_complete"], "unsafe partial default sandbox snapshot"
+          sha = hashlib.sha256(path.read_bytes()).hexdigest()
+          report = {
+              "kind": "rgp_sandbox_current_commit_snapshot",
+              "source_commit": commit,
+              "rgp_sha256": sha,
+              "rgp_bytes": path.stat().st_size,
+              "file_count": overview["file_count"],
+              "included_source_bytes": overview["included_bytes"],
+              "snapshot_complete": True,
+              "index_coverage": overview["index_coverage"],
+              "provenance_source": "GitHub Actions job summary (separate from downloaded artifact)",
+              "gate_b": "HOLD",
+          }
+          (path.parent / "snapshot-provenance.json").write_text(
+              json.dumps(report, sort_keys=True, indent=2) + "\n"
+          )
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              summary.write("## RGP for Kira's local coding sandbox\n\n")
+              summary.write(f"GitHub SHA: `{commit}`\n\n")
+              summary.write(f"Independent expected RGP SHA-256: `{sha}`\n\n")
+              summary.write(f"Source files: {overview['file_count']}\n\n")
+              summary.write("Snapshot complete: true. **This SHA is available independently from the downloaded ZIP.**\n\n")
+              summary.write("Use the exact SHA as --expected-commit when exporting to the Python sandbox.\n")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"rgp_sha256={sha}\n")
+          print("RGP_CURRENT_COMMIT=" + commit)
+          print("RGP_TRUSTED_SHA256=" + sha)
+          PY
+      - name: Exercise actual sandbox source export for this exact Git commit
+        shell: bash
+        env:
+          TRUSTED_SHA256: ${{ steps.attest.outputs.rgp_sha256 }}
+        run: |
+          set -euo pipefail
+          python3 python/rgp_sandbox.py \
+            --artifact "$RUNNER_TEMP/REPO_CONTEXT.rgp" \
+            --trusted-sha256 "$TRUSTED_SHA256" \
+            --expected-commit "$GITHUB_SHA" \
+            --output "$RUNNER_TEMP/rgp-local-source"
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          folder = Path(os.environ["RUNNER_TEMP"]) / "rgp-local-source"
+          x = json.loads((folder / ".rgp-sandbox.json").read_text())
+          assert x["source_commit"] == os.environ["GITHUB_SHA"]
+          assert x["expected_commit"] == os.environ["GITHUB_SHA"]
+          assert x["files_exported"] > 0 and x["snapshot_complete"]
+          assert x["files_non_executable"] and not x["git_worktree"]
+          assert x["current_github_head_checked_by_exporter"] is False
+          print("RGP_SANDBOX_SELF_DOGFOOD=PASS")
+          print("RGP_EXPORT_FILES=" + str(x["files_exported"]))
+          PY
+      - name: Upload actual current-commit RGP for Kira to download
+        uses: actions/upload-artifact@v4
+        with:
+          name: kira-sandbox-rgp-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/REPO_CONTEXT.rgp
+            ${{ runner.temp }}/snapshot-provenance.json
+          retention-days: 7
+          if-no-files-found: error
