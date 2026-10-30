@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
 sys.path.insert(0, str(ROOT / "scripts"))
 from rgp_sandbox import export_workspace, METADATA  # noqa: E402
-from rgp_reader import Reader  # noqa: E402
+from rgp_reader import Reader, RgpError  # noqa: E402
 from gate_b import strict_json  # noqa: E402
 
 
@@ -29,7 +29,19 @@ def run(repository: str, artifact: Path, source_repo: Path, output: Path) -> dic
     anchor = next(r for r in checkpoints["artifacts"] if r["repository"] == repository)
     assert anchor["source_commit"] == pinned["commit"], "inconsistent external trust anchor"
     start = time.perf_counter_ns()
-    report = export_workspace(artifact, output, anchor["sha256"])
+    # An authenticated RGP from the wrong commit must be rejected before
+    # any workspace is created. Verify this on genuine pinned artifacts.
+    other_commit = ("f" if pinned["commit"][0] != "f" else "e") * len(pinned["commit"])
+    try:
+        export_workspace(artifact, output, anchor["sha256"],
+                         expected_commit=other_commit)
+    except RgpError as error:
+        assert error.code == "STALE_SNAPSHOT", f"wrong error: {error}"
+    else:
+        raise AssertionError("stale but authentic RGP was accepted")
+    assert not output.exists(), "stale RGP created a workspace"
+    report = export_workspace(artifact, output, anchor["sha256"],
+                              expected_commit=pinned["commit"])
     reader = Reader(artifact)
     assert report["source_commit"] == pinned["commit"]
     assert report["snapshot_complete"] is True, "pinned repo unexpectedly partial"
@@ -54,6 +66,8 @@ def run(repository: str, artifact: Path, source_repo: Path, output: Path) -> dic
         "repository": repository,
         "source_commit": pinned["commit"],
         "artifact_sha256_matched_committed_external_checkpoint": True,
+        "valid_but_stale_commit_rejected": True,
+        "expected_commit_matches_pinned_git": report["expected_commit"] == pinned["commit"],
         "files_exported": len(asserted),
         "source_files_compared_byte_for_byte_to_git": len(asserted),
         "bytes_exported": report["bytes_exported"],

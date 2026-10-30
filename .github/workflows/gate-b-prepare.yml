@@ -267,6 +267,8 @@ jobs:
           value = json.loads((Path(os.environ["RUNNER_TEMP"]) / "sandbox-workspace-trial.json").read_text())
           assert value["status"] == "PASS" and value["gate_b"] == "HOLD"
           assert value["files_exported"] == value["source_files_compared_byte_for_byte_to_git"]
+          assert value["valid_but_stale_commit_rejected"]
+          assert value["expected_commit_matches_pinned_git"]
           assert value["artifact_sha256_matched_committed_external_checkpoint"]
           assert value["all_file_executable_bits_cleared"]
           assert value["source_code_execution"] == "NONE"
