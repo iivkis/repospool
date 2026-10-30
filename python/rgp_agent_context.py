@@ -120,7 +120,7 @@ def context(reader: Reader, terms: list[str], *, prefix: str = "",
                 response["sources"].pop()
                 response["selection_truncated"] = True
                 break
-            if sum(s["path"] == path for s in response["sources"]) >= 3:
+            if sum(s["path"] == path for s in response["sources"]) >= 4:
                 break
         if response["selection_truncated"]:
             break
