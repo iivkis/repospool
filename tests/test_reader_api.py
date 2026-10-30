@@ -52,6 +52,17 @@ def three_scope_artifact():
 
 
 class ReaderApiTests(unittest.TestCase):
+    def test_verified_blobs_are_loaded_on_demand(self):
+        reader = Reader(three_scope_artifact())
+        # The ZIP was eagerly hash-checked, but raw blobs must not be cached
+        # in addition to the compressed payload as the snapshot grows.
+        self.assertIsInstance(reader._blobs, frozenset)
+        self.assertEqual(len(reader._blobs), 4)
+        first = reader.read("src/a.py")["content"]
+        self.assertEqual(first, "needle from src A\\nneedle again\\n".replace("\\\\n", "\\n"))
+        self.assertEqual(reader.read("src/a.py")["content"], first)
+        self.assertEqual(len(reader.search("needle")["matches"]), 5)
+
     def test_tree_cursor_is_stable_and_bound_to_prefix(self):
         r = Reader(MIXED)
         first = r.tree(limit=2)
