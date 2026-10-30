@@ -4,6 +4,18 @@ Reproducible, versioned **single-file repository snapshots** designed to be read
 
 > **Status: v0.1 / transport PoC.** 12 independent connector downloads of GitHub Actions artifacts (100 KiB–50 MiB outer RGP) passed byte-level verification in the Python sandbox. This is **conditional Gate A success for the Actions-artifact adapter only**, not proof that `fetch_file` delivers the canonical root file. Syntax/semantic indexing is intentionally not claimed.
 
+## Получение свежего контекста для работы Киры
+
+[Workflow `Kira sandbox RGP snapshot`](.github/workflows/kira-sandbox-rgp.yml)
+собирает и проверяет RGP **при каждом обновлении `main`**,
+публикует независимый от скачанного ZIP SHA-256 в Actions summary
+и выгружает короткоживущий ZIP `kira-sandbox-rgp-<commit>`.
+Теперь Кира может получить **снимок актуального кода**, а не
+постоянно использовать старые замороженные benchmark-артефакты.
+[Подробный порядок загрузки и проверки](docs/SANDBOX_SOURCE_WORKSPACE.md).
+Перед изменением GitHub-кода сравнивать `--expected-commit` с
+целевой ревизией GitHub и повторно проверять HEAD перед отправкой.
+
 ## Практический инструмент для песочницы Киры: локальные исходники
 
 [Новый безопасный экспорт](docs/SANDBOX_SOURCE_WORKSPACE.md)
@@ -17,10 +29,16 @@ Reproducible, versioned **single-file repository snapshots** designed to be read
 python3 python/rgp_sandbox.py \
   --artifact /path/to/REPO_CONTEXT.rgp \
   --trusted-sha256 <trusted-sha256-from-separate-source> \
+  --expected-commit <GitHub-commit-SHA> \
   --output /tmp/rgp-source-workspace
 ```
 
 Пределы по умолчанию: 1000 исходных файлов / 32 MiB.
+Проверка внешнего SHA-256 сама по себе не доказывает, что исходники
+актуальны для задачи. Если commit внутри RGP не совпадает с
+`--expected-commit`, утилита возвращает `STALE_SNAPSHOT`
+и не создаёт локальную папку. SHA целевой ревизии Кира должна
+получить из GitHub отдельно; сама утилита не делает сетевых вызовов.
 Данные неисполняемые, Git-симлинки создаются обычным текстом,
 неполные снимки требуют явного согласия. Экспортированная папка
 **не является Git-репозиторием**; реальные правки делаются через GitHub.

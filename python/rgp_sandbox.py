@@ -23,6 +23,7 @@ DEFAULT_MAX_FILES = 1000
 DEFAULT_MAX_BYTES = 32 * 1024 * 1024
 MAX_EXPORT_BYTES = 128 * 1024 * 1024
 METADATA = ".rgp-sandbox.json"
+COMMIT = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
 HEX = re.compile(r"[0-9a-f]{64}\Z")
 
 
@@ -35,6 +36,7 @@ def _sha256(path: Path) -> str:
 
 
 def export_workspace(artifact: Path, output: Path, trusted_sha256: str, *,
+                     expected_commit: str,
                      prefix: str = "", allow_partial: bool = False,
                      max_files: int = DEFAULT_MAX_FILES,
                      max_bytes: int = DEFAULT_MAX_BYTES) -> dict:
@@ -45,6 +47,8 @@ def export_workspace(artifact: Path, output: Path, trusted_sha256: str, *,
     """
     _require(isinstance(trusted_sha256, str) and bool(HEX.fullmatch(trusted_sha256)),
              "UNSUPPORTED_FORMAT", "a separate trusted SHA-256 is mandatory")
+    _require(isinstance(expected_commit, str) and bool(COMMIT.fullmatch(expected_commit)),
+             "UNSUPPORTED_FORMAT", "expected Git commit is mandatory (40 or 64 hex digits)")
     _require(_safe_prefix(prefix), "UNSAFE_PATH", "invalid path prefix")
     _require(type(max_files) is int and 1 <= max_files <= 50_000,
              "RESOURCE_LIMIT", "invalid file limit")
@@ -64,6 +68,10 @@ def export_workspace(artifact: Path, output: Path, trusted_sha256: str, *,
              "RGP does not match externally trusted SHA-256")
     reader = Reader(artifact)
     overview = reader.overview()
+    # Even authentic source bytes may be stale relative to the GitHub commit
+    # the agent intends to edit. The caller must separately obtain that SHA.
+    _require(overview["source_commit"] == expected_commit, "STALE_SNAPSHOT",
+             "snapshot commit differs from expected Git revision; acquire a matching RGP")
     _require(overview["snapshot_complete"] or allow_partial, "PARTIAL_SNAPSHOT",
              "snapshot is incomplete; explicit allow_partial required")
     entries = [e for e in reader.manifest["files"] if e["path"].startswith(prefix)]
@@ -100,6 +108,9 @@ def export_workspace(artifact: Path, output: Path, trusted_sha256: str, *,
         report = {
             "kind": "rgp_sandbox_workspace",
             "source_commit": overview["source_commit"],
+            "expected_commit": expected_commit,
+            "commit_match": "matched_caller_supplied_commit",
+            "current_github_head_checked_by_exporter": False,
             "input_tree_digest": overview["input_tree_digest"],
             "rgp_sha256": observed,
             "snapshot_complete": overview["snapshot_complete"],
@@ -132,6 +143,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--artifact", required=True, type=Path)
     parser.add_argument("--trusted-sha256", required=True)
+    parser.add_argument("--expected-commit", required=True,
+                        help="GitHub commit this snapshot must represent; obtain HEAD separately")
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--prefix", default="")
     parser.add_argument("--allow-partial", action="store_true")
@@ -141,7 +154,7 @@ def main() -> int:
     try:
         result = export_workspace(
             args.artifact, args.output, args.trusted_sha256,
-            prefix=args.prefix, allow_partial=args.allow_partial,
+            expected_commit=args.expected_commit, prefix=args.prefix, allow_partial=args.allow_partial,
             max_files=args.max_files, max_bytes=args.max_bytes)
     except (RgpError, OSError, ValueError) as exc:
         parser.exit(2, f"{exc}\n")

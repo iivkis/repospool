@@ -12,7 +12,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
 sys.path.insert(0, str(ROOT / "tests"))
-from rgp_sandbox import METADATA, export_workspace  # noqa: E402
+from rgp_sandbox import METADATA, export_workspace as _export_workspace  # noqa: E402
+
+def export_workspace(*args, **kwargs):
+    """Existing test fixture is tied to the deliberately frozen fake commit."""
+    return _export_workspace(*args, expected_commit="a" * 40, **kwargs)
+
 from rgp_reader import RgpError, Reader  # noqa: E402
 from test_reader_api import three_scope_artifact  # noqa: E402
 from test_manifest_contract import fake_artifact  # noqa: E402
@@ -28,6 +33,31 @@ class SandboxWorkspaceTests(unittest.TestCase):
         self.raw = three_scope_artifact()
         self.artifact.write_bytes(self.raw)
         self.trusted = hashlib.sha256(self.raw).hexdigest()
+
+    def test_valid_authenticated_but_stale_snapshot_rejected(self):
+        destination = self.root / "stale"
+        with self.assertRaisesRegex(RgpError, "STALE_SNAPSHOT"):
+            _export_workspace(self.artifact, destination, self.trusted,
+                              expected_commit="b" * 40)
+        self.assertFalse(destination.exists())
+        self.assertEqual(list(self.root.glob(".rgp-stage-*")), [])
+        with self.assertRaises(TypeError):
+            _export_workspace(self.artifact, destination, self.trusted)
+        for bad_commit in ("", "HEAD", "A" * 40, "f" * 39):
+            with self.subTest(bad_commit=bad_commit), self.assertRaisesRegex(
+                    RgpError, "UNSUPPORTED_FORMAT"):
+                _export_workspace(self.artifact, destination, self.trusted,
+                                  expected_commit=bad_commit)
+        self.assertFalse(destination.exists())
+
+    def test_correct_commit_report_avoids_claiming_live_github_check(self):
+        destination = self.root / "matching"
+        result = _export_workspace(self.artifact, destination, self.trusted,
+                                   expected_commit="a" * 40)
+        self.assertEqual(result["expected_commit"], "a" * 40)
+        self.assertEqual(result["source_commit"], "a" * 40)
+        self.assertEqual(result["commit_match"], "matched_caller_supplied_commit")
+        self.assertFalse(result["current_github_head_checked_by_exporter"])
 
     def test_real_reader_bytes_and_provenance_in_local_workspace(self):
         output = self.root / "worktree"
@@ -144,6 +174,7 @@ class SandboxWorkspaceTests(unittest.TestCase):
             [sys.executable, str(ROOT / "python/rgp_sandbox.py"),
              "--artifact", str(self.artifact),
              "--trusted-sha256", self.trusted,
+             "--expected-commit", "a" * 40,
              "--output", str(target), "--prefix", "tests/"],
             capture_output=True, text=True, check=True)
         report = json.loads(completed.stdout)
