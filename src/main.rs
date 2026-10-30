@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashSet};
 use std::fs::{self, OpenOptions};
-use std::io::{BufRead, BufReader, Cursor, Read, Seek, Write};
+use std::io::{BufRead, BufReader, BufWriter, Cursor, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -434,8 +434,9 @@ fn stream_transport(source: &Path, destination: &mut fs::File) -> Result<usize> 
         }
         hasher.update(&buffer[..n]);
     }
+    let mut output = BufWriter::with_capacity(64 * 1024, &mut *destination);
     writeln!(
-        destination,
+        output,
         "RGP/1.0\npayload_length={}\npayload_sha256={}\nbase64_line_width=76\n--",
         size,
         hex::encode(hasher.finalize())
@@ -458,10 +459,12 @@ fn stream_transport(source: &Path, destination: &mut fs::File) -> Result<usize> 
         let encoded_size = STANDARD
             .encode_slice(&raw[..n], &mut encoded)
             .map_err(|_| anyhow!("Base64 output buffer insufficient"))?;
-        destination.write_all(&encoded[..encoded_size])?;
-        destination.write_all(b"\n")?;
+        output.write_all(&encoded[..encoded_size])?;
+        output.write_all(b"\n")?;
     }
-    destination.write_all(b"END RGP\n")?;
+    output.write_all(b"END RGP\n")?;
+    output.flush()?;
+    drop(output);
     Ok(destination.metadata()?.len() as usize)
 }
 
