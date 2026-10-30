@@ -88,3 +88,12 @@ has a [four-profile, same-runner A/B report](../benchmarks/stage1/MEMORY_AB_2026
 Memory gains are measured (about 52% peak RSS for 12MiB and 50k
 cases), but 50k generation latency **increases substantially**.
 Do not claim pure performance improvement.
+
+## Buffered disk fallback independently covered
+
+The later [adaptive ZIP producer](STAGE1_ADAPTIVE_ZIP.md) adds a
+36 MiB incompressible Git fixture to the stress matrix. This
+exercises the **disk-backed fallback** when the 32 MiB in-memory ZIP
+estimate is exceeded. It verifies both Rust and Python readers,
+source byte fidelity and canonical deterministic output; see the
+[paired five-profile report](../benchmarks/stage1/ADAPTIVE_ZIP_2026-10-31.md).

@@ -139,6 +139,18 @@ about **52% lower peak generator RSS** for 12MiB blobs and the
 (5.46s vs 2.49s in the paired test). The gain is in memory,
 not proven universal runtime speed. Gate B remains HOLD.
 
+## Stage 1 adaptive producer throughput
+
+The [adaptive ZIP writer](docs/STAGE1_ADAPTIVE_ZIP.md) avoids the
+high-cardinality seek overhead of always-disk-backed ZIP production
+while keeping streamed Base64 output and strict resource validation.
+[Same-runner A/B evidence](benchmarks/stage1/ADAPTIVE_ZIP_2026-10-31.md)
+on 50,005 Git files observed **4.37 → 2.13 s** with peak Rust
+memory **88.5 → 103.2 MiB**. This is a documented, bounded-memory
+tradeoff rather than a claim of universal acceleration. The five
+synthetic stress cases include a 36 MiB disk-fallback source test;
+RGP output stays byte-identical.
+
 ## Gate B: assistant-only source comparison (protocol v2)
 
 The **assistant in the active conversation** writes the code, checks the source
