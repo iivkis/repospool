@@ -4,10 +4,11 @@ use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashSet};
-use std::fs;
-use std::io::{Cursor, Read, Write};
+use std::fs::{self, OpenOptions};
+use std::io::{BufRead, BufReader, Cursor, Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::time::{SystemTime, UNIX_EPOCH};
 use zip::{write::FileOptions, CompressionMethod, DateTime, ZipArchive, ZipWriter};
 
 const MAX_ARTIFACT: usize = 64 * 1024 * 1024;
@@ -126,6 +127,79 @@ fn git_text(repo: &Path, args: &[&str]) -> Result<String> {
     Ok(String::from_utf8(git(repo, args)?)?.trim().to_owned())
 }
 
+// Keep one bounded git cat-file process for a snapshot, rather than spawning
+// a subprocess per file. Read each response before sending the next request
+// so pipe buffers cannot deadlock on large repositories.
+struct GitBlobBatch {
+    child: Option<Child>,
+    stdin: Option<ChildStdin>,
+    stdout: BufReader<ChildStdout>,
+}
+
+impl GitBlobBatch {
+    fn start(repo: &Path) -> Result<Self> {
+        let mut child = Command::new("git")
+            .arg("-C")
+            .arg(repo)
+            .args(["cat-file", "--batch"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::inherit())
+            .spawn()
+            .context("failed to start git cat-file --batch")?;
+        let stdin = child.stdin.take().context("missing git stdin")?;
+        let stdout = BufReader::new(child.stdout.take().context("missing git stdout")?);
+        Ok(Self {
+            child: Some(child),
+            stdin: Some(stdin),
+            stdout,
+        })
+    }
+
+    fn read(&mut self, object: &str, expected_size: usize) -> Result<Vec<u8>> {
+        let stdin = self.stdin.as_mut().context("closed git batch stdin")?;
+        writeln!(stdin, "{object}")?;
+        stdin.flush()?;
+
+        let mut header = String::new();
+        ensure!(
+            self.stdout.read_line(&mut header)? > 0,
+            "Git cat-file ended unexpectedly"
+        );
+        let mut parts = header.split_ascii_whitespace();
+        ensure!(
+            parts.next() == Some(object)
+                && parts.next() == Some("blob")
+                && parts.next().and_then(|s| s.parse::<usize>().ok()) == Some(expected_size)
+                && parts.next().is_none(),
+            "Git cat-file object header mismatch: {header:?}"
+        );
+        let mut bytes = vec![0; expected_size];
+        self.stdout.read_exact(&mut bytes)?;
+        let mut separator = [0u8; 1];
+        self.stdout.read_exact(&mut separator)?;
+        ensure!(separator == [b'\n'], "Git cat-file response terminator");
+        Ok(bytes)
+    }
+
+    fn finish(mut self) -> Result<()> {
+        drop(self.stdin.take());
+        let mut child = self.child.take().context("missing git batch child")?;
+        ensure!(child.wait()?.success(), "git cat-file batch failed");
+        Ok(())
+    }
+}
+
+impl Drop for GitBlobBatch {
+    fn drop(&mut self) {
+        if let Some(mut child) = self.child.take() {
+            drop(self.stdin.take());
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+}
+
 fn snapshot(repo: &Path, rev: &str) -> Result<(Manifest, BTreeMap<String, Vec<u8>>)> {
     ensure!(!rev.starts_with('-'), "invalid revision");
     let root = git_text(repo, &["rev-parse", "--show-toplevel"])?;
@@ -147,6 +221,7 @@ fn snapshot(repo: &Path, rev: &str) -> Result<(Manifest, BTreeMap<String, Vec<u8
     let mut blobs = BTreeMap::new();
     let mut total = 0usize;
     let mut seen_paths = HashSet::new();
+    let mut git_blobs = GitBlobBatch::start(root)?;
     for record in listing.split(|b| *b == 0).filter(|r| !r.is_empty()) {
         let (meta, raw_path) = record
             .split_once_byte(b'\t')
@@ -193,11 +268,7 @@ fn snapshot(repo: &Path, rev: &str) -> Result<(Manifest, BTreeMap<String, Vec<u8
             });
             continue;
         }
-        let bytes = git(root, &["cat-file", "blob", object])?;
-        ensure!(
-            bytes.len() == object_size,
-            "Git object changed unexpectedly"
-        );
+        let bytes = git_blobs.read(object, object_size)?;
         total += bytes.len();
         let digest = sha(&bytes);
         let blob = format!("files/{digest}");
@@ -217,6 +288,7 @@ fn snapshot(repo: &Path, rev: &str) -> Result<(Manifest, BTreeMap<String, Vec<u8
             status: status.into(),
         });
     }
+    git_blobs.finish()?;
     manifest.files.sort_by(|a, b| a.path.cmp(&b.path));
     manifest.excluded.sort_by(|a, b| a.path.cmp(&b.path));
     manifest.input_tree_digest = tree_digest(&manifest.files)?;
@@ -244,6 +316,42 @@ fn tree_digest(files: &[FileEntry]) -> Result<String> {
         digest.update(hex::decode(&file.sha256)?);
     }
     Ok(hex::encode(digest.finalize()))
+}
+
+// A unique, create_new() staging file prevents parallel writers from
+// sharing a fixed ".rgp.tmp" name. Drop removes it after any failure.
+struct StagedOutput {
+    path: PathBuf,
+}
+
+impl StagedOutput {
+    fn create(output: &Path) -> Result<(Self, fs::File)> {
+        let name = output
+            .file_name()
+            .context("output must be a file path")?
+            .to_string_lossy();
+        let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
+        for attempt in 0..100 {
+            let path = output.with_file_name(format!(
+                ".{name}.{}.{}.{}.tmp",
+                std::process::id(),
+                stamp,
+                attempt
+            ));
+            match OpenOptions::new().write(true).create_new(true).open(&path) {
+                Ok(file) => return Ok((Self { path }, file)),
+                Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(err) => return Err(err.into()),
+            }
+        }
+        Err(anyhow!("unable to allocate unique temporary output"))
+    }
+}
+
+impl Drop for StagedOutput {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.path);
+    }
 }
 
 fn generate(repo: &Path, output: &Path, rev: &str) -> Result<()> {
@@ -275,15 +383,14 @@ fn generate(repo: &Path, output: &Path, rev: &str) -> Result<()> {
         artifact.push('\n');
     }
     artifact.push_str("END RGP\n");
-    // Verify fully before publishing; write a temporary file alongside the destination.
-    let tmp = output.with_extension("rgp.tmp");
-    fs::write(&tmp, artifact.as_bytes())?;
-    let result = verify(&tmp);
-    if let Err(err) = result {
-        let _ = fs::remove_file(&tmp);
-        return Err(err);
-    }
-    fs::rename(&tmp, output)?;
+    // Verify before replacing the destination, without sharing a temporary
+    // pathname with any concurrent generator.
+    let (staged, mut file) = StagedOutput::create(output)?;
+    file.write_all(artifact.as_bytes())?;
+    file.sync_all()?;
+    drop(file);
+    verify(&staged.path)?;
+    fs::rename(&staged.path, output)?;
     println!("generated {} ({} bytes)", output.display(), artifact.len());
     Ok(())
 }
@@ -539,6 +646,26 @@ mod tests {
         assert!(is_sensitive("app/.env.local"));
         assert!(is_sensitive("cert.pem"));
         assert!(!is_sensitive("app/README.md"));
+    }
+
+    #[test]
+    fn staging_files_are_unique_and_cleaned_on_drop() {
+        let output = std::env::temp_dir().join(format!(
+            "rgp-staging-{}-{}",
+            std::process::id(),
+            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()
+        ));
+        let (a, a_file) = StagedOutput::create(&output).unwrap();
+        let (b, b_file) = StagedOutput::create(&output).unwrap();
+        assert_ne!(a.path, b.path);
+        assert!(a.path.exists() && b.path.exists());
+        drop(a_file);
+        drop(b_file);
+        let a_path = a.path.clone();
+        let b_path = b.path.clone();
+        drop(a);
+        drop(b);
+        assert!(!a_path.exists() && !b_path.exists());
     }
 
     #[test]
