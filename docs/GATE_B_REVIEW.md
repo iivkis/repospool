@@ -4,6 +4,16 @@ Gate B remains **HOLD**. The current 24 answers were scored by the same assistan
 
 The stdlib utility `scripts/gate_b_review.py` supports arm-masked source review. It does not call an inference API, make correctness judgments, or grant GO.
 
+## Stage 1 delivery evidence (separate from answer grading)
+
+The [verified delivery protocol](STAGE1_DELIVERY.md) pins and tests
+GitHub Actions ZIP contents against the independently committed corpus
+SHA-256 and exact frozen Git source blobs. This is useful evidence for
+archive integrity and reproducible acquisition, **not** an independent
+review of the 24 answers, nor an authenticated replay of the old
+assistant's connector history. Keep both independent grading and
+authenticated historical source-call auditing as open blockers.
+
 ## Download a prepared review packet
 
 Every successful pull-request CI run now uploads a short-lived **gate-b-review-handoff**
