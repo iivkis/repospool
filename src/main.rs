@@ -436,7 +436,7 @@ fn stream_transport(source: &Path, destination: &mut fs::File) -> Result<usize> 
     }
     writeln!(
         destination,
-        "RGP/1.0\\npayload_length={}\\npayload_sha256={}\\nbase64_line_width=76\\n--",
+        "RGP/1.0\npayload_length={}\npayload_sha256={}\nbase64_line_width=76\n--",
         size,
         hex::encode(hasher.finalize())
     )?;
@@ -459,9 +459,9 @@ fn stream_transport(source: &Path, destination: &mut fs::File) -> Result<usize> 
             .encode_slice(&raw[..n], &mut encoded)
             .map_err(|_| anyhow!("Base64 output buffer insufficient"))?;
         destination.write_all(&encoded[..encoded_size])?;
-        destination.write_all(b"\\n")?;
+        destination.write_all(b"\n")?;
     }
-    destination.write_all(b"END RGP\\n")?;
+    destination.write_all(b"END RGP\n")?;
     Ok(destination.metadata()?.len() as usize)
 }
 
