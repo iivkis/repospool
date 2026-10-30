@@ -40,7 +40,7 @@ class GoldenContractTests(unittest.TestCase):
         self.assertEqual(binary["encoding"], "base64")
         self.assertEqual(base64.b64decode(binary["content"]), bytes(range(256)) + b"\0\xff")
         for entry in EXPECTED["mixed_files"]:
-            self.assertEqual(hashlib.sha256(reader._blobs[entry["blob"]]).hexdigest(), entry["sha256"])
+            self.assertEqual(hashlib.sha256(reader._blob(entry["path"])).hexdigest(), entry["sha256"])
         self.assertEqual(reader._files["README.md"]["blob"], reader._files["src/copy.md"]["blob"])
         self.assertEqual(len(reader._blobs), len({entry["sha256"] for entry in EXPECTED["mixed_files"]}))
 

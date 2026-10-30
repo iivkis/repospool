@@ -154,7 +154,9 @@ class Reader:
             _require(path.stat().st_size <= 2 * MAX_ARTIFACT, "RESOURCE_LIMIT", "artifact too large")
             source = path.read_bytes()
         payload = decode_transport(source)
-        blobs: dict[str, bytes] = {}
+        # Validate every source blob eagerly, but retain only its length and
+        # the compressed ZIP payload. Reads and searches decompress on demand.
+        blobs: dict[str, int] = {}
         try:
             archive = zipfile.ZipFile(io.BytesIO(payload))
             with archive:
@@ -180,7 +182,7 @@ class Reader:
                         manifest_data = contents
                     else:
                         _require(name == f"files/{_digest(contents)}", "HASH_MISMATCH", "blob mismatch")
-                        blobs[name] = contents
+                        blobs[name] = len(contents)
         except (zipfile.BadZipFile, RuntimeError, EOFError) as exc:
             raise RgpError("UNSUPPORTED_FORMAT", "invalid ZIP archive") from exc
         _require("manifest_data" in locals(), "UNSUPPORTED_FORMAT", "missing manifest")
@@ -223,7 +225,7 @@ class Reader:
             _require(isinstance(sha256, str) and bool(HEX.fullmatch(sha256)), "UNSUPPORTED_FORMAT", "file hash")
             blob = f"files/{sha256}"
             _require(entry.get("blob") == blob and blob in blobs, "HASH_MISMATCH", "missing blob")
-            _require(type(entry.get("size")) is int and entry["size"] == len(blobs[blob]), "HASH_MISMATCH", "blob length")
+            _require(type(entry.get("size")) is int and entry["size"] == blobs[blob], "HASH_MISMATCH", "blob length")
             records[path] = entry
         _require(set(blobs) == {rec["blob"] for rec in records.values()}, "UNSUPPORTED_FORMAT", "unused ZIP blobs")
         last_exclusion = None
@@ -237,8 +239,14 @@ class Reader:
             used.add(path.lower())
         _require(_tree_digest(files) == manifest.get("input_tree_digest"), "HASH_MISMATCH", "input tree digest")
         self.manifest = manifest
-        self._blobs = blobs
+        self._blobs = frozenset(blobs)
+        self._payload = payload
         self._files = records
+
+    def _blob(self, path: str) -> bytes:
+        """Read a verified source blob on demand, without caching all raw files."""
+        with zipfile.ZipFile(io.BytesIO(self._payload)) as archive:
+            return archive.read(self._files[path]["blob"])
 
     def validate(self) -> dict:
         """All transport, manifest and content checks completed during construction."""
@@ -323,7 +331,7 @@ class Reader:
         _require(start_line is None or (type(start_line) is int and start_line >= 1), "UNSUPPORTED_FORMAT", "start line")
         _require(end_line is None or (type(end_line) is int and end_line >= 0), "UNSUPPORTED_FORMAT", "end line")
         entry = self._files[path]
-        data = self._blobs[entry["blob"]]
+        data = self._blob(path)
         try:
             text = data.decode("utf-8")
         except UnicodeDecodeError:
@@ -360,25 +368,27 @@ class Reader:
         _require(position is None or (position[0] in selected and position[1] >= 1), "UNSUPPORTED_FORMAT", "search cursor position")
         page = []
         last = None
-        for path in selected:
-            if position is not None and path < position[0]:
-                continue
-            try:
-                text = self._blobs[self._files[path]["blob"]].decode("utf-8")
-            except UnicodeDecodeError:
-                continue
-            for number, line in enumerate(text.splitlines(), start=1):
-                if position is not None and path == position[0] and number <= position[1]:
+        # Open the already verified ZIP once per search, not once per file.
+        with zipfile.ZipFile(io.BytesIO(self._payload)) as archive:
+            for path in selected:
+                if position is not None and path < position[0]:
                     continue
-                if query not in line:
+                try:
+                    text = archive.read(self._files[path]["blob"]).decode("utf-8")
+                except UnicodeDecodeError:
                     continue
-                if len(page) >= limit:
-                    return {"matches": page, "next_cursor": self._make_cursor("search", context, last[0], last[1]), "snapshot_status": self._snapshot_summary()["status"]}
-                # Use a bounded match-aware window, not the first bytes of
-                # a potentially long minified/source line.
-                excerpt = _matching_excerpt(line, query)
-                page.append({"path": path, "line": number, "excerpt": excerpt})
-                last = (path, number)
+                for number, line in enumerate(text.splitlines(), start=1):
+                    if position is not None and path == position[0] and number <= position[1]:
+                        continue
+                    if query not in line:
+                        continue
+                    if len(page) >= limit:
+                        return {"matches": page, "next_cursor": self._make_cursor("search", context, last[0], last[1]), "snapshot_status": self._snapshot_summary()["status"]}
+                    # Use a bounded match-aware window, not the first bytes of
+                    # a potentially long minified/source line.
+                    excerpt = _matching_excerpt(line, query)
+                    page.append({"path": path, "line": number, "excerpt": excerpt})
+                    last = (path, number)
         return {"matches": page, "next_cursor": None, "snapshot_status": self._snapshot_summary()["status"]}
 
 
