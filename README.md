@@ -128,6 +128,17 @@ real Git→RGP→Reader stress test commits 50,005 unique blobs and checks
 full pagination, exact source reads, negative cases, determinism and
 observed resource cost. This is not Gate B GO.
 
+## Stage 1 memory-bounded generation
+
+The [bounded-memory producer](docs/STAGE1_MEMORY.md) now stages
+deterministic ZIP files and streams the Base64 transport, with
+no change to RGP/1.0 output bytes. [Actual paired same-runner
+measurements](benchmarks/stage1/MEMORY_AB_2026-10-31.md) show
+about **52% lower peak generator RSS** for 12MiB blobs and the
+50k-member workload, but **large-tree generation is slower**
+(3.67s vs 1.70s in the paired test). The gain is in memory,
+not proven universal runtime speed. Gate B remains HOLD.
+
 ## Gate B: assistant-only source comparison (protocol v2)
 
 The **assistant in the active conversation** writes the code, checks the source
