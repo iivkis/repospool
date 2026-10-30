@@ -40,10 +40,16 @@ def _require(condition: bool, code: str, message: str) -> None:
 
 
 def _safe_path(path: str) -> bool:
+    if not isinstance(path, str) or not path:
+        return False
+    # JSON can represent lone UTF-16 surrogates even though UTF-8 Git paths
+    # cannot. Reject them as unsafe data, never as an uncaught Python error.
+    try:
+        size = len(path.encode("utf-8"))
+    except UnicodeEncodeError:
+        return False
     return (
-        isinstance(path, str)
-        and bool(path)
-        and len(path.encode("utf-8")) <= MAX_PATH_BYTES
+        size <= MAX_PATH_BYTES
         and not path.startswith("/")
         and "\\" not in path
         and not any(unicodedata.category(c) == "Cc" for c in path)
@@ -326,7 +332,7 @@ class Reader:
         return path, line
 
     def tree(self, prefix: str = "", limit: int = 200, cursor: str | None = None) -> dict:
-        _require(isinstance(prefix, str) and len(prefix.encode("utf-8")) <= 4096, "UNSUPPORTED_FORMAT", "tree prefix")
+        _require(_safe_prefix(prefix), "UNSUPPORTED_FORMAT", "tree prefix")
         _require(type(limit) is int and 0 < limit <= 200, "RESOURCE_LIMIT", "tree limit")
         context = self._cursor_context("tree", prefix)
         position = self._read_cursor(cursor, "tree", context)
@@ -359,7 +365,12 @@ class Reader:
     def search(self, query: str, paths: list[str] | None = None, limit: int = 50,
                cursor: str | None = None, *, prefix: str = "") -> dict:
         """Find source lines, optionally restricted to a lexical path prefix."""
-        _require(isinstance(query, str) and 0 < len(query.encode("utf-8")) <= 1024, "RESOURCE_LIMIT", "search query")
+        _require(isinstance(query, str), "RESOURCE_LIMIT", "search query")
+        try:
+            query_bytes = len(query.encode("utf-8"))
+        except UnicodeEncodeError as exc:
+            raise RgpError("UNSUPPORTED_FORMAT", "search query is not valid UTF-8") from exc
+        _require(0 < query_bytes <= 1024, "RESOURCE_LIMIT", "search query")
         _require(type(limit) is int and 0 < limit <= 100, "RESOURCE_LIMIT", "search limit")
         _require(_safe_prefix(prefix), "UNSUPPORTED_FORMAT", "invalid search prefix")
         _require(paths is None or (isinstance(paths, list) and len(paths) <= MAX_ENTRIES and all(isinstance(p, str) for p in paths)), "UNSUPPORTED_FORMAT", "paths")
