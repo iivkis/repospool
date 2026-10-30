@@ -4,6 +4,32 @@ Reproducible, versioned **single-file repository snapshots** designed to be read
 
 > **Status: v0.1 / transport PoC.** 12 independent connector downloads of GitHub Actions artifacts (100 KiB–50 MiB outer RGP) passed byte-level verification in the Python sandbox. This is **conditional Gate A success for the Actions-artifact adapter only**, not proof that `fetch_file` delivers the canonical root file. Syntax/semantic indexing is intentionally not claimed.
 
+## Главная цель: Кира разрабатывает RGP для самой себя
+
+**Основной пользователь RGP — Кира, ChatGPT coding-ассистент, работающий
+с GitHub-проектами в собственной Python-песочнице.** RGP нужен, чтобы
+Кира получала достоверный контекст проекта, лучше понимала структуру
+кода и последствия изменений, **реже ошибалась и эффективнее
+выполняла реальные задачи разработки**.
+
+RGP — проверяемый *неизменяемый снимок для понимания*, а не редактор
+GitHub и не LLM-runtime. Главный путь — использовать доверенный
+Python stdlib Reader **прямо в песочнице Киры**, затем менять код
+GitHub-инструментами и проверять результат. MCP — **необязательный
+адаптер**, а не цель проекта и не автоматически доступный инструмент
+чата. Основной масштаб применения — небольшие репозитории
+(от десятков до примерно 1000 файлов), а не синтетические 50k.
+
+**Критерий успеха:** меньше неверных решений и правок, лучше
+обоснованный выбор файлов/тестов, успешная верификация изменения.
+Затраты на вызовы GitHub, передачу исходников, токены и время
+измеряются честно, включая доставку RGP. Если GitHub без RGP
+оказывается лучше на конкретной задаче, так и фиксировать.
+
+**[Каноническая продуктовая цель и обязательный dogfooding](docs/PRODUCT_NORTH_STAR.md).**
+[Контракт самого агента](AGENTS.md) требует проверять пользу
+RGP на настоящей задаче, не только открывать архив. **Gate B = HOLD.**
+
 ## Product direction and agent accountability
 
 The canonical [three-stage product roadmap](docs/PRODUCT_ROADMAP.md)
