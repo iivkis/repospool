@@ -34,6 +34,15 @@ after building). CI uploads sanitized metadata for this acceptance.
 This verifies functional source tasks, **not** a Gate B decision or
 connector transport claim. Gate B remains **HOLD**.
 
+For the next large Stage 1 diagnostic, the
+[three-repository frozen corpus protocol](docs/STAGE1_CORPUS_DIAGNOSTIC.md)
+exercises all 12 preregistered task reference sets across pinned
+Rust/Python repositories, checking actual Reader search/read answers
+against Git source and collecting observed runtime/RSS metrics. Run
+`task stage1:corpus REPOSITORY=rgp` (or `serde_json` /
+`itsdangerous`). The corresponding Actions matrix retains
+**metadata-only evidence**. It does not claim Gate B success.
+
 ## Development
 
 The primary implementation is **Rust**. The trusted Reader and bootstrap interface use **Python stdlib only**. `uv` is for developer tooling, never a runtime dependency of the agent.
