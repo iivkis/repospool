@@ -3,6 +3,28 @@
 /.venv/
 __pycache__/
 *.pyc
+/.pytest_cache/
+/.mypy_cache/
+/.ruff_cache/
+/.coverage
+/htmlcov/
+/build/
+/dist/
+*.egg-info/
+
+# Local machine and editor artifacts
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+/.idea/
+
+# Local secrets (examples may be committed intentionally)
+/.env
+/.env.*
+!/.env.example
+
 # REPO_CONTEXT.rgp is tracked and refreshed by the first-party dogfood workflow.
 *.rgp.tmp
 /result
