@@ -90,3 +90,11 @@ recorded. Green CI alone is insufficient: inspect the JSON artifacts
 product, not a model-based two-arm experiment or independent review.
 The 12 tasks still need answer-level evidence and authenticated
 call-history review under the existing Gate B protocol.
+
+## Observed first three-repo run
+
+The initial successful multi-repository run and its measured results are
+recorded in [CORPUS_2026-10-31.md](../benchmarks/stage1/CORPUS_2026-10-31.md).
+The recorded generated RGP checksums matched the earlier pinned Gate B
+corpus files. A newer workflow also enforces that matching automatically.
+The first run by itself is not proof of that newer regression assertion.
