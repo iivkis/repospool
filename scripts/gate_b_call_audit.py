@@ -24,10 +24,19 @@ HEX = frozenset("0123456789abcdef")
 GITHUB_SOURCE_TOOLS = frozenset({
     "mcp__GitHub__fetch_file", "mcp__GitHub__fetch", "mcp__GitHub__fetch_blob",
 })
-RGP_ACQUISITION_TOOLS = frozenset({
-    "mcp__GitHub__fetch", "mcp__GitHub__fetch_workflow_run_artifacts",
-    "mcp__GitHub__download_workflow_artifact", "mcp__GitHub__fetch_workflow_run_jobs",
-})
+# Exact six operations claimed in the old cache-fair replay.
+# These claims do not authenticate themselves.
+RGP_OPERATIONS = {
+    "rgp": ("corpus_checkpoint", "artifact_listing", "artifact_download", "reader_source"),
+    "serde_json": ("artifact_download",),
+    "itsdangerous": ("artifact_download",),
+}
+RGP_TOOLS = {
+    "corpus_checkpoint": frozenset({"mcp__GitHub__fetch_file", "mcp__GitHub__fetch"}),
+    "artifact_listing": frozenset({"mcp__GitHub__fetch_workflow_run_artifacts", "mcp__GitHub__fetch"}),
+    "artifact_download": frozenset({"mcp__GitHub__download_workflow_artifact"}),
+    "reader_source": frozenset({"mcp__GitHub__fetch_file", "mcp__GitHub__fetch"}),
+}
 
 
 def make_template(plan: dict, observations: dict) -> dict:
@@ -51,9 +60,11 @@ def make_template(plan: dict, observations: dict) -> dict:
     rgp = []
     for repo in plan["repositories"]:
         name = repo["id"]
-        for ordinal in range(setup[name]):
+        require(name in RGP_OPERATIONS and len(RGP_OPERATIONS[name]) == setup[name],
+                "historical RGP setup operation allocation changed")
+        for ordinal, purpose in enumerate(RGP_OPERATIONS[name]):
             rgp.append({"repository": name, "source_commit": repo["commit"],
-                        "slot": ordinal + 1, "receipt": None})
+                        "slot": ordinal + 1, "purpose": purpose, "receipt": None})
     require(len(entries) == accounting["github_calls"] and
             len(rgp) == accounting["rgp_calls_including_preparation"],
             "claimed counts disagree with expected source and setup calls")
@@ -70,7 +81,8 @@ def _hex(value: object, size: int) -> bool:
 
 
 def _validate_receipt(receipt: object, expected_url: str | None,
-                      seen: set[str], tools: frozenset[str]) -> bool:
+                      seen: set[str], tools: frozenset[str],
+                      purpose: str | None = None) -> bool:
     if receipt is None:
         return False
     require(isinstance(receipt, dict) and set(receipt) ==
@@ -87,8 +99,18 @@ def _validate_receipt(receipt: object, expected_url: str | None,
     if expected_url is not None:
         require(url == expected_url, "provider source request differs from pinned URL")
     else:
-        require(url.startswith("https://github.com/iivkis/rgp/actions/"),
-                "RGP setup must reference the approved repository Actions run")
+        prefix = "https://github.com/iivkis/rgp/"
+        require(url.startswith(prefix),
+                "RGP setup must reference the approved repository")
+        if purpose in ("artifact_listing", "artifact_download"):
+            require(url.startswith(prefix + "actions/"),
+                    "RGP setup must reference the approved repository Actions run")
+        elif purpose == "corpus_checkpoint":
+            require("corpus_preparation.json" in url,
+                    "RGP checkpoint request must identify the frozen checkpoint")
+        elif purpose == "reader_source":
+            require("rgp_reader.py" in url,
+                    "RGP reader source request must identify the trusted Reader")
     require(_hex(receipt["response_sha256"], 64), "invalid response content digest")
     record_url = receipt["record_url"]
     require(isinstance(record_url, str) and record_url.startswith("https://")
@@ -105,8 +127,7 @@ def audit(plan: dict, observations: dict, ledger: dict) -> dict:
         require(ledger[key] == expected[key], f"provider ledger {key} mismatch")
     seen = set()
     counts = {}
-    for key, tools in (("github_source_calls", GITHUB_SOURCE_TOOLS),
-                       ("rgp_acquisition_calls", RGP_ACQUISITION_TOOLS)):
+    for key in ("github_source_calls", "rgp_acquisition_calls"):
         values, expected_rows = ledger[key], expected[key]
         require(isinstance(values, list) and len(values) == len(expected_rows),
                 f"{key}: missing or additional claimed calls")
@@ -120,7 +141,9 @@ def audit(plan: dict, observations: dict, ledger: dict) -> dict:
                     require(entry[field] == reference[field],
                             f"{key}[{n}]: claimed source/slot changed")
             url = reference.get("source_url")
-            present += int(_validate_receipt(entry["receipt"], url, seen, tools))
+            purpose = reference.get("purpose")
+            tools = GITHUB_SOURCE_TOOLS if purpose is None else RGP_TOOLS[purpose]
+            present += int(_validate_receipt(entry["receipt"], url, seen, tools, purpose))
         counts[key] = {"expected": len(expected_rows),
                        "receipts_present": present, "receipts_missing": len(expected_rows) - present}
     total = sum(v["expected"] for v in counts.values())
