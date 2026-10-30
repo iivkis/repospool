@@ -102,7 +102,7 @@ def verify_fixture(path: Path, expected: dict) -> None:
             not overview["snapshot_complete"]):
         raise ValueError("MANIFEST_MISMATCH: snapshot metadata differs")
     for entry in reader.manifest["files"]:
-        data = reader._blobs[entry["blob"]]
+        data = reader._blob(entry["path"])
         if sha(data) != entry["sha256"] or len(data) != entry["size"]:
             raise ValueError(f"HASH_MISMATCH: {entry['path']}")
 
