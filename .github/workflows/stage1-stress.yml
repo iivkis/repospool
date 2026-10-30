@@ -1,0 +1,85 @@
+name: Stage 1 stress and limit acceptance
+
+on:
+  pull_request:
+    paths:
+      - src/main.rs
+      - python/rgp_reader.py
+      - scripts/stage1_stress.py
+      - tests/test_stage1_stress.py
+      - .github/workflows/stage1-stress.yml
+  push:
+    branches: [main]
+    paths:
+      - src/main.rs
+      - python/rgp_reader.py
+      - scripts/stage1_stress.py
+      - tests/test_stage1_stress.py
+      - .github/workflows/stage1-stress.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stage1-stress-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  synthetic-stress:
+    name: Stress ${{ matrix.profile }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [many-files, incompressible, compressible, oversized]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build generator
+        run: cargo build --locked --release
+      - name: Execute full Git-to-RGP stress case and resource measurement
+        shell: bash
+        env:
+          TEST_PROFILE: ${{ matrix.profile }}
+        run: |
+          set -euo pipefail
+          python3 scripts/stage1_stress.py \
+            --profile "$TEST_PROFILE" \
+            --rust-cli target/release/rgp \
+            --report "$RUNNER_TEMP/stage1-stress.json"
+          python3 -c 'import json,os; from pathlib import Path; x=json.loads((Path(os.environ["RUNNER_TEMP"]) / "stage1-stress.json").read_text()); assert x["status"]=="PASS" and x["gate_b"]=="HOLD"'
+      - name: Summarize measured evidence
+        if: always()
+        shell: bash
+        env:
+          TEST_PROFILE: ${{ matrix.profile }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          path = Path(os.environ["RUNNER_TEMP"]) / "stage1-stress.json"
+          if path.exists():
+              r = json.loads(path.read_text())
+              with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as out:
+                  out.write(f"### Synthetic stress: {os.environ['TEST_PROFILE']}\n\n")
+                  out.write(f"Status: **{r['status']}**; Gate B: HOLD\n\n")
+                  if r["status"] == "PASS":
+                      out.write(f"RGP bytes: {r['rgp_bytes']}; files: {r['file_count']}; complete: {r['snapshot_complete']}\n\n")
+                      out.write(f"Observed resources: \`{r['timings']}\`\n\n")
+                  else:
+                      out.write(f"Failure: \`{r.get('reason', 'unknown')}\`\n\n")
+                  out.write("Local synthetic Git only; no connector throughput, tokens or performance improvement claim.\n")
+          PY
+      - name: Upload metadata only, never source or RGP
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage1-stress-${{ matrix.profile }}
+          path: ${{ runner.temp }}/stage1-stress.json
+          if-no-files-found: warn
+          retention-days: 14
