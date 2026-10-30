@@ -368,25 +368,27 @@ class Reader:
         _require(position is None or (position[0] in selected and position[1] >= 1), "UNSUPPORTED_FORMAT", "search cursor position")
         page = []
         last = None
-        for path in selected:
-            if position is not None and path < position[0]:
-                continue
-            try:
-                text = self._blob(path).decode("utf-8")
-            except UnicodeDecodeError:
-                continue
-            for number, line in enumerate(text.splitlines(), start=1):
-                if position is not None and path == position[0] and number <= position[1]:
+        # Open the already verified ZIP once per search, not once per file.
+        with zipfile.ZipFile(io.BytesIO(self._payload)) as archive:
+            for path in selected:
+                if position is not None and path < position[0]:
                     continue
-                if query not in line:
+                try:
+                    text = archive.read(self._files[path]["blob"]).decode("utf-8")
+                except UnicodeDecodeError:
                     continue
-                if len(page) >= limit:
-                    return {"matches": page, "next_cursor": self._make_cursor("search", context, last[0], last[1]), "snapshot_status": self._snapshot_summary()["status"]}
-                # Use a bounded match-aware window, not the first bytes of
-                # a potentially long minified/source line.
-                excerpt = _matching_excerpt(line, query)
-                page.append({"path": path, "line": number, "excerpt": excerpt})
-                last = (path, number)
+                for number, line in enumerate(text.splitlines(), start=1):
+                    if position is not None and path == position[0] and number <= position[1]:
+                        continue
+                    if query not in line:
+                        continue
+                    if len(page) >= limit:
+                        return {"matches": page, "next_cursor": self._make_cursor("search", context, last[0], last[1]), "snapshot_status": self._snapshot_summary()["status"]}
+                    # Use a bounded match-aware window, not the first bytes of
+                    # a potentially long minified/source line.
+                    excerpt = _matching_excerpt(line, query)
+                    page.append({"path": path, "line": number, "excerpt": excerpt})
+                    last = (path, number)
         return {"matches": page, "next_cursor": None, "snapshot_status": self._snapshot_summary()["status"]}
 
 
