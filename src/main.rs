@@ -358,8 +358,11 @@ impl Drop for StagedOutput {
 // by guessing compressibility from samples. A valid, repetitive source file
 // must not be rejected as a ZIP bomb by our own independent readers.
 // Ordinary archives retain their original compression and byte format.
-fn build_zip(manifest_data: &[u8], blobs: &BTreeMap<String, Vec<u8>>,
-             stored: &HashSet<String>) -> Result<Vec<u8>> {
+fn build_zip(
+    manifest_data: &[u8],
+    blobs: &BTreeMap<String, Vec<u8>>,
+    stored: &HashSet<String>,
+) -> Result<Vec<u8>> {
     let mut zip = ZipWriter::new(Cursor::new(Vec::new()));
     let options = FileOptions::default()
         .compression_method(CompressionMethod::Deflated)
@@ -407,8 +410,10 @@ fn generate(repo: &Path, output: &Path, rev: &str) -> Result<()> {
         // At most one bounded retry. Stored entries cannot exceed the ZIP
         // compression-ratio ceiling; never turn off anti-bomb checks.
         let safe = build_zip(&manifest_data, &blobs, &outliers)?;
-        ensure!(excessive_compression(&safe)?.is_empty(),
-                "RESOURCE_LIMIT: unsafe compression ratio after fallback");
+        ensure!(
+            excessive_compression(&safe)?.is_empty(),
+            "RESOURCE_LIMIT: unsafe compression ratio after fallback"
+        );
         safe
     };
     ensure!(
@@ -703,7 +708,10 @@ mod tests {
         let rebuilt = build_zip(b"{}", &blobs, &outliers).unwrap();
         assert!(excessive_compression(&rebuilt).unwrap().is_empty());
         let mut zip = ZipArchive::new(Cursor::new(rebuilt)).unwrap();
-        assert_eq!(zip.by_name(&key).unwrap().compression(), CompressionMethod::Stored);
+        assert_eq!(
+            zip.by_name(&key).unwrap().compression(),
+            CompressionMethod::Stored
+        );
     }
 
     #[test]
