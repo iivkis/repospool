@@ -61,10 +61,17 @@ jobs:
           python3 scripts/gate_b_review.py template --packet "$handoff/packet.json" > "$handoff/review-template.json"
           python3 scripts/gate_b_review.py check --packet "$handoff/packet.json" --review "$handoff/review-template.json" > "$handoff/initial-status.json"
           python3 -c 'import json,sys; v=json.load(open(sys.argv[1])); assert v["status"]=="HOLD" and v["missing"]==24' "$handoff/initial-status.json"
+          # Self-recorded counts are not proof of provider calls.
+          # The new handoff contains 19 intentionally missing receipts.
+          python3 scripts/gate_b_call_audit.py template --output "$handoff/tool-receipt-template.json" > /dev/null
+          python3 scripts/gate_b_call_audit.py audit --ledger "$handoff/tool-receipt-template.json" --output "$handoff/tool-receipt-status.json" > /dev/null
+          python3 -c 'import json,sys; x=json.load(open(sys.argv[1])); assert x["status"]=="HOLD" and x["missing_receipts_total"]==19 and x["verified_connector_call_reduction"] is None' "$handoff/tool-receipt-status.json"
+          python3 scripts/gate_b_decision.py --packet "$handoff/packet.json" --review "$handoff/review-template.json" --ledger "$handoff/tool-receipt-template.json" --output "$handoff/final-gate-b-status.json" > /dev/null
+          python3 -c 'import json,sys; x=json.load(open(sys.argv[1])); assert x["official_status"]=="HOLD" and x["answer_review"]["missing"]==24 and x["tool_history"]["missing_receipts_total"]==19' "$handoff/final-gate-b-status.json"
           # Integrity and discovery hashes are supplied, but no reviewer verdict is invented.
           cp benchmarks/gate_b/source_line_counts.json "$handoff/source-line-counts.json"
           cp benchmarks/gate_b/corpus_preparation.json "$handoff/corpus-checkpoint.json"
-          (cd "$handoff" && sha256sum packet.json review-template.json initial-status.json source-line-counts.json corpus-checkpoint.json > SHA256SUMS)
+          (cd "$handoff" && sha256sum packet.json review-template.json initial-status.json tool-receipt-template.json tool-receipt-status.json final-gate-b-status.json source-line-counts.json corpus-checkpoint.json > SHA256SUMS)
           cp docs/GATE_B_REVIEW.md "$handoff/INSTRUCTIONS.md"
       - name: Upload Gate B review handoff (not a reviewed result)
         uses: actions/upload-artifact@v4

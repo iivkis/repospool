@@ -19,7 +19,7 @@ authenticated historical source-call auditing as open blockers.
 Every successful pull-request CI run now uploads a short-lived **gate-b-review-handoff**
 artifact under that run's *Artifacts* section on GitHub Actions. Download the
 artifact ZIP and keep its files together: `packet.json`, `review-template.json`,
-`initial-status.json`, `SHA256SUMS`, and `INSTRUCTIONS.md`, plus `source-line-counts.json` and `corpus-checkpoint.json`. The blank
+`initial-status.json`, `SHA256SUMS`, and `INSTRUCTIONS.md`, plus `source-line-counts.json`, `corpus-checkpoint.json`, and the provider-call audit template/status. The blank
 `initial-status.json` must report **HOLD** and 24 missing review verdicts.
 
 The A/B order is independently randomized on each workflow run. **Do not pair
@@ -47,6 +47,70 @@ python3 scripts/gate_b_review.py template \
 ```
 
 The packet randomizes A/B ordering within each task and omits the original arm labels, original correctness flags and connector counts. It includes fixed-commit source URLs, answers, task rubrics, and a packet identifier. Keep the same packet for validation. Re-generating it invalidates the review binding.
+
+## Provider-call history audit (separate from answer review)
+
+The handoff now includes `tool-receipt-template.json` and
+`tool-receipt-status.json`, alongside the blinded 24-answer review
+packet. The ledger is generated from the **existing** cache-fair
+observations, with 13 frozen first-use GitHub source requests and
+6 RGP preparation/acquisition call slots (4 for rgp, 1 for serde_json,
+1 for itsdangerous). The RGP preparation slots specifically bind one
+checkpoint fetch, one Actions listing, one RGP download, and one trusted
+Reader source fetch; the other two repos require one RGP download each. All **19 receipt fields are initially null**.
+This is deliberate: the existing observation JSON never authenticated
+the provider's historical tool invocation IDs, responses or URLs.
+
+A separate auditor with access to the **original session's real tool
+events** may fill a slot with `call_id`, `tool_name`,
+`request_url`, `response_sha256`, and an inspectable
+`record_url`. Response hashes must be calculated over the original
+provider response bytes, not inferred from the RGP checkpoint. For
+GitHub source calls, the normalized request URL must name the
+exact pinned GitHub file. For RGP acquisitions, it must reference the
+approved Actions run. Reusing one provider invocation as two calls,
+changing the attribution or source hash, and inventing zero-cost
+operations are rejected.
+
+```sh
+python3 scripts/gate_b_call_audit.py template \
+  --output /tmp/gate-b-tool-receipts.json
+
+python3 scripts/gate_b_call_audit.py audit \
+  --ledger /tmp/gate-b-tool-receipts.json \
+  --output /tmp/gate-b-tool-audit.json
+```
+
+The same CI handoff now includes `final-gate-b-status.json`, produced
+by `scripts/gate_b_decision.py` from the **exact same** masked packet,
+empty verdict template, 19-slot receipt ledger, and pinned source-line
+and RGP checkpoints. It reports **HOLD**, precisely **24 missing
+verdicts** and **19 missing provider receipts** on the current pilot.
+This is the consolidated gate-readiness dossier, not another score.
+For a filled independent review and receipt file:
+
+```sh
+python3 scripts/gate_b_decision.py \
+  --packet packet.json --review reviewed.json \
+  --ledger tool-receipts.json \
+  --output final-gate-b-status.json
+```
+
+The result always requires independent human/provider verification;
+an offline script cannot verify the contents of its own untrusted
+reviewer declaration or receipt URLs.
+
+The audit **never emits GO**, even for 19 syntactically complete
+receipts. It marks complete submissions
+`TRACE_CANDIDATE_UNAUTHENTICATED` until an independent maintainer
+checks each tool event against the real original provider log.
+Without such a comparison, someone could invent all the strings in
+the ledger. The reported 13 vs 6 count reduction (53.85%) remains
+**claimed**, not independently measured or verified.
+
+This new ledger is distinct from the **real 2026-10-31 connected ZIP
+delivery audit**, which proves three current artifact downloads but
+cannot retroactively prove the original 29 October Gate B operations.
 
 ## Review
 
