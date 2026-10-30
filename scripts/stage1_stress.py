@@ -124,7 +124,7 @@ def run(profile: str, binary: Path) -> dict:
             if path.endswith(".txt") and profile == "compressible":
                 found = reader.search("AAAA", paths=[path], limit=1)
                 insist(found["matches"][0]["line"] == 1, "large-text search failed")
-                insist(reader.read(path, 1, 1)["content"] == expected.decode(),
+                insist(reader.read(path, 1, 1)["content"] == expected.splitlines(keepends=True)[0].decode(),
                        "line reading lost large source bytes")
         if profile == "many-files":
             paths = set()
