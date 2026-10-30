@@ -82,7 +82,7 @@ def export_workspace(artifact: Path, output: Path, trusted_sha256: str, *,
         for entry in entries:
             path = staging.joinpath(*entry["path"].split("/"))
             path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-            data = reader._blob(entry["path"])  # Reader verified these bytes before export.
+            data = reader.read_bytes(entry["path"])  # Public verified-source Reader contract.
             _require(len(data) == entry["size"] and hashlib.sha256(data).hexdigest() == entry["sha256"],
                      "HASH_MISMATCH", "source blob changed during workspace export")
             # O_NOFOLLOW is defense-in-depth. The private staging tree contains
