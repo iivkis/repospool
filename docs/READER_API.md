@@ -14,6 +14,7 @@ page = reader.tree(prefix="src/", limit=100)
 while page["next_cursor"] is not None:
     page = reader.tree(prefix="src/", limit=100, cursor=page["next_cursor"])
 reader.read("README.md", start_line=1, end_line=40)
+exact_git_blob = reader.read_bytes("README.md")  # verified raw bytes, no decoding
 page = reader.search("TODO", paths=["README.md"], limit=10)
 while page["next_cursor"] is not None:
     page = reader.search("TODO", paths=["README.md"], limit=10, cursor=page["next_cursor"])
@@ -22,6 +23,14 @@ page = reader.search("TODO", prefix="src/", limit=10)
 while page["next_cursor"] is not None:
     page = reader.search("TODO", prefix="src/", limit=10, cursor=page["next_cursor"])
 ```
+
+`read_bytes(path)` is a **public Python-only verified raw source API**.
+It preserves exact Git blob bytes including binary data and line endings,
+without interpreting symlinks or importing source. Unknown/omitted paths
+raise `PARTIAL_SNAPSHOT`. It is not a 256 KiB JSON response; individual
+blobs remain bounded by verified Reader resource limits. It supports
+[safe sandbox source workspaces](SANDBOX_SOURCE_WORKSPACE.md), which
+never depend on the Reader's private ZIP implementation.
 
 A search result contains its exact `path` and 1-based `line`, plus a
 **match-aware excerpt** bounded to 512 UTF-8 bytes. For queries that fit in
