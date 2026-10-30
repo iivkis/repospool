@@ -99,6 +99,14 @@ tasks:
       - cargo build --locked --release
       - python3 scripts/stage1_stress.py --profile '{{.PROFILE}}' --rust-cli target/release/rgp --report /tmp/rgp-stage1-stress-{{.PROFILE}}.json
 
+  stage1:delivery:
+    desc: Independently verify a downloaded Actions ZIP with pinned RGP checkpoint (REPOSITORY and ZIP required)
+    vars:
+      REPOSITORY: '{{.REPOSITORY | default "rgp"}}'
+      ZIP: '{{.ZIP | default "/tmp/gate-b-artifact.zip"}}'
+    cmds:
+      - python3 scripts/stage1_delivery.py --repository '{{.REPOSITORY}}' --actions-zip '{{.ZIP}}' --output /tmp/rgp-stage1-delivery-{{.REPOSITORY}}.rgp --report /tmp/rgp-stage1-delivery-{{.REPOSITORY}}.json
+
   check:
     desc: Run all checks, deterministic snapshot smoke and goal-level RGP acceptance
     cmds:
