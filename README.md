@@ -21,6 +21,19 @@ independent reviews can audit claims but do not replace agent testing.
 See the [31 Oct 2026 review](docs/REVIEW_2026-10-31.md) for findings,
 limitations and priorities.
 
+## Stage 1 implementation and functional acceptance
+
+[Stage 1 implementation notes](docs/STAGE1_IMPLEMENTATION.md) describe
+the production-hardening work in progress: batched Git blob retrieval,
+collision-free staging for concurrent generation, a lower-memory Reader,
+and a repeatable **real-RGP, goal-level acceptance** against pinned Git
+source truths. Run `task stage1:acceptance` (or
+`python3 scripts/stage1_acceptance.py --rust-cli target/debug/rgp`
+after building). CI uploads sanitized metadata for this acceptance.
+
+This verifies functional source tasks, **not** a Gate B decision or
+connector transport claim. Gate B remains **HOLD**.
+
 ## Development
 
 The primary implementation is **Rust**. The trusted Reader and bootstrap interface use **Python stdlib only**. `uv` is for developer tooling, never a runtime dependency of the agent.
