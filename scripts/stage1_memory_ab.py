@@ -20,8 +20,9 @@ sys.path.insert(0, str(ROOT / "python"))
 from rgp_reader import Reader  # noqa: E402
 from stage1_corpus import measured  # noqa: E402
 from stage1_stress import make_source  # noqa: E402
+from stage1_scale import FILES, CAP, SAMPLE, commit_many, path_for  # noqa: E402
 
-PROFILES = ("many-files", "incompressible", "compressible")
+PROFILES = ("many-files", "incompressible", "compressible", "scale-50k")
 
 
 def main() -> int:
@@ -39,7 +40,12 @@ def main() -> int:
             with tempfile.TemporaryDirectory(prefix=f"rgp-memory-ab-{profile}-") as name:
                 folder = Path(name)
                 source_dir = folder / "source"
-                commit, fixture = make_source(source_dir, profile)
+                if profile == "scale-50k":
+                    commit = commit_many(source_dir, FILES)
+                    sample = [path_for(index) for index in SAMPLE]
+                else:
+                    commit, fixture = make_source(source_dir, profile)
+                    sample = list(fixture)[:3] + list(fixture)[-3:]
                 # Alternate order to reduce, not eliminate, warm-cache bias.
                 order = ("baseline", "candidate") if profile != "compressible" else (
                     "candidate", "baseline")
@@ -66,10 +72,14 @@ def main() -> int:
                 overview = reader.overview()
                 if not reader.validate()["valid"] or overview["source_commit"] != commit:
                     raise AssertionError(f"invalid source snapshot: {profile}")
-                if not overview["snapshot_complete"]:
+                if profile == "scale-50k":
+                    if overview["snapshot_complete"] or overview["file_count"] != CAP:
+                        raise AssertionError("large snapshot incorrectly claimed complete")
+                    if overview["excluded_by_reason"].get("entry_limit") != FILES - CAP:
+                        raise AssertionError("large source lost its exclusions")
+                elif not overview["snapshot_complete"]:
                     raise AssertionError(f"unexpected partial snapshot: {profile}")
                 # Check sampled source bytes against independently read pinned Git.
-                sample = list(fixture)[:3] + list(fixture)[-3:]
                 for path in sorted(set(sample)):
                     raw = subprocess.check_output([
                         "git", "-C", str(source_dir), "show", f"{commit}:{path}"])
@@ -89,9 +99,9 @@ def main() -> int:
                         100 * (candidate_rss - baseline_rss) / baseline_rss, 2),
                 }
                 report["profiles"].append(profile_report)
-        # Synthetic 12MiB data must actually benefit in peak RSS.
+        # Synthetic large data and the maximum ZIP member count must benefit in RSS.
         for item in report["profiles"]:
-            if item["profile"] in ("incompressible", "compressible"):
+            if item["profile"] in ("incompressible", "compressible", "scale-50k"):
                 if item["candidate"]["peak_rss_kib"] >= item["baseline"]["peak_rss_kib"]:
                     raise AssertionError(f"no demonstrated memory gain on {item['profile']}")
         report["status"] = "PASS"
