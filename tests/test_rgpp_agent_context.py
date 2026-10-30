@@ -45,6 +45,10 @@ class AgentContextTests(unittest.TestCase):
     def test_no_sibling_prefix_leak_and_multiple_terms_ranked(self):
         result = context(self.reader, ["needle", "again"], prefix="src/")
         self.assertEqual(result["sources"][0]["path"], "src/a.py")
+        chosen_terms = [s["match_term"] for s in result["sources"]
+                        if s["path"] == "src/a.py"]
+        self.assertIn("needle", chosen_terms)
+        self.assertIn("again", chosen_terms)
         self.assertFalse(any(s["path"].startswith("src2/") or
                              s["path"].startswith("tests/")
                              for s in result["sources"]))
