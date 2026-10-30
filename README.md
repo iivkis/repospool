@@ -94,6 +94,17 @@ python3 python/rgp_reader.py --artifact /tmp/REPO_CONTEXT.rgp overview
 
 Bootstrap refuses path traversal, duplicate/extra ZIP members, malformed manifests, resource-limit violations and hash mismatches; it does not execute ZIP content. The optional `expected.json` *inside* the ZIP is not an authenticity anchor. A SHA-256 supplied from the same untrusted download does not independently prove provenance.
 
+## Stage 1 authenticated delivery checks
+
+The [Stage 1 delivery protocol](docs/STAGE1_DELIVERY.md) replays
+the supported GitHub Actions ZIP adapter using an RGP SHA-256 pinned in
+the Git repository **outside the downloaded ZIP**. The three-repo
+`Gate B pinned corpus preparation` workflow now runs the ZIP bootstrap,
+checks actual Reader source-navigation answers against independent
+pinned Git data and publishes a metadata-only test report. The agent
+still must retrieve and test the actual connected-app artifact separately.
+Source-byte integrity is not proof of independent answer grading.
+
 ## Gate B: assistant-only source comparison (protocol v2)
 
 The **assistant in the active conversation** writes the code, checks the source
