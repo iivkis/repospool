@@ -248,6 +248,16 @@ class Reader:
         with zipfile.ZipFile(io.BytesIO(self._payload)) as archive:
             return archive.read(self._files[path]["blob"])
 
+    def read_bytes(self, path: str) -> bytes:
+        """Return independently verified raw Git source bytes for a known path.
+
+        Unlike read(), this preserves binary data, encodings and line endings
+        exactly. It never executes or follows symlinks in the source snapshot.
+        """
+        _require(isinstance(path, str) and path in self._files,
+                 "PARTIAL_SNAPSHOT", "file not present in snapshot")
+        return self._blob(path)
+
     def validate(self) -> dict:
         """All transport, manifest and content checks completed during construction."""
         return {"valid": True, "input_tree_digest": self.manifest["input_tree_digest"], "file_count": len(self._files)}
