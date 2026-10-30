@@ -51,6 +51,22 @@ checks the answer-ready passages against original pinned Git.
 **Product priority: real LLM use and independent A/B, not more
 50,000-file optimization. Stage 1 Gate B stays HOLD.**
 
+## 12 реальные задачи агента на небольшом коде
+
+[Реальный опыт модели](docs/AGENT_VALUE_TRIAL_2026-10-31.md)
+выполнил **12 зафиксированных задач** в публичных репозиториях
+с 46, 93 и 50 файлами. Через скачанный RGP модель нашла и
+объяснила проверяемые участки исходников; [CI проверил
+72 исходных фрагмента против закреплённого Git](scripts/stage1_agent_task_pilot.py).
+
+Честный итог: в исследованном сценарии **6 целевых GitHub-операций
+подготовки/получения RGP против 13 запросов исходных файлов**,
+но **396 854 байт трёх ZIP против 336 734 исходных байт 13 файлов**.
+Это *не* доказательство снижения токенов или улучшения ответов
+модели. Независимый слепой A/B не завершён, поэтому Gate B остаётся
+**HOLD**. Дальнейший приоритет: реальные задачи модели, качество
+ответов и полная стоимость, а не файлы на 50 тысяч.
+
 ## Stage 1 implementation and functional acceptance
 
 [Stage 1 implementation notes](docs/STAGE1_IMPLEMENTATION.md) describe
