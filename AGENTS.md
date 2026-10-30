@@ -27,6 +27,13 @@ must be explicit. The agent must not claim to have used RGP when it
 actually relied only on GitHub. If RGP is missing/stale/unverifiable,
 use direct GitHub and disclose the fallback.
 
+To obtain fresh RGP source for work on this repository, use the
+[main-commit sandbox snapshot workflow](.github/workflows/kira-sandbox-rgp.yml).
+Read the **independent SHA-256 and source commit from GitHub Actions job
+summary** before downloading its RGP artifact. Reject a snapshot if
+the GitHub branch advanced beyond the intended commit. Avoid relying
+on frozen Gate B corpus RGPs for coding against current `main`.
+
 For sandbox-based understanding, when a verified RGP is available, an
 inert source workspace can now be exported using
 `python/rgp_sandbox.py --artifact ... --trusted-sha256 ... --expected-commit <GitHub_SHA> --output ...`.
