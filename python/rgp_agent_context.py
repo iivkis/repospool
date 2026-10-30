@@ -75,7 +75,16 @@ def context(reader: Reader, terms: list[str], *, prefix: str = "",
 
     for path in ordered_paths[:max_files]:
         seen_lines = set()
-        for term, number, excerpt in hits[path]:
+        # Diversity matters more than repetition: 'serialize_i64'
+        # may match several implementations before we reach f64/str.
+        # Give each distinct term one source passage first, then fill
+        # spare slots with additional matches in original search order.
+        first_per_term = {}
+        for hit in hits[path]:
+            first_per_term.setdefault(hit[0], hit)
+        prioritized = list(first_per_term.values())
+        prioritized += [hit for hit in hits[path] if hit not in prioritized]
+        for term, number, excerpt in prioritized:
             if number in seen_lines:
                 continue
             seen_lines.add(number)
@@ -120,6 +129,9 @@ def context(reader: Reader, terms: list[str], *, prefix: str = "",
         response["selection_truncated"] or len(ordered_paths) > max_files
         or total_matches > len(response["sources"])
     )
+    while len(compact_json(response).encode("utf-8")) > max_bytes and response["sources"]:
+        response["sources"].pop()
+        response["selection_truncated"] = True
     # No answer correctness is inferred from a successful lexical hit.
     # Never label a no-match or truncated search 'source absent'.
     return response
