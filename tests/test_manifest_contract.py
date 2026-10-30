@@ -119,7 +119,7 @@ class ManifestContractTest(unittest.TestCase):
             reader.search(chr(0xD800))
         # An invalid agent-generated query must not poison later reads.
         self.assertEqual(reader.read("src/file.txt")["content"],
-                         "alpha\\nbeta\\nbeta\\n")
+                         "alpha\nbeta\nbeta\n")
 
     def test_canonical_base64_newline(self):
         original = fake_artifact()
