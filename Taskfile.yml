@@ -91,6 +91,14 @@ tasks:
       - cargo build --locked --release
       - python3 scripts/stage1_corpus.py --repository '{{.REPOSITORY}}' --rust-cli target/release/rgp --report /tmp/rgp-stage1-corpus-{{.REPOSITORY}}.json
 
+  stage1:stress:
+    desc: Run the synthetic source stress profile (PROFILE=many-files|incompressible|compressible|oversized)
+    vars:
+      PROFILE: '{{.PROFILE | default "many-files"}}'
+    cmds:
+      - cargo build --locked --release
+      - python3 scripts/stage1_stress.py --profile '{{.PROFILE}}' --rust-cli target/release/rgp --report /tmp/rgp-stage1-stress-{{.PROFILE}}.json
+
   check:
     desc: Run all checks, deterministic snapshot smoke and goal-level RGP acceptance
     cmds:

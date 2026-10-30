@@ -354,20 +354,68 @@ impl Drop for StagedOutput {
     }
 }
 
-fn generate(repo: &Path, output: &Path, rev: &str) -> Result<()> {
-    let (manifest, blobs) = snapshot(repo, rev)?;
+// Choose a safe storage method by inspecting the actual ZIP metadata, not
+// by guessing compressibility from samples. A valid, repetitive source file
+// must not be rejected as a ZIP bomb by our own independent readers.
+// Ordinary archives retain their original compression and byte format.
+fn build_zip(
+    manifest_data: &[u8],
+    blobs: &BTreeMap<String, Vec<u8>>,
+    stored: &HashSet<String>,
+) -> Result<Vec<u8>> {
     let mut zip = ZipWriter::new(Cursor::new(Vec::new()));
     let options = FileOptions::default()
         .compression_method(CompressionMethod::Deflated)
         .last_modified_time(DateTime::default())
         .unix_permissions(0o644);
-    zip.start_file("manifest.json", options)?;
-    zip.write_all(&serde_json::to_vec(&manifest)?)?;
+    let manifest_method = if stored.contains("manifest.json") {
+        CompressionMethod::Stored
+    } else {
+        CompressionMethod::Deflated
+    };
+    zip.start_file("manifest.json", options.compression_method(manifest_method))?;
+    zip.write_all(manifest_data)?;
     for (name, contents) in blobs {
-        zip.start_file(name, options)?;
-        zip.write_all(&contents)?;
+        let method = if stored.contains(name) {
+            CompressionMethod::Stored
+        } else {
+            CompressionMethod::Deflated
+        };
+        zip.start_file(name, options.compression_method(method))?;
+        zip.write_all(contents)?;
     }
-    let compressed = zip.finish()?.into_inner();
+    Ok(zip.finish()?.into_inner())
+}
+
+fn excessive_compression(payload: &[u8]) -> Result<HashSet<String>> {
+    let mut archive = ZipArchive::new(Cursor::new(payload))?;
+    let mut out = HashSet::new();
+    for index in 0..archive.len() {
+        let member = archive.by_index(index)?;
+        if member.size() > std::cmp::max(4096, member.compressed_size().saturating_mul(MAX_RATIO)) {
+            out.insert(member.name().to_owned());
+        }
+    }
+    Ok(out)
+}
+
+fn generate(repo: &Path, output: &Path, rev: &str) -> Result<()> {
+    let (manifest, blobs) = snapshot(repo, rev)?;
+    let manifest_data = serde_json::to_vec(&manifest)?;
+    let compressed_first = build_zip(&manifest_data, &blobs, &HashSet::new())?;
+    let outliers = excessive_compression(&compressed_first)?;
+    let compressed = if outliers.is_empty() {
+        compressed_first
+    } else {
+        // At most one bounded retry. Stored entries cannot exceed the ZIP
+        // compression-ratio ceiling; never turn off anti-bomb checks.
+        let safe = build_zip(&manifest_data, &blobs, &outliers)?;
+        ensure!(
+            excessive_compression(&safe)?.is_empty(),
+            "RESOURCE_LIMIT: unsafe compression ratio after fallback"
+        );
+        safe
+    };
     ensure!(
         compressed.len() <= MAX_ARTIFACT,
         "RESOURCE_LIMIT: ZIP payload too large"
@@ -646,6 +694,24 @@ mod tests {
         assert!(is_sensitive("app/.env.local"));
         assert!(is_sensitive("cert.pem"));
         assert!(!is_sensitive("app/README.md"));
+    }
+
+    #[test]
+    fn high_compression_blob_uses_stored_without_disabling_reader_limits() {
+        let mut blobs = BTreeMap::new();
+        let repeated = vec![0u8; 1024 * 1024];
+        let key = format!("files/{}", sha(&repeated));
+        blobs.insert(key.clone(), repeated);
+        let first = build_zip(b"{}", &blobs, &HashSet::new()).unwrap();
+        let outliers = excessive_compression(&first).unwrap();
+        assert!(outliers.contains(&key));
+        let rebuilt = build_zip(b"{}", &blobs, &outliers).unwrap();
+        assert!(excessive_compression(&rebuilt).unwrap().is_empty());
+        let mut zip = ZipArchive::new(Cursor::new(rebuilt)).unwrap();
+        assert_eq!(
+            zip.by_name(&key).unwrap().compression(),
+            CompressionMethod::Stored
+        );
     }
 
     #[test]
