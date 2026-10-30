@@ -81,6 +81,25 @@ python3 scripts/gate_b_call_audit.py audit \
   --output /tmp/gate-b-tool-audit.json
 ```
 
+The same CI handoff now includes `final-gate-b-status.json`, produced
+by `scripts/gate_b_decision.py` from the **exact same** masked packet,
+empty verdict template, 19-slot receipt ledger, and pinned source-line
+and RGP checkpoints. It reports **HOLD**, precisely **24 missing
+verdicts** and **19 missing provider receipts** on the current pilot.
+This is the consolidated gate-readiness dossier, not another score.
+For a filled independent review and receipt file:
+
+```sh
+python3 scripts/gate_b_decision.py \
+  --packet packet.json --review reviewed.json \
+  --ledger tool-receipts.json \
+  --output final-gate-b-status.json
+```
+
+The result always requires independent human/provider verification;
+an offline script cannot verify the contents of its own untrusted
+reviewer declaration or receipt URLs.
+
 The audit **never emits GO**, even for 19 syntactically complete
 receipts. It marks complete submissions
 `TRACE_CANDIDATE_UNAUTHENTICATED` until an independent maintainer
