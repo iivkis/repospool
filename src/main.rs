@@ -422,9 +422,9 @@ fn excessive_compression<R: Read + Seek>(reader: R) -> Result<HashSet<String>> {
 const ZIP_MEMORY_BUDGET: usize = 32 * 1024 * 1024;
 
 fn cache_zip_in_memory(manifest_data: &[u8], blobs: &BTreeMap<String, Vec<u8>>) -> bool {
-    let raw = blobs
-        .values()
-        .fold(manifest_data.len(), |total, blob| total.saturating_add(blob.len()));
+    let raw = blobs.values().fold(manifest_data.len(), |total, blob| {
+        total.saturating_add(blob.len())
+    });
     // All ZIP member names are fixed 70-byte content hashes, except the
     // manifest. 256 bytes/member reserves ample header and DEFLATE slack.
     raw.saturating_add((blobs.len() + 1).saturating_mul(256)) <= ZIP_MEMORY_BUDGET
@@ -441,14 +441,19 @@ fn prepare_zip(
     blobs: &BTreeMap<String, Vec<u8>>,
 ) -> Result<PreparedZip> {
     if cache_zip_in_memory(manifest_data, blobs) {
-        let first = build_zip(Cursor::new(Vec::new()), manifest_data, blobs, &HashSet::new())?
-            .into_inner();
+        let first = build_zip(
+            Cursor::new(Vec::new()),
+            manifest_data,
+            blobs,
+            &HashSet::new(),
+        )?
+        .into_inner();
         let outliers = excessive_compression(Cursor::new(&first))?;
         if outliers.is_empty() {
             return Ok(PreparedZip::Memory(first));
         }
-        let safe = build_zip(Cursor::new(Vec::new()), manifest_data, blobs, &outliers)?
-            .into_inner();
+        let safe =
+            build_zip(Cursor::new(Vec::new()), manifest_data, blobs, &outliers)?.into_inner();
         ensure!(
             excessive_compression(Cursor::new(&safe))?.is_empty(),
             "RESOURCE_LIMIT: unsafe compression ratio after fallback"
@@ -565,9 +570,7 @@ fn generate(repo: &Path, output: &Path, rev: &str) -> Result<()> {
     let (staged, mut file) = StagedOutput::create(output)?;
     let artifact_size = match &prepared {
         PreparedZip::Memory(bytes) => stream_transport(Cursor::new(bytes.as_slice()), &mut file)?,
-        PreparedZip::File(archive) => {
-            stream_transport(fs::File::open(&archive.path)?, &mut file)?
-        }
+        PreparedZip::File(archive) => stream_transport(fs::File::open(&archive.path)?, &mut file)?,
     };
     file.sync_all()?;
     drop(file);
@@ -854,10 +857,7 @@ mod tests {
         let mut blobs = BTreeMap::new();
         blobs.insert("files/small".to_owned(), vec![1u8; 1024]);
         assert!(cache_zip_in_memory(b"{}", &blobs));
-        blobs.insert(
-            "files/large".to_owned(),
-            vec![1u8; ZIP_MEMORY_BUDGET],
-        );
+        blobs.insert("files/large".to_owned(), vec![1u8; ZIP_MEMORY_BUDGET]);
         assert!(!cache_zip_in_memory(b"{}", &blobs));
     }
 
@@ -865,12 +865,14 @@ mod tests {
     fn in_memory_and_disk_zip_are_byte_identical() -> Result<()> {
         let mut blobs = BTreeMap::new();
         blobs.insert("files/example".to_owned(), b"repeat-test-data".to_vec());
-        let memory = build_zip(
-            Cursor::new(Vec::new()), b"{}", &blobs, &HashSet::new(),
-        )?.into_inner();
+        let memory =
+            build_zip(Cursor::new(Vec::new()), b"{}", &blobs, &HashSet::new())?.into_inner();
         let (stage, file) = StagedOutput::create(Path::new("strategy-unit-test.rgp"))?;
         let file = build_zip(
-            BufWriter::with_capacity(1024, file), b"{}", &blobs, &HashSet::new(),
+            BufWriter::with_capacity(1024, file),
+            b"{}",
+            &blobs,
+            &HashSet::new(),
         )?;
         drop(file.into_inner()?);
         assert_eq!(memory, fs::read(&stage.path)?);
