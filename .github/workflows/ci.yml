@@ -96,6 +96,22 @@ jobs:
           cargo run -- verify --artifact "$RUNNER_TEMP/a.rgp" --repo .
           python3 python/rgp_reader.py --artifact "$RUNNER_TEMP/a.rgp" overview
           python3 python/rgp_reader.py --artifact "$RUNNER_TEMP/a.rgp" read --path README.md
+      - name: Stage 1 agent-owned RGP acceptance against pinned Git sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/stage1_acceptance.py \
+            --rust-cli target/debug/rgp \
+            --report "$RUNNER_TEMP/stage1-acceptance.json"
+          python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); assert r["status"]=="PASS" and len(r["tasks"])==3 and r["gate_b"]=="HOLD"' "$RUNNER_TEMP/stage1-acceptance.json"
+      - name: Publish sanitized Stage 1 acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage1-acceptance
+          path: ${{ runner.temp }}/stage1-acceptance.json
+          if-no-files-found: warn
+          retention-days: 14
 
   nix:
     name: Nix flake dev-shell evaluation
