@@ -110,6 +110,13 @@ records three real GitHub app ZIP downloads, independent RGP checksums
 and 13 pinned Git blob-identity comparisons; the operation history
 belongs to this Stage 1 delivery check, **not** the earlier Gate B pilot.
 
+A [Gate B review handoff](docs/GATE_B_REVIEW.md) now contains a
+**19-operation provider receipt ledger** (13 pinned GitHub fetches plus
+6 RGP setup/acquisition calls) and a single fail-closed decision dossier
+alongside the 24-answer masked reviewer packet. The original pilot's
+reported 53.85% call reduction is still an unauthenticated claim,
+not a licensed GO decision; see [Issue #25](https://github.com/iivkis/rgp/issues/25).
+
 ## Gate B: assistant-only source comparison (protocol v2)
 
 The **assistant in the active conversation** writes the code, checks the source
