@@ -77,14 +77,21 @@ tasks:
         python3 python/rgp_reader.py --artifact "$work/a.rgp" validate
         python3 python/rgp_reader.py --artifact "$work/a.rgp" read --path README.md
 
+  stage1:acceptance:
+    desc: Real pinned Git source tasks, Reader results, rejection cases and parallel generation
+    cmds:
+      - cargo build --locked
+      - python3 scripts/stage1_acceptance.py --rust-cli target/debug/rgp
+
   check:
-    desc: Run formatting, lint, all tests, and deterministic snapshot smoke test
+    desc: Run all checks, deterministic snapshot smoke and goal-level RGP acceptance
     cmds:
       - task: fmt:check
       - task: lint
       - task: test
       - task: contract:cross
       - task: smoke
+      - task: stage1:acceptance
 
   generate:
     desc: Generate a snapshot (override REPO and ARTIFACT as needed)
