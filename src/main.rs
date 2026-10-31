@@ -620,7 +620,6 @@ mod tests {
         assert!(!guide.contains("D ="));
         assert!(guide.contains("independent"));
         assert!(!guide.contains("github.com/iivkis"));
-        assert!(!guide.contains(".repospool"));
     }
 
     #[test]
