@@ -117,7 +117,7 @@ def run(binary: Path) -> dict:
                "entry-limit exclusions not disclosed")
         demand(summary["index_coverage"] == "not_indexed",
                "index coverage hallucinated at scale")
-        demand(raw.startswith(b"RGP/2.0\n"), "expected raw UTF-8 source transport")
+        demand(raw.startswith(b"RGP/2.1\n"), "expected raw UTF-8 source transport")
         source_sections = len(reader._files)
         demand(source_sections == CAP, "plaintext source section limit")
         # All paths are covered by the public paginated tree operation,
