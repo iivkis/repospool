@@ -25,7 +25,7 @@ MAX_CURSOR = 8192
 MAX_PATH_BYTES = 4096
 MAX_OVERVIEW_EXCLUSIONS = 100
 MAX_HEADER = 4096
-# Only legacy RGP/1.1 embeds this guide. New RGP/1.2 uses a .rgpmi sidecar.
+# Only legacy RGP/1.1 embeds the old guide. RGP/2.1 uses length-framed inline guidance.
 # Pin its digest here so the trusted Reader stays standalone in a sandbox.
 AGENT_GUIDE_SHA256 = "9585596e0f091096bac8c67163a50fb40ab789ee72f49089f80557acbec4740d"
 HEX = re.compile(r"[0-9a-f]{64}\Z")
