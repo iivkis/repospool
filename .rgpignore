@@ -14,6 +14,7 @@
 
 # Binary/encoded golden transports, which are especially wasteful in a text RGP.
 /tests/fixtures/
+/scripts/legacy_transport_fixture.py
 
 # Workflow and repository automation: easy to read from GitHub on demand.
 /.github/
