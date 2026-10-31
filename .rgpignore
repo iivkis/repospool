@@ -1,4 +1,4 @@
-# RGP/0.1.0 context filter; paths remain in Git.
+# RGP/0.2.0 context filter; paths remain in Git.
 # Research archives are not needed to understand the Rust generator.
 /benchmarks/
 /docs/AGENT_FIRST_PILOT.md

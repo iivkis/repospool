@@ -2,6 +2,7 @@ use anyhow::{anyhow, ensure, Context, Result};
 use clap::{Parser, Subcommand};
 
 mod lean;
+mod outline;
 mod rgpignore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -50,6 +51,7 @@ enum Commands {
 struct Manifest {
     schema_version: String,
     source_commit: String,
+    github_repo: Option<String>,
     input_tree_digest: String,
     files: Vec<FileEntry>,
     excluded: Vec<Exclusion>,
@@ -120,6 +122,27 @@ fn git(repo: &Path, args: &[&str]) -> Result<Vec<u8>> {
         String::from_utf8_lossy(&result.stderr)
     );
     Ok(result.stdout)
+}
+
+fn github_locator(root: &Path) -> Option<String> {
+    let origin = git_text(root, &["config", "--get", "remote.origin.url"]).ok()?;
+    let path = origin
+        .strip_prefix("https://github.com/")
+        .or_else(|| origin.strip_prefix("git@github.com:"))
+        .or_else(|| origin.strip_prefix("ssh://git@github.com/"))?
+        .trim_end_matches(".git");
+    let (owner, name) = path.split_once('/')?;
+    if [owner, name].iter().all(|component| {
+        !component.is_empty()
+            && component.len() <= 100
+            && component
+                .bytes()
+                .all(|ch| ch.is_ascii_alphanumeric() || b"._-".contains(&ch))
+    }) {
+        Some(format!("github:{owner}/{name}"))
+    } else {
+        None
+    }
 }
 
 fn git_text(repo: &Path, args: &[&str]) -> Result<String> {
@@ -210,8 +233,9 @@ fn snapshot(repo: &Path, rev: &str) -> Result<(Manifest, BTreeMap<String, Vec<u8
     let listing = git(root, &["ls-tree", "--full-tree", "-r", "-l", "-z", &commit])?;
     let ignored = rgpignore::ignored_paths(root, &commit, &listing)?;
     let mut manifest = Manifest {
-        schema_version: "1.0".into(),
+        schema_version: "2.0".into(),
         source_commit: commit,
+        github_repo: github_locator(root),
         input_tree_digest: String::new(),
         files: Vec::new(),
         excluded: Vec::new(),
@@ -408,7 +432,7 @@ fn verify(path: &Path) -> Result<Manifest> {
 
 fn verify_manifest(manifest: Manifest, blobs: BTreeMap<String, u64>) -> Result<Manifest> {
     ensure!(
-        manifest.schema_version == "1.0",
+        manifest.schema_version == "2.0",
         "UNSUPPORTED_FORMAT: manifest version"
     );
     ensure!(
@@ -549,6 +573,27 @@ mod tests {
     }
 
     #[test]
+    fn only_safe_github_origins_are_recorded() {
+        // The generator never embeds arbitrary remote URLs or credentials.
+        let root = std::env::temp_dir().join(format!("rgp-origin-{}", std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        assert!(Command::new("git").arg("-C").arg(&root).args(["init", "-q"]).status().unwrap().success());
+        assert!(github_locator(&root).is_none());
+        for (origin, expected) in [
+            ("git@github.com:owner/project.git", Some("github:owner/project")),
+            ("https://github.com/owner/project", Some("github:owner/project")),
+            ("https://user:token@github.com/owner/project", None),
+            ("https://gitlab.com/owner/project", None),
+            ("git@github.com:owner/a/b", None),
+        ] {
+            assert!(Command::new("git").arg("-C").arg(&root)
+                .args(["config", "remote.origin.url", origin]).status().unwrap().success());
+            assert_eq!(github_locator(&root).as_deref(), expected);
+        }
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn sensitive_names() {
         assert!(is_sensitive("app/.env.local"));
         assert!(is_sensitive("cert.pem"));
@@ -603,7 +648,8 @@ mod tests {
         };
         run_git(&["init", "-q"]);
         fs::write(repo.join("source.txt"), "Hello from another repository!\n").unwrap();
-        run_git(&["add", "source.txt"]);
+        fs::write(repo.join("lib.rs"), "pub fn hello() {\n    let value = 1;\n}\n").unwrap();
+        run_git(&["add", "source.txt", "lib.rs"]);
         run_git(&[
             "-c",
             "user.name=RGP Test",
@@ -617,12 +663,19 @@ mod tests {
         let output = output_path(&repo, None);
         generate(&repo, &output, "HEAD").unwrap();
         let verified = verify(&output).unwrap();
-        assert_eq!(verified.files.len(), 1);
-        assert_eq!(verified.files[0].path, "source.txt");
+        assert_eq!(verified.files.len(), 2);
+        assert_eq!(verified.files[0].path, "lib.rs");
         let artifact = fs::read_to_string(&output).unwrap();
-        assert!(artifact.starts_with("RGP/0.1.0\n"));
+        assert!(artifact.starts_with("RGP/0.2.0\n"));
         assert!(artifact.contains("FILE\tsource.txt\nHello from another repository!\n"));
-        assert!(artifact.contains("This guide describes the format, not the source repository."));
+        assert!(artifact.contains("D\tlib.rs\t1\tfn\thello"));
+        let index = artifact.lines().find(|line| line.starts_with("F\tlib.rs\t")).unwrap();
+        let fields: Vec<_> = index.split('\t').collect();
+        let at: usize = fields[3].parse().unwrap();
+        assert_eq!(artifact.lines().nth(at - 1), Some("pub fn hello() {"));
+        assert_eq!(fields[4], "3");
+        assert_eq!(verified.source_commit.len(), 40);
+        assert!(artifact.contains("The guide describes only the format"));
         fs::remove_dir_all(&repo).unwrap();
     }
 

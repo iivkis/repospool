@@ -1,29 +1,22 @@
 # RGP product roadmap
 
-**Target:** publish an installable Nix flake providing the Rust command
-`rgp generate .`. A user can add `github:iivkis/rgp` as a flake input and
-receive one `REPO_CONTEXT.rgp` file to hand directly to a coding agent.
+**Goal:** `rgp generate .` using an installable Nix flake, producing one
+source-context artifact usable directly by an agent.
 
-## Product boundary
+## RGP/0.2.0
+- Minimal repository locator (optional) and one Git commit ID, not per-file hashes
+- Exact RGP line coordinates for source sections and corresponding Git source lines
+- Bounded lexical symbol outline (Rust, Python, Go, JavaScript, TypeScript)
+- Important excluded-path notices, including omitted CI and lock files
+- Versioned deterministic Rust generator and structural verifier
+- No Python Reader, ZIP, MCP, database, semantic graph or remote runtime
 
-- Generator: Rust binary with deterministic, versioned text output.
-- Distribution: Nix package and runnable app, usable from another flake.
-- Artifact: universal guide, file index and original UTF-8 source bodies.
-- Consumer: coding agent reads **one file**. No Python scripts, MCP server,
-  Reader installation, ZIP delivery or extra local workspace required.
-- Provenance: independently trusted Git revision and artifact digest remain
-  external; the text is read-only source context, not a trust anchor.
+## Next validation
+Compare GitHub-only, original 0.1.0 and navigable 0.2.0 on the same
+source-editing tasks. Measure correct source selection, connector calls,
+tokens, time and successful verified edits. A file format improvement alone
+is not an established assistant quality gain. Gate B remains HOLD pending
+independent evaluations.
 
-## Acceptance
-
-1. `nix build .#rgp` installs the binary, including access to Git at runtime.
-2. `rgp generate .` creates `REPO_CONTEXT.rgp` in the target repository.
-3. Running twice on unchanged committed source produces identical bytes.
-4. Rust validates the output and its source boundaries.
-5. A coding agent can navigate the artifact's header, index and FILE sections
-   with ordinary file-reading capabilities, without any companion scripts.
-6. Evaluate source-understanding tasks against a GitHub-only baseline.
-   **Gate B remains HOLD** until independent task results justify a change.
-
-Older ZIP, Python Reader, MCP, sandbox and performance experiments are
-historical; their scripts are removed from this product's runtime and CI.
+Source locator and revision are hints; the agent must verify provenance
+and GitHub permissions independently before modifying a live repository.
