@@ -93,7 +93,8 @@ def run(artifact: Path, source_repo: Path, repository: str, plan: Path) -> dict:
         assert {t["name"] for t in tools} == {
             "rgp_status", "rgp_tree", "rgp_search", "rgp_read", "rgp_context"}
         status = client.tool("rgp_status")["overview"]
-        assert status["source_commit"] == repo["commit"]
+        assert status["source_commit"] in (None, repo["commit"])
+        # RGP/3.0 leaves authenticity to the pinned Git source comparisons.
         assert status["snapshot_complete"]
         assert status["file_count"] > 0
         assert status["index_coverage"] == "not_indexed"
@@ -104,7 +105,7 @@ def run(artifact: Path, source_repo: Path, repository: str, plan: Path) -> dict:
             context = client.tool("rgp_context", {
                 "terms": terms, "max_bytes": 24_000, "max_files": 4
             })
-            assert context["source_commit"] == repo["commit"]
+            assert context["source_commit"] in (None, repo["commit"])
             assert not context["terms_without_source"]
             assert not context["search_capped_terms"]
             actual_paths = {x["path"] for x in context["sources"]}
