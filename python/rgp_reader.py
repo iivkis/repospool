@@ -168,7 +168,7 @@ def decode_transport(source: bytes) -> bytes:
     return payload
 
 
-def decode_plain(source: bytes) -> tuple[bytes, dict[str, int], dict[str, tuple[int, int]]]:
+def decode_plain(source: bytes) -> tuple[bytes, dict[str, int], dict[str, tuple[int, int]], dict | None]:
     """Read exact UTF-8 source spans from RGP/2.0 or self-contained 2.1."""
     _require(len(source) <= 192 * 1024 * 1024, "RESOURCE_LIMIT", "RGP/2.0 too large")
     try:
@@ -232,10 +232,10 @@ def decode_plain(source: bytes) -> tuple[bytes, dict[str, int], dict[str, tuple[
                  "TRUNCATED_ARTIFACT", "embedded guide")
         _require(_digest(raw_guide) == embedded["guide_sha256"],
                  "HASH_MISMATCH", "embedded guide")
-        _require(b"\\x00" not in raw_guide, "UNSUPPORTED_FORMAT", "guide NUL")
+        _require(b"\x00" not in raw_guide, "UNSUPPORTED_FORMAT", "guide NUL")
         embedded["instructions"] = raw_guide.decode("utf-8")
         pos += embedded["guide_length"]
-        _require(source[pos:pos + 1] == b"\\n", "TRUNCATED_ARTIFACT", "guide delimiter")
+        _require(source[pos:pos + 1] == b"\n", "TRUNCATED_ARTIFACT", "guide delimiter")
         pos += 1
     manifest_bytes = source[pos:pos + count]
     _require(len(manifest_bytes) == count, "TRUNCATED_ARTIFACT", "plain manifest")
