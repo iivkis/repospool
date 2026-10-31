@@ -16,7 +16,7 @@ def digest(b):
     return hashlib.sha256(b).hexdigest()
 
 
-def build_plain(files=None):
+def build_plain(files=None, excluded=None):
     if files is None:
         files = {"src/example.py": b'print("END RGP\\n--\\nFILE\\t")\r\n',
                  "src/unicode.txt": "Привет, мир!\n".encode("utf-8")}
@@ -31,7 +31,7 @@ def build_plain(files=None):
                   entry["mode"].encode() + b"\0" + bytes.fromhex(entry["sha256"]))
     manifest = {"schema_version": "1.0", "source_commit": "a" * 40,
                 "input_tree_digest": th.hexdigest(), "files": entries,
-                "excluded": [], "index_coverage": "not_indexed",
+                "excluded": excluded or [], "index_coverage": "not_indexed",
                 "graph_coverage": "not_indexed"}
     manifest_bytes = json.dumps(manifest, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     raw_rgp = (f"RGP/2.0\nmanifest_length={len(manifest_bytes)}\n"
@@ -76,6 +76,23 @@ class PlainReaderTest(unittest.TestCase):
             with self.subTest(error=error):
                 with self.assertRaisesRegex(RgpError, error):
                     Reader(broken)
+
+    def test_rgpignore_explicitly_excludes_without_reducing_scope_completeness(self):
+        excluded = [{"path": "benchmarks/old.md", "reason": "rgpignore"}]
+        raw = build_plain(
+            {".rgpignore": b"/benchmarks/\\n", "src/code.py": b"answer = 42\\n"},
+            excluded=excluded,
+        )
+        reader = Reader(raw)
+        report = reader.overview()
+        self.assertTrue(reader.validate()["valid"])
+        self.assertTrue(report["snapshot_complete"])
+        self.assertEqual(report["intentionally_ignored_files"], 1)
+        self.assertEqual(report["excluded_by_reason"]["rgpignore"], 1)
+        self.assertEqual(report["excluded_files"], 0)
+        self.assertEqual(reader.read_bytes(".rgpignore"), b"/benchmarks/\\n")
+        with self.assertRaisesRegex(RgpError, "PARTIAL_SNAPSHOT"):
+            reader.read_bytes("benchmarks/old.md")
 
     def test_invalid_utf8_fails(self):
         raw = build_plain()
