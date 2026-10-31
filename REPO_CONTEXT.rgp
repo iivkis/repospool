@@ -1,10 +1,10 @@
 RGP/2.1
-source_commit=3f0544dcec98b4ba937757a65435e9715ffb5e92
+source_commit=7c8270b84d99e3f9478756992347cd7cd25dda14
 snapshot_complete=true
 guide_length=2767
 guide_sha256=5cffc222e892e8c5b04d6939fb6c44bea01844ce9727f0cf4788e37d60b90e9a
 manifest_length=29724
-manifest_sha256=17b8108ce05bd155b888415c3d5a7d3ce939c3ab17357557d5c56f297fc8f5e2
+manifest_sha256=551190cf4a631025fbcb82f8a7021cdcfc9f8ac5936eb3f935ec6fc039606c89
 --
 # RGP/2.1 — agent quickstart (embedded directly in the RGP)
 
@@ -27,8 +27,8 @@ The manifest has source provenance, index and graph coverage; source content is 
 
 {
   "schema_version": "1.0",
-  "source_commit": "3f0544dcec98b4ba937757a65435e9715ffb5e92",
-  "input_tree_digest": "4997cd858b31dbde7613f5a9ca73b0e4d9c8d273ca6bdf1660f42edbdf51dceb",
+  "source_commit": "7c8270b84d99e3f9478756992347cd7cd25dda14",
+  "input_tree_digest": "e7e0107047e22973cb964a0133ac9aa6e192e2e48479f5a246369c745719718e",
   "files": [
     {
       "path": ".gitignore",
@@ -610,9 +610,9 @@ The manifest has source provenance, index and graph coverage; source content is 
       "path": "tests/test_plain_reader.py",
       "mode": "100644",
       "kind": "file",
-      "size": 7103,
-      "sha256": "862919b25e793f8bebf676db24dae2716783f95565dab2cea0a1517260ee122c",
-      "blob": "files/862919b25e793f8bebf676db24dae2716783f95565dab2cea0a1517260ee122c",
+      "size": 7128,
+      "sha256": "f278e8adc24cf903a8febd691c9672da00c7d3f4998a1fc8a83bc31b3901912e",
+      "blob": "files/f278e8adc24cf903a8febd691c9672da00c7d3f4998a1fc8a83bc31b3901912e",
       "status": "included"
     },
     {
@@ -10659,12 +10659,13 @@ class ManifestContractTest(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main()
 
-FILE	"tests/test_plain_reader.py"	7103	862919b25e793f8bebf676db24dae2716783f95565dab2cea0a1517260ee122c
+FILE	"tests/test_plain_reader.py"	7128	f278e8adc24cf903a8febd691c9672da00c7d3f4998a1fc8a83bc31b3901912e
 """Readable RGP/2.0 independent test vectors (no ZIP, Base64 or Rust dependency)."""
 import hashlib
 import json
 import sys
 import unittest
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
