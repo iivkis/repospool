@@ -37,7 +37,7 @@ jobs:
           target/debug/rgp generate . --output "$RUNNER_TEMP/b.rgp"
           cmp "$RUNNER_TEMP/a.rgp" "$RUNNER_TEMP/b.rgp"
           target/debug/rgp verify --artifact "$RUNNER_TEMP/a.rgp" --repo .
-          test "$(head -n 1 "$RUNNER_TEMP/a.rgp")" = "RGP/0.1.0"
+          test "$(head -n 1 "$RUNNER_TEMP/a.rgp")" = "RGP/0.2.0"
 
   nix:
     name: Nix package build and external-style invocation
