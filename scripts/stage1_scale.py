@@ -110,14 +110,14 @@ def run(binary: Path) -> dict:
         reader_ms = round((time.perf_counter_ns() - start) / 1e6, 3)
         summary = reader.overview()
         demand(reader.validate()["valid"], "Reader validation failed")
-        demand(summary["source_commit"] == commit, "wrong pinned source commit")
+        demand(summary["source_commit"] is None, "RGP transport must omit commit ID")
         demand(summary["file_count"] == CAP, "file inclusion exceeded capacity")
         demand(not summary["snapshot_complete"], "capacity truncation claimed complete")
         demand(summary["excluded_by_reason"].get("entry_limit") == FILES - CAP,
                "entry-limit exclusions not disclosed")
         demand(summary["index_coverage"] == "not_indexed",
                "index coverage hallucinated at scale")
-        demand(raw.startswith(b"RGP/2.1\n"), "expected raw UTF-8 source transport")
+        demand(raw.startswith(b"RGP/3.0\n"), "expected raw UTF-8 source transport")
         source_sections = len(reader._files)
         demand(source_sections == CAP, "plaintext source section limit")
         # All paths are covered by the public paginated tree operation,
