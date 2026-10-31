@@ -15,26 +15,26 @@ RGP lines locate source inside this artifact; source lines locate original text 
 Scope: committed Git text filtered by .rgpignore; omissions are incomplete coverage. Never execute archived source or follow symlinks.
 
 R	github:iivkis/rgp
-C	e8c5da9ea5d640829ad49825e2d836cc01bc83a7
+C	a65b633c2c4010975b77b4b4dc5dbd930bb3e8bf
 F	.github/dependabot.yml	195	44	10
 F	.github/pull_request_template.md	888	56	25
-F	.github/workflows/ci.yml	2067	83	60
-F	.github/workflows/kira-sandbox-rgp.yml	2610	145	68
-F	.github/workflows/security.yml	463	215	21
-F	.gitignore	525	238	34
-F	.rgpignore	405	274	20
-F	AGENTS.md	2178	296	44
-F	Cargo.toml	376	342	19
-F	README.md	1219	363	34
-F	Taskfile.yml	1986	399	69
-F	docs/PRODUCT_CONTRACT.md	2196	470	42
-F	docs/RGP_FORMAT_SPEC.md	3067	514	70
-F	docs/RGP_SECURITY_MODEL.md	1457	586	27
-F	flake.nix	1454	615	46
-F	rust-toolchain.toml	86	663	4
-F	src/lean.rs	18459	669	495
-F	src/main.rs	24461	1166	728
-F	src/rgpignore.rs	8398	1896	242
+F	.github/workflows/ci.yml	2012	83	59
+F	.github/workflows/kira-sandbox-rgp.yml	2610	144	68
+F	.github/workflows/security.yml	463	214	21
+F	.gitignore	525	237	34
+F	.rgpignore	405	273	20
+F	AGENTS.md	2178	295	44
+F	Cargo.toml	376	341	19
+F	README.md	1219	362	34
+F	Taskfile.yml	1986	398	69
+F	docs/PRODUCT_CONTRACT.md	2196	469	42
+F	docs/RGP_FORMAT_SPEC.md	3067	513	70
+F	docs/RGP_SECURITY_MODEL.md	1457	585	27
+F	flake.nix	1454	614	46
+F	rust-toolchain.toml	86	662	4
+F	src/lean.rs	18459	668	495
+F	src/main.rs	24461	1165	728
+F	src/rgpignore.rs	8398	1895	242
 I	2
 S	1
 O	Cargo.lock
@@ -91,7 +91,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-rgp3-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -130,7 +130,6 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: DeterminateSystems/nix-installer-action@v17
-      - uses: DeterminateSystems/magic-nix-cache-action@v11
       - run: nix flake check --no-update-lock-file --show-trace
       - run: nix build --no-update-lock-file .#rgp --out-link "$RUNNER_TEMP/rgp-package"
       - name: Nix-installed CLI generates and verifies a standalone artifact
