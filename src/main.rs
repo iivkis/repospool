@@ -577,17 +577,34 @@ mod tests {
         // The generator never embeds arbitrary remote URLs or credentials.
         let root = std::env::temp_dir().join(format!("rgp-origin-{}", std::process::id()));
         fs::create_dir_all(&root).unwrap();
-        assert!(Command::new("git").arg("-C").arg(&root).args(["init", "-q"]).status().unwrap().success());
+        assert!(Command::new("git")
+            .arg("-C")
+            .arg(&root)
+            .args(["init", "-q"])
+            .status()
+            .unwrap()
+            .success());
         assert!(github_locator(&root).is_none());
         for (origin, expected) in [
-            ("git@github.com:owner/project.git", Some("github:owner/project")),
-            ("https://github.com/owner/project", Some("github:owner/project")),
+            (
+                "git@github.com:owner/project.git",
+                Some("github:owner/project"),
+            ),
+            (
+                "https://github.com/owner/project",
+                Some("github:owner/project"),
+            ),
             ("https://user:token@github.com/owner/project", None),
             ("https://gitlab.com/owner/project", None),
             ("git@github.com:owner/a/b", None),
         ] {
-            assert!(Command::new("git").arg("-C").arg(&root)
-                .args(["config", "remote.origin.url", origin]).status().unwrap().success());
+            assert!(Command::new("git")
+                .arg("-C")
+                .arg(&root)
+                .args(["config", "remote.origin.url", origin])
+                .status()
+                .unwrap()
+                .success());
             assert_eq!(github_locator(&root).as_deref(), expected);
         }
         fs::remove_dir_all(root).unwrap();
@@ -648,7 +665,11 @@ mod tests {
         };
         run_git(&["init", "-q"]);
         fs::write(repo.join("source.txt"), "Hello from another repository!\n").unwrap();
-        fs::write(repo.join("lib.rs"), "pub fn hello() {\n    let value = 1;\n}\n").unwrap();
+        fs::write(
+            repo.join("lib.rs"),
+            "pub fn hello() {\n    let value = 1;\n}\n",
+        )
+        .unwrap();
         run_git(&["add", "source.txt", "lib.rs"]);
         run_git(&[
             "-c",
@@ -669,7 +690,10 @@ mod tests {
         assert!(artifact.starts_with("RGP/0.2.0\n"));
         assert!(artifact.contains("FILE\tsource.txt\nHello from another repository!\n"));
         assert!(artifact.contains("D\tlib.rs\t1\tfn\thello"));
-        let index = artifact.lines().find(|line| line.starts_with("F\tlib.rs\t")).unwrap();
+        let index = artifact
+            .lines()
+            .find(|line| line.starts_with("F\tlib.rs\t"))
+            .unwrap();
         let fields: Vec<_> = index.split('\t').collect();
         let at: usize = fields[3].parse().unwrap();
         assert_eq!(artifact.lines().nth(at - 1), Some("pub fn hello() {"));
