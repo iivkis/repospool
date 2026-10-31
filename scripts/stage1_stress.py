@@ -47,22 +47,26 @@ def make_source(repo: Path, profile: str) -> tuple[str, dict[str, bytes]]:
     insist(profile in PROFILES, "unrecognized stress profile")
     call("git", "init", "-q", str(repo))
     originals: dict[str, bytes] = {}
+
+    def noise(seed: bytes, size: int) -> bytes:
+        # Deterministic ASCII high-entropy data, not binary ZIP fixtures.
+        return hashlib.shake_256(seed).digest(size // 2 + size % 2).hex().encode()[:size]
+
     if profile == "many-files":
         for index in range(2000):
             path = f"src/group-{index // 200:02d}/module-{index:04d}.txt"
-            data = hashlib.shake_256(f"RGP-stress-file-{index}".encode()).digest(1024)
+            data = noise(f"RGP-stress-file-{index}".encode(), 1024)
             originals[path] = data
     elif profile == "incompressible":
-        originals["data/incompressible.bin"] = hashlib.shake_256(
-            b"RGP-incompressible-12MiB").digest(12 * MIB)
+        originals["data/incompressible.txt"] = noise(
+            b"RGP-incompressible-12MiB", 12 * MIB)
     elif profile == "compressible":
         originals["data/compressible.txt"] = (b"A" * 4095 + bytes([10])) * 3072
     elif profile == "disk-fallback":
-        # 36 MiB of uncompressible real Git blobs necessarily exceeds the
-        # 32 MiB bounded in-memory ZIP budget and exercises file staging.
+        # 36 MiB of readable high-entropy source exercises disk staging.
         for index in range(3):
-            originals[f"data/disk-{index}.bin"] = hashlib.shake_256(
-                f"RGP-disk-fallback-{index}".encode()).digest(12 * MIB)
+            originals[f"data/disk-{index}.txt"] = noise(
+                f"RGP-disk-fallback-{index}".encode(), 12 * MIB)
     else:
         # Exceed the documented per-file cap by one byte: must be EXCLUDED,
         # not mislabeled as a complete snapshot or a successful read.
@@ -106,11 +110,8 @@ def run(profile: str, binary: Path) -> dict:
         overview = reader.overview()
         insist(overview["source_commit"] == commit and reader.validate()["valid"],
                "source revision or RGP integrity mismatch")
-        stored = []
-        with zipfile.ZipFile(io.BytesIO(decode_transport(first_bytes))) as archive:
-            for info in archive.infolist():
-                if info.filename.startswith("files/") and info.compress_type == zipfile.ZIP_STORED:
-                    stored.append(info.filename)
+        insist(first_bytes.startswith(b"RGP/2.0\n"), "expected readable transport")
+        insist(b"\nFILE\t" in first_bytes, "missing plaintext file sections")
 
         observed_source_sha = {}
         for path, expected in source.items():
@@ -144,14 +145,12 @@ def run(profile: str, binary: Path) -> dict:
                     break
             insist(paths == set(source), "many-file pagination lost paths")
         if profile == "compressible":
-            insist(len(stored) == 1, "highly compressible blob not stored safely")
             insist(overview["snapshot_complete"], "compressible valid source marked partial")
         if profile in ("incompressible", "disk-fallback"):
-            insist(not stored, "incompressible data unnecessarily stored")
             insist(overview["snapshot_complete"], "incompressible valid source marked partial")
         if profile == "disk-fallback":
             insist(overview["file_count"] == 3, "disk fallback lost source files")
-            insist(len(first_bytes) > 32 * MIB, "did not exercise large ZIP transport")
+            insist(len(first_bytes) > 32 * MIB, "did not exercise large plaintext transport")
         if profile == "oversized":
             insist(not overview["snapshot_complete"], "oversized source misrepresented as complete")
             insist(overview["excluded_by_reason"].get("size_limit") == 1,
@@ -174,7 +173,7 @@ def run(profile: str, binary: Path) -> dict:
             "rgp_bytes": len(first_bytes), "file_count": overview["file_count"],
             "excluded_by_reason": overview["excluded_by_reason"],
             "snapshot_complete": overview["snapshot_complete"],
-            "stored_blob_count": len(stored),
+            "stored_blob_count": 0,
             "verified_included_source_count": len(observed_source_sha),
             "timings": {"generate_first": first_metrics,
                         "generate_second": second_metrics,
