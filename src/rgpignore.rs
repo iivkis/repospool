@@ -21,7 +21,9 @@ impl ScratchRepo {
                 Err(error) => return Err(error.into()),
             }
         }
-        Err(anyhow!("RESOURCE_LIMIT: no unique ignore scratch directory"))
+        Err(anyhow!(
+            "RESOURCE_LIMIT: no unique ignore scratch directory"
+        ))
     }
 }
 
@@ -89,7 +91,10 @@ pub(super) fn ignored_paths(root: &Path, commit: &str, listing: &[u8]) -> Result
         .stderr(Stdio::piped())
         .spawn()
         .context("git check-ignore spawn failed")?;
-    let mut input = child.stdin.take().ok_or_else(|| anyhow!("missing ignore stdin"))?;
+    let mut input = child
+        .stdin
+        .take()
+        .ok_or_else(|| anyhow!("missing ignore stdin"))?;
     // Concurrent I/O avoids a pipe deadlock on large source trees.
     let writer = std::thread::spawn(move || input.write_all(&paths));
     let result = child.wait_with_output()?;
@@ -104,7 +109,10 @@ pub(super) fn ignored_paths(root: &Path, commit: &str, listing: &[u8]) -> Result
     let mut ignored = HashSet::new();
     for raw in result.stdout.split(|b| *b == 0).filter(|p| !p.is_empty()) {
         let path = std::str::from_utf8(raw).context("UNSAFE_PATH: invalid ignore match")?;
-        ensure!(permitted.contains(path), "UNSUPPORTED_FORMAT: unexpected ignore result");
+        ensure!(
+            permitted.contains(path),
+            "UNSUPPORTED_FORMAT: unexpected ignore result"
+        );
         ignored.insert(path.to_owned());
     }
     Ok(ignored)
