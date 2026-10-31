@@ -80,7 +80,7 @@ def main() -> int:
                     ], check=True, stdout=subprocess.DEVNULL)
                 reader = Reader(optimized)
                 overview = reader.overview()
-                if not reader.validate()["valid"] or overview["source_commit"] != commit:
+                if not reader.validate()["valid"] or overview["source_commit"] is not None:
                     raise AssertionError(f"invalid source snapshot: {profile}")
                 if profile == "scale-50k":
                     if overview["snapshot_complete"] or overview["file_count"] != CAP:
