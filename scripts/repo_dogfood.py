@@ -18,9 +18,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
 from rgp_reader import Reader, RgpError, _require  # noqa: E402
+from rgpmi import validate as validate_sidecar  # noqa: E402
 from rgp_sandbox import export_workspace  # noqa: E402
 
 NAME = "REPO_CONTEXT.rgp"
+SIDECAR = "REPO_CONTEXT.rgpmi"
 
 
 def git(repo: Path, *args: str) -> subprocess.CompletedProcess[bytes]:
@@ -57,6 +59,15 @@ def check(repo: Path, artifact: Path | None = None) -> dict:
              "local REPO_CONTEXT.rgp differs from committed Git blob")
     reader = Reader(actual)
     overview = reader.overview()
+    # New transports require a Git-tracked sidecar. Legacy RGP/1.1 may
+    # temporarily remain on main until the publication bot refreshes it.
+    if actual.startswith(b"RGP/1.2\n"):
+        metadata = repo / SIDECAR
+        _require(metadata.is_file() and not metadata.is_symlink(),
+                 "UNSUPPORTED_FORMAT", "RGP-MI sidecar missing")
+        _require(metadata.read_bytes() == checked_git(repo, "show", f"{head}:{SIDECAR}"),
+                 "HASH_MISMATCH", "sidecar differs from committed Git blob")
+        validate_sidecar(metadata, artifact, overview["source_commit"])
     _require(overview["snapshot_complete"], "PARTIAL_SNAPSHOT",
              "in-repository source snapshot is not complete")
     source = overview["source_commit"]
@@ -64,22 +75,22 @@ def check(repo: Path, artifact: Path | None = None) -> dict:
     ancestor = git(repo, "merge-base", "--is-ancestor", source, head)
     _require(ancestor.returncode == 0, "STALE_SNAPSHOT",
              "RGP source commit is not an ancestor of checkout HEAD")
-    # The tracked RGP itself is excluded from the input tree digest. Commit
-    # B may add/update only this file after source commit A. All *other*
+    # The tracked RGP and its metadata are excluded from the input digest.
+    # Publication may change only these files after source commit A. Other
     # changes (even docs and tests) make the snapshot stale.
     diff = git(repo, "diff", "--quiet", source, head,
-               "--", ".", f":(exclude){NAME}")
+               "--", ".", f":(exclude){NAME}", f":(exclude){SIDECAR}")
     _require(diff.returncode == 0, "STALE_SNAPSHOT",
              "source files differ from the RGP commit; refresh the snapshot")
     # Local working-tree modifications are not represented by a pinned Git
     # snapshot, even when committed HEAD is source-equivalent. Refuse to
     # present the snapshot as a complete view of modified agent work.
     worktree = git(repo, "diff", "--quiet", "HEAD",
-                   "--", ".", f":(exclude){NAME}")
+                   "--", ".", f":(exclude){NAME}", f":(exclude){SIDECAR}")
     _require(worktree.returncode == 0, "STALE_SNAPSHOT",
              "tracked working-tree files differ from HEAD")
     staged = git(repo, "diff", "--cached", "--quiet", "HEAD",
-                 "--", ".", f":(exclude){NAME}")
+                 "--", ".", f":(exclude){NAME}", f":(exclude){SIDECAR}")
     _require(staged.returncode == 0, "STALE_SNAPSHOT",
              "staged source changes are not in the RGP")
     untracked = checked_git(repo, "ls-files", "--others", "--exclude-standard", "-z")
