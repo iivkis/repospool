@@ -25,6 +25,10 @@ Add `rgp.url = "github:iivkis/rgp";` to flake inputs and
 nix run github:iivkis/rgp -- generate .
 ```
 
+If a project has non-obvious architecture constraints, its maintainers can
+record a few verified, task-relevant invariants in the existing README or
+AGENTS.md. RGP preserves these as ordinary source, never inferred metadata.
+
 Scope is selected by committed `.rgpignore`. Optional GitHub locator and one
 Git commit ID are **untrusted navigation hints**, not proof of authenticity.
 Verify provenance independently before making repository changes.
