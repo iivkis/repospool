@@ -1,62 +1,32 @@
-# Stage 1: bounded-memory deterministic RGP production
+# Память и размер при генерации RGP/3.0
 
-A single 50,000-member RGP/1.0 artifact can occupy tens of megabytes,
-and the previous generator retained the complete ZIP, encoded Base64,
-transport text and source blob map concurrently. See the measured
-[paired memory A/B evidence](../benchmarks/stage1/MEMORY_AB_2026-10-31.md).
+Нынешний генератор выпускает **обычный UTF-8** с компактным
+индексом и оригинальными исходниками. Никаких ZIP/DEFLATE,
+Base64, промежуточной декомпрессии и встроенных SHA в самом
+артефакте нет. Это меняет баланс затрат: размер исходников не
+сжимается, но модель не получает длинную Base64-строку.
 
-The producer now stages the ZIP in a unique temporary file, retains
-the existing compression-ratio checks and deterministic
-`ZIP_STORED` fallback, hashes completed ZIP bytes in bounded chunks,
-and writes Base64 in **57-byte input / 76-character output** lines
-using a **64 KiB output buffer**. Source blob buffers are released
-before the final Rust verification. Staging is created with
-`create_new`, cleaned automatically after ordinary errors, and
-the completed RGP replaces its destination only after verification.
-No additional dependencies and no RGP/1.0 format change.
-
-## What the real experiment established
-
-Four separate old/new tests used *identical pinned Git source commits*
-and both separately compiled Rust binaries on the same CI runner.
-The generated RGP bytes matched **exactly** in all cases. Observed
-generator peak RSS was **38% lower** for 2,000 files and **about 52%
-lower** for both 12MiB blobs and the 50k member case.
-
-This is a **memory-for-I/O tradeoff**. At 50k members, paired
-generation time was **2.49 s before / 5.46 s after**, so the large-tree
-case is materially slower. The implementation makes no general speedup
-claim. Source checkout, connector delivery and inference tokens were
-not measured. Temporary ZIP files require disk space and increase
-filesystem activity. The original limits for payload size, expansion,
-entry count and anti-bomb ratios remain in force.
-
-## Reproduce the paired comparison
-
-The [paired workflow](../.github/workflows/stage1-memory-ab.yml)
-builds the PR baseline and candidate separately and runs:
+[Скрипт парного измерения](../scripts/stage1_memory_ab.py)
+и [CI workflow](../.github/workflows/stage1-memory-ab.yml)
+по-прежнему пригодны для **same-format** сравнений фиксированных
+Git-репозиториев по времени и пиковой памяти. Два разных формата
+нельзя объявлять сопоставимым A/B тестом генератора без явной
+коррекции целей и стоимости.
 
 ```sh
 python3 scripts/stage1_memory_ab.py \
-  --baseline /path/to/old/rgp \
-  --candidate /path/to/new/rgp \
+  --baseline /path/to/baseline/rgp \
+  --candidate /path/to/candidate/rgp \
   --report /tmp/rgp-memory-ab.json
 ```
 
-The CLI self-generates fixed synthetic source commits, runs Rust
-verification, Python Reader checks and Git byte comparisons. Only
-the measured JSON is uploaded. The 50k acceptance workflow separately
-covers the full 250-page Reader path traversal.
+Ранний отчёт историческое парное измерение (доступно в Git history)
+описывает **исторические ZIP-варианты**, не RGP/3.0. Его
+проценты по RSS, скорости и числу ZIP-элементов нельзя переносить
+на новый текстовый транспорт. Историю экспериментов сохраняет Git.
 
-Gate B **HOLD** persists independently of memory improvements.
-
-## Follow-up: faster adaptive ZIP (PR #41)
-
-[Adaptive ZIP selection](STAGE1_ADAPTIVE_ZIP.md) trades a conservative
-32 MiB *estimated* ZIP memory budget for fewer disk seeks in small-blob
-source trees. The [paired five-profile evidence](../benchmarks/stage1/ADAPTIVE_ZIP_2026-10-31.md)
-reports a 50k-file speed improvement with a measured **16.65%**
-peak RSS increase relative to the previous disk-backed baseline.
-The earlier measurements above are retained for their actual
-historical A/B context, not overwritten or treated as identical
-runs.
+**Нынешняя цель измерений:** сколько контекста модель реально
+получает через GitHub line-range, сколько токенов и вызовов
+экономит по сравнению с прямыми GitHub-файлами, и насколько
+это влияет на правильность изменения проекта. Без такого опыта
+Gate B остаётся **HOLD**.

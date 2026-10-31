@@ -1,5 +1,13 @@
 # Stage 1: verified Actions delivery and source-answer proof
 
+> **Исторический материал:** этот отчёт описывает более ранние
+> форматы и/или измерения; для текущего RGP/3.0 см.
+> [канонический roadmap](PRODUCT_ROADMAP.md) и
+> [актуальное техническое ревью](REVIEW_2026-10-31.md).
+> Его ZIP/JSON/внутренние SHA выводы не переносятся на RGP/3.0
+> без повторного измерения и внешней проверки по Git.
+
+
 This is the Stage 1 delivery counterpart to the
 [pinned-corpus functional test](STAGE1_CORPUS_DIAGNOSTIC.md) and the
 [resource stress test](STAGE1_STRESS.md).
@@ -92,7 +100,7 @@ Actions artifact ZIPs** through the connected GitHub app, verified
 their RGP SHA-256 against the committed checkpoint, and independently
 matched all 13 frozen reference Git blob identifiers. The observed
 artifact IDs, hashes, source commitments, limits and run links are
-in [CONNECTED_DELIVERY_2026-10-31.md](../benchmarks/stage1/CONNECTED_DELIVERY_2026-10-31.md).
+in исторический отчёт по Actions ZIP (доступен в Git history).
 This is distinct from the workflow's simulated local ZIP replay.
 
 ## Gate B cannot be auto-approved

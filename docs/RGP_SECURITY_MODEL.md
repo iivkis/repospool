@@ -1,11 +1,70 @@
-# Security model (PoC baseline)
+# Модель безопасности RGP/3.0
 
-**Trust boundary:** every RGP byte is untrusted, including manifest JSON, source comments, and code. SHA-256 of bytes stored alongside those bytes demonstrates **integrity during delivery**, not **authenticity or trust**. Provenance is represented by `source_commit`, not independently authenticated. Consumers must authenticate the transport/repository by an independent channel before assigning trust to the source.
+**Доверительная граница:** содержимое каждого RGP и любой исходный
+код внутри него — **недоверенные данные**, включая встроенную
+инструкцию агента. Они не имеют приоритета над внешними правилами
+и заданиями пользователя. Reader работает без `exec/eval`,
+импортов и выполнения архива.
 
-The trusted Python Reader lives outside the artifact; it never uses `exec`, `eval`, dynamic imports or `zipimport` on archive content. ZIP data is loaded only after strict outer-container verification. Manifest paths and ZIP paths are validated; duplicate/ambiguous names, malformed schemas and mismatching file hashes fail closed. Blob reads use ZIP APIs, never `extractall`. Resource caps bound outer size, per-blob size, ZIP member count and total inflated bytes; search and read results are capped. These controls reduce risk, but the PoC still needs fuzzing and adversarial resource testing before production.
+## Целостность и происхождение
 
-**Publication safety:** the Rust generator omits `REPO_CONTEXT.rgp` and conservative sensitive filenames such as `.env*`, `*.pem`, `*.key`, `id_rsa*`, `credentials*`, `secrets*`. This is not secret scanning and does not make automatic publication of an arbitrary repository safe. CI does not commit or upload generated repository snapshots to a public location. Project owners must review content, access controls, submodules and Git LFS status before publication.
+В RGP/3.0 намеренно нет SHA-256, исходного Git commit ID,
+отдельного sidecar или внутреннего JSON-манифеста. Reader проверяет
+UTF-8, отсутствие NUL, длины секций, безопасные пути, порядок,
+дубликаты, лимиты и терминатор. **Он не обнаруживает равнодлинные
+подмены исходного текста**, а локально вычисленный им digest
+не доказывает ни происхождение, ни подлинность.
 
-**Completeness:** `pointer_only`, submodules, omitted large blobs and excluded secrets make a snapshot partial. An absent graph or language index is `not_indexed`, **never** evidence that a relation does not exist. Source text handed to an LLM is untrusted material, not instructions.
+При доверенном использовании нужен **внешний** trust anchor:
+закреплённая исходная Git-ревизия и Git blob опубликованного
+`REPO_CONTEXT.rgp` (либо независимо полученный SHA-256),
+сверка исходников с той же ревизией при необходимости.
+При частичном чтении через GitHub line-range без полного скачивания
+проверка всего файла **не может считаться завершённой**.
+Устаревший RGP нельзя представлять как актуальный.
 
-**GitHub Actions artifact adapter:** the stdlib `python/rgp_bootstrap.py` accepts a ZIP wrapper with exactly one `.rgp` and optional `expected.json`, enforces entry names/types, per-entry limits, anti-zip-bomb ratios, validates the received RGP with the trusted Reader and atomically emits verified bytes. The optional `--trusted-sha256` must come from an independently authenticated channel to support authenticity; the manifest bundled alongside an artifact does *not* meet that criterion. This adapter is intentionally separate from raw RGP file decoding.
+`python/rgp_sandbox.py` требует внешний digest и для RGP/3.0
+внешнее утверждение о source commit. Эти значения должны быть
+получены из доверенного источника, а не из той же непроверенной
+копии файла. Само наличие двух аргументов ещё не доказывает,
+что они независимы или правильно связаны.
+
+## Границы и публикация
+
+- RGP/3.0 — до 192 MiB валидного UTF-8; отдельный файл до
+  16 MiB, ограничен общий объём и число путей. `FILE`-секции
+  отмеряются **байтами**, а не по словам-разделителям.
+- Исключены недопустимые пути, NUL, контрольные символы в
+  именах, дубликаты, абсолютные пути и `..`.
+  Symlink сохраняется как инертный текст, не разыменовывается.
+- `.rgpignore` — фильтр **контекста**, не защита от утечек.
+  Его правила и число намеренно исключённых файлов находятся
+  в снимке; сами пропущенные файлы остаются в Git.
+- Поименованное исключение `.env*`, ключей и подобных файлов
+  не заменяет secret scanning или явную политику публикации.
+  **Не публиковать автоматически приватные/секретные репозитории**
+  без независимой оценки содержимого и прав доступа.
+- `snapshot_complete` означает полноту только выбранной
+  области после `.rgpignore`; не гарантирует присутствие
+  всех отслеживаемых исходников, LFS или submodules.
+- Источники для агентских ответов требуют проверки `path:line`.
+  `not_indexed` не доказывает отсутствие символа или связи.
+
+## Исторические форматы и опциональная доставка
+
+Legacy Reader продолжает читать RGP/1.0–1.2 (ZIP/Base64)
+и RGP/2.0–2.1 (текст с внутренними хешами).
+Для этих **старых** форматов сохранены проверки ZIP-path,
+лимиты разжатия, anti-zip-bomb, хеши и immutable fixtures.
+Они не входят в формат нового RGP/3.0.
+
+Опциональный `python/rgp_bootstrap.py` принимает
+GitHub Actions ZIP **обёртку**, внутри которой лежит RGP.
+Эта обёртка не делает сам RGP ZIP-архивом и не является
+требованием для чтения исходников через GitHub-коннектор.
+Сопутствующий `expected.json` из той же ZIP-обёртки
+сам по себе не является независимым trust anchor.
+
+**Открытые задачи:** fuzz/adversarial testing границ файла,
+защита публикации приватных проектов, внешняя проверка
+происхождения и честные замеры на реальных задачах.

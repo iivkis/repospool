@@ -1,22 +1,20 @@
-# RGP/2.0 context filter. Gitignore syntax; evaluated at the pinned Git commit.
+# RGP/3.0 context filter. Gitignore syntax; evaluated at the pinned Git commit.
 # These paths stay in Git: an agent can fetch them directly when needed.
 # This file itself is ALWAYS included in the RGP and documents its scope.
 #
 # Historic measurements, checkpoints and long-form archived planning.
 /benchmarks/
 /docs/RGP_INLINE_AGENT_GUIDE.txt
-/docs/ROADMAP_v1.1.md
 /docs/REVIEW_*.md
 /docs/STAGE1_*.md
 /docs/AGENT_VALUE_TRIAL_*.md
-/docs/POC_TRANSPORT_REPORT.md
 /docs/RGP_BENCHMARK_BASELINE.md
 /docs/GATE_B_REVIEW.md
-/docs/TRANSPORT_PROBE_PROTOCOL.md
 /docs/gate-a/
 
 # Binary/encoded golden transports, which are especially wasteful in a text RGP.
 /tests/fixtures/
+/scripts/legacy_transport_fixture.py
 
 # Workflow and repository automation: easy to read from GitHub on demand.
 /.github/

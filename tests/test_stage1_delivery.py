@@ -13,7 +13,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 import stage1_delivery as delivery  # noqa: E402
-from transport_probe import make_fixture  # noqa: E402
+from legacy_transport_fixture import make_fixture  # noqa: E402
 
 PLAN = json.loads((ROOT / "benchmarks/gate_b/plan.json").read_text())
 CHECKPOINT = json.loads((ROOT / "benchmarks/gate_b/corpus_preparation.json").read_text())

@@ -85,12 +85,6 @@ jobs:
           python3 scripts/golden_fixtures.py check
           cargo build --locked
           python3 scripts/golden_fixtures.py check --rust-cli target/debug/rgp
-      - name: Tiny valid RGP transport fixture and negative tests
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 scripts/transport_probe.py generate --output-dir "$RUNNER_TEMP/probe" --sizes 102400
-          python3 scripts/transport_probe.py verify --input-dir "$RUNNER_TEMP/probe" --expected "$RUNNER_TEMP/probe/expected.json"
       - name: Canonical cross-language round-trip and determinism
         shell: bash
         run: |

@@ -1,6 +1,17 @@
 # Trusted Reader API: MVP-A resource and coverage contract
 
-`python/rgp_reader.py` is Python stdlib-only and treats the RGP archive as untrusted **data**. It never imports code from the ZIP. Constructing `Reader(path_or_bytes)` verifies the transport checksum, ZIP limits and paths, every blob hash, `manifest.json`, and the input tree digest before it answers requests.
+`python/rgp_reader.py` использует только стандартную библиотеку
+Python и считает любой RGP недоверенными данными. Для текущего
+**RGP/3.0** создание `Reader` проверяет UTF-8, границы байтов,
+порядок путей, дубликаты, NUL и ресурсные лимиты; SHA/Git commit
+**отсутствуют в транспорте**. Метаданные SHA в API вычисляются
+локально и **не подтверждают подлинность** исходников. Проверка
+доверенного источника выполняется **вне Reader**, по Git blob
+или независимому SHA-256, связанному с исходной Git-ревизией.
+
+Для старых RGP/1.0–1.2 Reader сохраняет проверку ZIP/Base64
+и внутренних SHA, а для RGP/2.0–2.1 проверяет встроенные
+хеши UTF-8-транспорта. Не путать исторические свойства с 3.0.
 
 ## API
 
@@ -14,7 +25,7 @@ page = reader.tree(prefix="src/", limit=100)
 while page["next_cursor"] is not None:
     page = reader.tree(prefix="src/", limit=100, cursor=page["next_cursor"])
 reader.read("README.md", start_line=1, end_line=40)
-exact_git_blob = reader.read_bytes("README.md")  # verified raw bytes, no decoding
+exact_git_blob = reader.read_bytes("README.md")  # exact RGP bytes, NOT independently Git-verified
 page = reader.search("TODO", paths=["README.md"], limit=10)
 while page["next_cursor"] is not None:
     page = reader.search("TODO", paths=["README.md"], limit=10, cursor=page["next_cursor"])
@@ -24,11 +35,11 @@ while page["next_cursor"] is not None:
     page = reader.search("TODO", prefix="src/", limit=10, cursor=page["next_cursor"])
 ```
 
-`read_bytes(path)` is a **public Python-only verified raw source API**.
+`read_bytes(path)` is a **public Python-only raw source API**. It verifies the internal structure and length; on RGP/3.0 it does not prove those bytes equal a Git blob.
 It preserves exact Git blob bytes including binary data and line endings,
 without interpreting symlinks or importing source. Unknown/omitted paths
 raise `PARTIAL_SNAPSHOT`. It is not a 256 KiB JSON response; individual
-blobs remain bounded by verified Reader resource limits. It supports
+blobs remain bounded by Reader resource limits. It supports
 [safe sandbox source workspaces](SANDBOX_SOURCE_WORKSPACE.md), which
 never depend on the Reader's private ZIP implementation.
 
@@ -57,30 +68,31 @@ and `search` terms, and the context CLI reports invalid term arguments.
 MCP keeps answering subsequent tool requests, including after a
 surrogate-containing JSON-RPC request identifier.
 
-## Resource limits (v1.0 Reader)
+## Resource limits
 
-| Boundary | Maximum |
-|---|---:|
-| Outer text | 128 MiB |
-| ZIP payload | 64 MiB |
-| Total ZIP entries | 50,000 |
-| Total uncompressed ZIP data | 128 MiB |
-| A single content blob | 16 MiB |
-| `manifest.json` | 16 MiB |
-| ZIP expansion ratio | 200×, with a 4 KiB allowance per member |
-| UTF-8 source/ZIP path | 4,096 bytes |
-| A single `read()` response content | 256 KiB, **including Base64 expansion** |
-| Tree result | 200 paths |
-| Search result | 100 hits; 512 UTF-8 bytes per excerpt |
-| Search query | 1,024 UTF-8 bytes |
-| Cursor token | 8,192 characters |
-| Exclusion rows returned in overview | 100, with `excluded_truncated` indicator |
+| Ограничение | RGP/3.0 | Исторические RGP/1.x/2.x |
+| --- | --- | --- |
+| Полный текст RGP | 192 MiB | Отдельные транспортные лимиты |
+| Отдельный файл | 16 MiB | 16 MiB |
+| Индекс / JSON-манифест | 16 MiB (text index) | 16 MiB (manifest) |
+| Длина пути | 4096 байт UTF-8 | 4096 байт UTF-8 |
+| Число файлов | 50 000 (верхняя граница) | Лимиты по форматам |
+| ZIP-разжатие | **Отсутствует** | Проверка количества, размера и 200× ratio |
+| Содержимое одного `read()` | 256 KiB | 256 KiB |
+| `tree()` | до 200 путей | до 200 |
+| `search()` | до 100 результатов, 512 байт на snippet | то же |
+| Строка запроса `search()` | 1024 UTF-8 байта | то же |
+| Cursor | 8192 символов | то же |
+| Обзор исключений | до 100 записей | то же |
 
-Limits are validation policies, not guarantees of fixed peak process RSS or wall time. Construction currently holds decoded ZIP and verified content blobs in RAM, so peak memory exceeds the uncompressed-byte ceiling. ZIP is never extracted with `extractall()`. Queries over large files may scan them; the v1 Reader does not promise indexed or constant-time search.
+Общий объём и память ограничены; Reader в текущем виде может
+держать полное содержимое в памяти и сканировать строки при поиске.
+Лимит файла не обещает фиксированной задержки или RSS.
+Текстовый RGP/3.0 не является сжатым ZIP-архивом.
 
 ## Explicit completeness
 
-`overview()` and `coverage("snapshot")` report `included_files`, `pointer_only_files`, `excluded_files`, `excluded_by_reason`, and `snapshot_complete`. An intentionally excluded `REPO_CONTEXT.rgp` (`self_artifact`) is not treated as a missing source file. Sensitive, oversized or unavailable submodule paths, and unhydrated LFS pointers, mark the snapshot `partial`.
+`overview()` and `coverage("snapshot")` report `included_files`, `pointer_only_files`, `excluded_files`, `excluded_by_reason`, and `snapshot_complete`. An intentionally excluded `REPO_CONTEXT.rgp` (`self_artifact`) is not treated as a missing source file. The configured `.rgpignore` removes deliberately omitted paths from scope, while sensitive, oversized, unavailable submodule paths and unhydrated LFS pointers mark the selected snapshot `partial`. For RGP/3.0 ignored paths are reported by count, not as a full enumerated list.
 
 `tree()` and `search()` return `snapshot_status` so an empty result in a partial snapshot cannot be confused with proof of absence. An explicitly requested path missing from the snapshot causes `PARTIAL_SNAPSHOT` instead of silently searching nothing. `coverage("index")` and `coverage("graph")` return `not_indexed`; `coverage("investigation")` returns `unknown`, because tool disclosure does not prove what an agent understood.
 

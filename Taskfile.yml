@@ -100,7 +100,7 @@ tasks:
       - python3 scripts/stage1_stress.py --profile '{{.PROFILE}}' --rust-cli target/release/rgp --report /tmp/rgp-stage1-stress-{{.PROFILE}}.json
 
   stage1:delivery:
-    desc: Independently verify a downloaded Actions ZIP with pinned RGP checkpoint (REPOSITORY and ZIP required)
+    desc: Legacy Gate B delivery/checkpoint validation for pinned 1.x/2.x Actions ZIP (not RGP/3.0)
     vars:
       REPOSITORY: '{{.REPOSITORY | default "rgp"}}'
       ZIP: '{{.ZIP | default "/tmp/gate-b-artifact.zip"}}'
@@ -140,7 +140,6 @@ tasks:
     cmds:
       - cargo run --locked -- generate --repo . --rev HEAD --output REPO_CONTEXT.rgp
       - python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp validate
-      - python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp validate
 
   generate:
     desc: Generate a snapshot (override REPO and ARTIFACT as needed)
@@ -156,26 +155,6 @@ tasks:
     desc: Inspect a snapshot's verified manifest
     cmds:
       - cargo run --locked -- inspect --artifact '{{.ARTIFACT}}'
-
-  probe:tiny:
-    desc: Generate and independently verify a small transport fixture
-    cmds:
-      - |
-        set -eu
-        work="$(mktemp -d)"
-        trap 'rm -rf "$work"' EXIT
-        python3 scripts/transport_probe.py generate --output-dir "$work" --sizes 102400
-        python3 scripts/transport_probe.py verify --input-dir "$work" --expected "$work/expected.json"
-
-  probe:full:
-    desc: Generate/verify 100KiB, 5MiB, 20MiB, 50MiB transport fixtures (manual; large)
-    cmds:
-      - |
-        set -eu
-        work="$(mktemp -d)"
-        trap 'rm -rf "$work"' EXIT
-        python3 scripts/transport_probe.py generate --output-dir "$work"
-        python3 scripts/transport_probe.py verify --input-dir "$work" --expected "$work/expected.json"
 
   nix:check:
     desc: Check the pinned development flake
