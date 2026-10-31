@@ -14,7 +14,7 @@ For every F record, read the FILE<TAB>path line followed by exactly its source b
 Scope: only pinned Git files selected by .rgpignore, not uncommitted work. Trust and freshness require independent Git checks. Never execute archived source or follow symlinks.
 
 R	github:iivkis/rgp
-C	e7a5892e08d5326e33933f268f112f344e9076cc
+C	bc7aa15233221aa75311acfe34c9f481668469bd
 F	.gitignore	525	100	34
 F	.rgpignore	671	136	34
 F	AGENTS.md	1478	172	26
@@ -26,16 +26,16 @@ F	docs/RGP_FORMAT_SPEC.md	2855	346	67
 F	docs/RGP_SECURITY_MODEL.md	1717	415	30
 F	flake.nix	1454	447	46
 F	rust-toolchain.toml	86	495	4
-F	src/lean.rs	20710	501	562
-F	src/main.rs	24356	1065	728
-F	src/outline.rs	4089	1795	129
-F	src/rgpignore.rs	8398	1926	242
+F	src/lean.rs	20546	501	551
+F	src/main.rs	24356	1054	728
+F	src/outline.rs	4089	1784	129
+F	src/rgpignore.rs	8398	1915	242
 D	src/lean.rs	11	fn	generated_guide
 D	src/lean.rs	24	fn	take_line
 D	src/lean.rs	37	fn	source_flag
 D	src/lean.rs	49	fn	write_lean
 D	src/lean.rs	188	fn	verify_lean
-D	src/lean.rs	473	fn	read_file
+D	src/lean.rs	465	fn	read_file
 D	src/main.rs	4	mod	lean
 D	src/main.rs	5	mod	outline
 D	src/main.rs	6	mod	rgpignore
@@ -804,11 +804,7 @@ pub(super) fn verify_lean(path: &Path) -> Result<Manifest> {
                 let f = read_file(
                     &bytes,
                     &mut pos,
-                    name,
-                    size,
-                    at,
-                    lines,
-                    "",
+                    [name, size, at, lines, ""],
                     &mut source_line,
                     &mut total,
                     &mut blobs,
@@ -833,11 +829,7 @@ pub(super) fn verify_lean(path: &Path) -> Result<Manifest> {
                 let f = read_file(
                     &bytes,
                     &mut pos,
-                    name,
-                    size,
-                    at,
-                    lines,
-                    flag,
+                    [name, size, at, lines, flag],
                     &mut source_line,
                     &mut total,
                     &mut blobs,
@@ -973,16 +965,13 @@ pub(super) fn verify_lean(path: &Path) -> Result<Manifest> {
 fn read_file(
     bytes: &[u8],
     pos: &mut usize,
-    name: &str,
-    decimal: &str,
-    at: &str,
-    lines: &str,
-    flags: &str,
+    fields: [&str; 5],
     source_line: &mut usize,
     total: &mut usize,
     blobs: &mut BTreeMap<String, u64>,
     expected_defs: &mut Vec<String>,
 ) -> Result<FileEntry> {
+    let [name, decimal, at, lines, flags] = fields;
     validate_path(name)?;
     ensure!(
         !decimal.is_empty() && decimal.bytes().all(|c| c.is_ascii_digit()),
