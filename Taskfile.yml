@@ -140,7 +140,7 @@ tasks:
     cmds:
       - cargo run --locked -- generate --repo . --rev HEAD --output REPO_CONTEXT.rgp
       - python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp validate
-      - python3 python/rgpmi.py --metadata REPO_CONTEXT.rgpmi
+      - python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp validate
 
   generate:
     desc: Generate a snapshot (override REPO and ARTIFACT as needed)
