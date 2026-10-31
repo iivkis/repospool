@@ -132,7 +132,7 @@ python3 python/rgp_reader.py --artifact /tmp/rgp-example.rgp search 'RGP' --pref
 
 - **Generator/verifier:** [`src/main.rs`](src/main.rs), [format contract](docs/RGP_FORMAT_SPEC.md), [security limits](docs/RGP_SECURITY_MODEL.md).
 - **Trusted Reader:** [`python/rgp_reader.py`](python/rgp_reader.py) and [Reader API](docs/READER_API.md).
-- **Delivery:** [`python/rgp_bootstrap.py`](python/rgp_bootstrap.py), [transport protocol](docs/TRANSPORT_PROBE_PROTOCOL.md) and [authenticated delivery](docs/STAGE1_DELIVERY.md).
+- **Optional file delivery and Git provenance:** [`python/rgp_bootstrap.py`](python/rgp_bootstrap.py), [authenticated delivery](docs/STAGE1_DELIVERY.md), and [self-snapshot checks](docs/IN_REPO_DOGFOOD.md). The primary agent route is selective GitHub line-range reading.
 - **Optional agent interfaces:** [context helper](python/rgp_agent_context.py), [MCP adapter](python/rgp_mcp.py) and [MCP usage](docs/RGP_MCP_AGENT.md).
 
 Snapshots pin an actual Git commit; modified/untracked worktree files are not included. Git symlinks are stored as link text, submodules and unsafe paths are excluded, LFS pointers are labeled as pointers, and partial snapshots must not be mistaken for complete ones. The Reader bounds resource use and reports unavailable semantic indexing as `not_indexed`.
@@ -141,15 +141,23 @@ Run `python3 -m unittest discover -s tests -p 'test_*.py' -v` for the standard-l
 
 ## Roadmap and measured evidence
 
-The [three-stage product roadmap](docs/PRODUCT_ROADMAP.md) is canonical. The longer [v1.1 technical plan](docs/ROADMAP_v1.1.md) is background, not a competing release checklist. The [engineering principles](docs/ENGINEERING_PRINCIPLES.md) and [technical review](docs/REVIEW_2026-10-31.md) describe current constraints.
+The [three-stage roadmap](docs/PRODUCT_ROADMAP.md) and
+[current technical review](docs/REVIEW_2026-10-31.md) describe the
+**RGP/3.0 direction**. [Product north star](docs/PRODUCT_NORTH_STAR.md)
+sets the success criteria; the previous ZIP/Base64 research and
+v1.1 mega-roadmap are accessible via Git history, not active requirements.
+[Engineering principles](docs/ENGINEERING_PRINCIPLES.md) stay normative.
 
 | Area | Documentation and evidence |
 | --- | --- |
-| Gate A: Actions ZIP transport | [Report](docs/POC_TRANSPORT_REPORT.md), [experiment protocol](docs/TRANSPORT_PROBE_PROTOCOL.md), [workflow](.github/workflows/transport-probe.yml) |
-| Stage 1: format, real-source tasks, stress and scale | [Implementation](docs/STAGE1_IMPLEMENTATION.md), [corpus](docs/STAGE1_CORPUS_DIAGNOSTIC.md), [stress](docs/STAGE1_STRESS.md), [50k-member boundary](docs/STAGE1_SCALE.md), [measured reports](benchmarks/stage1/) |
-| Stage 1: delivery, memory and agent integration | [Delivery](docs/STAGE1_DELIVERY.md), [memory](docs/STAGE1_MEMORY.md), [adaptive ZIP](docs/STAGE1_ADAPTIVE_ZIP.md), [agent task pilot](docs/AGENT_FIRST_PILOT.md), [12-task trial](docs/AGENT_VALUE_TRIAL_2026-10-31.md) |
-| Gate B: agent usefulness and cost | [Evaluation protocol](docs/RGP_BENCHMARK_BASELINE.md), [frozen plan](benchmarks/gate_b/plan.json), [observations](benchmarks/gate_b/), [independent review requirements](docs/GATE_B_REVIEW.md), [correction](docs/GATE_B_CORRECTION.md) |
+| Current RGP/3.0, trust and scoped completeness | [Format](docs/RGP_FORMAT_SPEC.md), [security](docs/RGP_SECURITY_MODEL.md), [.rgpignore](.rgpignore) |
+| Generator, corpus, stress, scale | [Implementation](docs/STAGE1_IMPLEMENTATION.md), [corpus](docs/STAGE1_CORPUS_DIAGNOSTIC.md), [stress](docs/STAGE1_STRESS.md), [50k boundary](docs/STAGE1_SCALE.md) |
+| Agent navigation and optional sandbox/MCP | [Agent pilot](docs/AGENT_FIRST_PILOT.md), [12-task navigation](docs/AGENT_VALUE_TRIAL_2026-10-31.md), [sandbox provenance](docs/SANDBOX_SOURCE_WORKSPACE.md) |
+| Gate B: usefulness and cost | [Protocol](docs/RGP_BENCHMARK_BASELINE.md), [frozen plan](benchmarks/gate_b/plan.json), [observations](benchmarks/gate_b/), [review requirements](docs/GATE_B_REVIEW.md) |
 
-Gate A's 12 successful artifact transfers do not establish arbitrary connector delivery. Stage 1 tests validate a specific set of source tasks and boundary cases, not general model performance. The published Gate B diagnostic compares source acquisition for pinned repositories, but its earlier task judgments were unblinded and assistant-scored; independent correctness review and authenticated tool-history evidence are still missing. **No automatic Gate B GO or measured token improvement is claimed.**
+The frozen legacy Gate B numbers and old transport reports **do not
+measure RGP/3.0 model tokens**. Technical source checks establish
+byte fidelity, not proof that agents answer better. Gate B remains
+**HOLD** until a fair baseline and independent answer assessment.
 
 The repository intentionally retains the tracked `REPO_CONTEXT.rgp`, golden fixtures and pinned benchmark evidence: they are inputs and audit records, **not disposable build artifacts**. Generated local outputs, editor files and caches belong outside version control.
