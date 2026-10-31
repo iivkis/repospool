@@ -2,7 +2,6 @@ use anyhow::{anyhow, ensure, Context, Result};
 use clap::{Parser, Subcommand};
 
 mod lean;
-mod outline;
 mod rgpignore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -55,8 +54,6 @@ struct Manifest {
     input_tree_digest: String,
     files: Vec<FileEntry>,
     excluded: Vec<Exclusion>,
-    index_coverage: String,
-    graph_coverage: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -233,14 +230,12 @@ fn snapshot(repo: &Path, rev: &str) -> Result<(Manifest, BTreeMap<String, Vec<u8
     let listing = git(root, &["ls-tree", "--full-tree", "-r", "-l", "-z", &commit])?;
     let ignored = rgpignore::ignored_paths(root, &commit, &listing)?;
     let mut manifest = Manifest {
-        schema_version: "2.0".into(),
+        schema_version: "3.0".into(),
         source_commit: commit,
         github_repo: github_locator(root),
         input_tree_digest: String::new(),
         files: Vec::new(),
         excluded: Vec::new(),
-        index_coverage: "not_indexed".into(),
-        graph_coverage: "not_indexed".into(),
     };
     let mut blobs = BTreeMap::new();
     let mut total = 0usize;
@@ -256,7 +251,7 @@ fn snapshot(repo: &Path, rev: &str) -> Result<(Manifest, BTreeMap<String, Vec<u8
             seen_paths.insert(path.to_lowercase()),
             "UNSAFE_PATH: case-colliding paths"
         );
-        if path == "REPO_CONTEXT.rgp" || path == "REPO_CONTEXT.rgpmi" {
+        if path == "REPO_CONTEXT.rgp" {
             manifest.excluded.push(Exclusion {
                 path: path.into(),
                 reason: "self_artifact".into(),
@@ -432,7 +427,7 @@ fn verify(path: &Path) -> Result<Manifest> {
 
 fn verify_manifest(manifest: Manifest, blobs: BTreeMap<String, u64>) -> Result<Manifest> {
     ensure!(
-        manifest.schema_version == "2.0",
+        manifest.schema_version == "3.0",
         "UNSUPPORTED_FORMAT: manifest version"
     );
     ensure!(
@@ -537,10 +532,9 @@ fn main() -> Result<()> {
                 );
             }
             println!(
-                "verified: {} files, {} excluded, digest {}",
+                "verified: {} files, {} listed omissions/exclusions",
                 manifest.files.len(),
-                manifest.excluded.len(),
-                manifest.input_tree_digest
+                manifest.excluded.len()
             );
             Ok(())
         }
@@ -620,8 +614,10 @@ mod tests {
     #[test]
     fn generated_guide_is_generic_and_versioned() {
         let guide = lean::generated_guide();
-        assert!(guide.contains("RGP/0.2.0"));
+        assert!(guide.contains("RGP/0.3.0"));
         assert!(guide.contains("F ="));
+        assert!(guide.contains("The agent interprets"));
+        assert!(!guide.contains("D ="));
         assert!(guide.contains("independent"));
         assert!(!guide.contains("github.com/iivkis"));
         assert!(!guide.contains("REPO_CONTEXT.rgp"));
@@ -687,9 +683,9 @@ mod tests {
         assert_eq!(verified.files.len(), 2);
         assert_eq!(verified.files[0].path, "lib.rs");
         let artifact = fs::read_to_string(&output).unwrap();
-        assert!(artifact.starts_with("RGP/0.2.0\n"));
+        assert!(artifact.starts_with("RGP/0.3.0\n"));
         assert!(artifact.contains("FILE\tsource.txt\nHello from another repository!\n"));
-        assert!(artifact.contains("D\tlib.rs\t1\tfn\thello"));
+        assert!(!artifact.lines().any(|line| line.starts_with("D\t")));
         let index = artifact
             .lines()
             .find(|line| line.starts_with("F\tlib.rs\t"))
@@ -699,6 +695,10 @@ mod tests {
         assert_eq!(artifact.lines().nth(at - 1), Some("pub fn hello() {"));
         assert_eq!(fields[4], "3");
         assert_eq!(verified.source_commit.len(), 40);
+        let mut legacy = artifact.as_bytes().to_vec();
+        legacy[..9].copy_from_slice(b"RGP/0.2.0");
+        fs::write(repo.join("legacy.rgp"), legacy).unwrap();
+        assert!(verify(&repo.join("legacy.rgp")).is_err());
         assert!(artifact.contains("The guide describes only the format"));
         fs::remove_dir_all(&repo).unwrap();
     }

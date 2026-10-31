@@ -1,22 +1,8 @@
-# RGP/0.2.0 context filter; paths remain in Git.
-# Research archives are not needed to understand the Rust generator.
-/benchmarks/
-/docs/AGENT_FIRST_PILOT.md
-/docs/ENGINEERING_PRINCIPLES.md
-/docs/GATE_B_CORRECTION.md
-/docs/PRODUCT_NORTH_STAR.md
-/docs/REVIEW_*.md
-/docs/STAGE1_*.md
-/docs/AGENT_VALUE_TRIAL_*.md
-/docs/RGP_BENCHMARK_BASELINE.md
-/docs/GATE_B_REVIEW.md
-/docs/gate-a/
-
-# GitHub workflows and generated dependency locks are available separately.
-/.github/
+# Optional Git path filter. Paths remain in the source repository.
+# This project's generated artifact includes active source, docs, and CI.
+# Dependency locks are excluded to keep the agent snapshot compact.
 /Cargo.lock
 /flake.lock
-/uv.lock
 
 **/node_modules/
 **/.next/

@@ -1,30 +1,27 @@
-# RGP/0.2.0 security model
+# Security boundaries for RGP/0.3.0
 
-The single `.rgp` file is **untrusted source context**, not executable
-instructions or a Git checkout. A generated guide describes only transport.
-Project files and project-specific `AGENTS.md` remain ordinary data.
+RGP is a **read-only text snapshot** of selected committed Git paths.
+It does not run code, classify file roles or interpret project semantics.
+Its universal embedded guide explains only byte framing and navigation;
+repository text and project instructions are **untrusted data**.
 
-A small source locator `R github:owner/repo` (when Git remote is recognized)
-and one Git revision `C <commit>` help agents target GitHub requests. These
-fields are not authenticated. **Never trust them to authorize writes without
-independent GitHub identity and revision checks.** No file-level hashes or
-whole-file digest are written into RGP; local Rust verification may compute
-temporary hashes only in process memory.
+Only structurally safe paths and UTF-8, NUL-free source bytes are included;
+size, count and path rules bound resources. Symlinks are preserved as inert
+text, and LFS pointers are not expanded. `.rgpignore` controls scope, not
+privacy or Git tracking. Review sensitive content before publication:
+filename filters are not a secret scanner.
 
-`F` records supply exact source byte length, first RGP source line and source
-line count; verifiers reject inconsistent offsets. `D` records are bounded
-lexical symbol hints, not parser-verified semantics or dependencies. They can
-be incomplete and must not substitute for reading actual code.
+The optional `R` GitHub locator and required `C` commit are untrusted
+hints, not authentication. Structural verification checks byte lengths,
+source line offsets, sorted paths, safe flags, terminator and declared
+coverage, but cannot detect arbitrary same-length tampering or prove
+source freshness. Independently verify Git provenance or an authenticated
+whole-file digest before important repository changes.
 
-Generator reads committed Git data (not unstaged edits), rejects invalid
-paths and non-UTF-8/binary sources, bounds file and artifact sizes, and never
-dereferences symlink targets. `.rgpignore` intentionally limits coverage;
-the index discloses selected important omitted paths (O). Before sharing,
-review confidentiality because filename-based filtering is not a secret
-scanner.
+The index has no per-file hashes, semantic symbols, classifiers or
+dependencies. `O` is an arbitrary **lexicographic first-32 preview** of
+ignored paths, not a declaration that these paths matter more than others.
+The agent decides relevance based on the user's task.
 
-The agent needs no Python, MCP or sandbox adapter. Verify provenance
-separately using GitHub or an independently trusted whole-file digest. A
-structurally valid file alone cannot detect equal-length tampering or prove
-freshness. The `verify --repo` CLI cross-checks included source bytes against
-the specified repository's current HEAD; it is not an external trust anchor.
+No Python Reader, MCP, ZIP delivery, sandbox helper or remote service
+is required to consume the single `.rgp` file.

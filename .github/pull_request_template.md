@@ -1,20 +1,25 @@
-## What changed
+## Change and acceptance
 
-## Goal-level acceptance (agent-owned)
-- [ ] Observable user goal and expected results were stated before the change
-- [ ] Implementing agent generated a real RGP from a pinned commit, verified it and used the Reader to answer a predefined repository task (when RGP behavior changed)
-- [ ] Agent compared results with source truth and recorded commit/SHA-256, exact commands, observed outcomes and failures
-- [ ] If execution was blocked: clearly marked NOT RUN/BLOCKED, with no claim of completion
-- [ ] Documentation-only change: links and consistency checked; no invented test executions
+- [ ] Goal stated in observable terms
+- [ ] RGP remains language-agnostic and does not infer code meaning
+- [ ] No semantic symbols, file-role guesses or per-file hashes in artifact
+- [ ] Single `rgp generate .` artifact still reads without companion tools
+- [ ] Included files, byte framing, RGP line coordinates and omission coverage remain correct
 
-## Tests
-- [ ] `just check` or equivalent tests
-- [ ] Reproducible RGP output checked if serialization changed
-- [ ] New negative cases for untrusted inputs
+## Verification
 
-## Safety and product gates
-- [ ] No secrets or private source snapshots committed/uploaded
-- [ ] No semantic completeness or connector-transport claims without evidence
-- [ ] Gate B remains HOLD unless its specific evidence requirements are fulfilled
+- [ ] `task check`
+- [ ] `task nix:check`
+- [ ] Output stable for identical pinned Git input
+- [ ] Invalid, truncated and outdated formats rejected
+- [ ] GitHub CI results checked
+- [ ] Any skipped checks explicitly marked
 
-See [AGENTS.md](../AGENTS.md) and [Product Roadmap](../docs/PRODUCT_ROADMAP.md).
+## Security
+
+- [ ] No secrets or private sources published
+- [ ] Source revision and locator treated as untrusted hints
+- [ ] Changes to live GitHub repositories independently verified
+
+See [AGENTS.md](../AGENTS.md) and
+[product contract](../docs/PRODUCT_CONTRACT.md).
