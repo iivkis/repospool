@@ -109,3 +109,118 @@ pub(super) fn ignored_paths(root: &Path, commit: &str, listing: &[u8]) -> Result
     }
     Ok(ignored)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn add_file(dir: &Path, name: &str, content: &str) -> Result<()> {
+        let path = dir.join(name);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(path, content)?;
+        Ok(())
+    }
+
+    #[test]
+    fn pinned_gitignore_semantics_and_scoped_snapshot() -> Result<()> {
+        let dir = ScratchRepo::create()?;
+        git(&dir.0, &["init", "-q"])?;
+        add_file(
+            &dir.0,
+            ".rgpignore",
+            "/benchmarks/\n/docs/*.log\n*.lock\n!important.lock\n**/generated/\n",
+        )?;
+        for (name, contents) in [
+            ("src/main.rs", "fn main() {}\n"),
+            ("benchmarks/report.txt", "large evidence\n"),
+            ("docs/build.log", "log\n"),
+            ("docs/notes.md", "useful\n"),
+            ("Cargo.lock", "lock\n"),
+            ("important.lock", "keep me\n"),
+            ("deep/generated/cache.txt", "generated\n"),
+        ] {
+            add_file(&dir.0, name, contents)?;
+        }
+        git(&dir.0, &["add", "-A"])?;
+        git(
+            &dir.0,
+            &[
+                "-c",
+                "user.name=RGP Test",
+                "-c",
+                "user.email=rgp@example.invalid",
+                "commit",
+                "-qm",
+                "source",
+            ],
+        )?;
+        let pin = git_text(&dir.0, &["rev-parse", "HEAD"])?;
+        let (manifest, _) = snapshot(&dir.0, &pin)?;
+        let included: HashSet<_> = manifest.files.iter().map(|f| f.path.as_str()).collect();
+        assert!(included.contains(".rgpignore"));
+        assert!(included.contains("src/main.rs"));
+        assert!(included.contains("docs/notes.md"));
+        assert!(included.contains("important.lock")); // Negation works.
+        for ignored in [
+            "benchmarks/report.txt",
+            "docs/build.log",
+            "Cargo.lock",
+            "deep/generated/cache.txt",
+        ] {
+            assert!(!included.contains(ignored));
+            assert!(manifest
+                .excluded
+                .iter()
+                .any(|e| e.path == ignored && e.reason == "rgpignore"));
+        }
+        // A dirty working tree must NEVER influence the pinned Git rules.
+        add_file(&dir.0, ".rgpignore", "*\n")?;
+        let (pinned_again, _) = snapshot(&dir.0, &pin)?;
+        assert_eq!(manifest.input_tree_digest, pinned_again.input_tree_digest);
+        assert_eq!(manifest.excluded.len(), pinned_again.excluded.len());
+
+        git(&dir.0, &["add", ".rgpignore"])?;
+        git(
+            &dir.0,
+            &[
+                "-c",
+                "user.name=RGP Test",
+                "-c",
+                "user.email=rgp@example.invalid",
+                "commit",
+                "-qm",
+                "change ignore scope",
+            ],
+        )?;
+        let (new_manifest, _) = snapshot(&dir.0, "HEAD")?;
+        assert_eq!(new_manifest.files.len(), 1); // Forced .rgpignore only.
+        assert_eq!(new_manifest.files[0].path, ".rgpignore");
+        Ok(())
+    }
+
+    #[test]
+    fn repositories_without_rgpignore_keep_legacy_inclusion() -> Result<()> {
+        let dir = ScratchRepo::create()?;
+        git(&dir.0, &["init", "-q"])?;
+        add_file(&dir.0, "src/code.py", "print('source')\n")?;
+        git(&dir.0, &["add", "-A"])?;
+        git(
+            &dir.0,
+            &[
+                "-c",
+                "user.name=RGP Test",
+                "-c",
+                "user.email=rgp@example.invalid",
+                "commit",
+                "-qm",
+                "source",
+            ],
+        )?;
+        let (manifest, _) = snapshot(&dir.0, "HEAD")?;
+        assert_eq!(manifest.files.len(), 1);
+        assert!(manifest.excluded.is_empty());
+        Ok(())
+    }
+}
