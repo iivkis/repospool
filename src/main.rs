@@ -593,7 +593,10 @@ fn parse_transport(path: &Path) -> Result<Vec<u8>> {
     let (header, rest) = data
         .split_once("\n--\n")
         .ok_or_else(|| anyhow!("TRUNCATED_ARTIFACT: missing separator"))?;
-    ensure!(header.len() <= MAX_HEADER, "RESOURCE_LIMIT: header too large");
+    ensure!(
+        header.len() <= MAX_HEADER,
+        "RESOURCE_LIMIT: header too large"
+    );
     // RGP/1.0 remains readable. RGP/1.1 requires the *exact* canonical
     // guide, so malicious or accidentally modified header instructions fail.
     let fields = if let Some(legacy) = header.strip_prefix("RGP/1.0\n") {
