@@ -26,7 +26,7 @@ F	flake.nix	1454
 F	justfile	168
 F	rust-toolchain.toml	86
 F	src/lean.rs	12912
-F	src/main.rs	21516
+F	src/main.rs	21586
 F	src/rgpignore.rs	8398
 I	39
 S	1
@@ -1282,7 +1282,7 @@ fn main() -> Result<()> {
     match Cli::parse().command {
         Commands::Generate { repo, output, rev } => {
             generate(&repo, &output_path(&repo, output), &rev)
-        },
+        }
         Commands::Verify { artifact, repo } => {
             let manifest = verify(&artifact)?;
             if let Some(repo) = repo {
@@ -1345,7 +1345,6 @@ mod tests {
         assert!(!guide.contains("REPO_CONTEXT.rgp"));
     }
 
-
     #[test]
     fn generate_accepts_positional_repository_and_defaults_to_its_root() {
         let parsed = Cli::try_parse_from(["rgp", "generate", "some-project"]).unwrap();
@@ -1386,8 +1385,14 @@ mod tests {
         fs::write(repo.join("source.txt"), "Hello from another repository!\n").unwrap();
         run_git(&["add", "source.txt"]);
         run_git(&[
-            "-c", "user.name=RGP Test", "-c", "user.email=rgp@example.invalid",
-            "commit", "-q", "-m", "Initial source",
+            "-c",
+            "user.name=RGP Test",
+            "-c",
+            "user.email=rgp@example.invalid",
+            "commit",
+            "-q",
+            "-m",
+            "Initial source",
         ]);
         let output = output_path(&repo, None);
         generate(&repo, &output, "HEAD").unwrap();
