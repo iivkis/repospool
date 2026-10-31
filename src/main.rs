@@ -682,12 +682,9 @@ mod tests {
         generate(&repo, &output, "HEAD").unwrap();
         let verified = verify(&output).unwrap();
         assert_eq!(verified.files.len(), 2);
-        assert!(verified
-            .excluded
-            .iter()
-            .any(|e| e.path == ".repospool" && e.reason == "self_artifact"));
         assert_eq!(verified.files[0].path, "lib.rs");
         let artifact = fs::read_to_string(&output).unwrap();
+        assert!(artifact.lines().any(|line| line == "S\t1"));
         assert!(artifact.starts_with("REPOSPOOL/1.0\n"));
         assert!(artifact.contains("FILE\tsource.txt\nHello from another repository!\n"));
         assert!(!artifact.lines().any(|line| line.starts_with("D\t")));
