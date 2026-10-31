@@ -304,11 +304,7 @@ pub(super) fn verify_lean(path: &Path) -> Result<Manifest> {
                 let f = read_file(
                     &bytes,
                     &mut pos,
-                    name,
-                    size,
-                    at,
-                    lines,
-                    "",
+                    [name, size, at, lines, ""],
                     &mut source_line,
                     &mut total,
                     &mut blobs,
@@ -333,11 +329,7 @@ pub(super) fn verify_lean(path: &Path) -> Result<Manifest> {
                 let f = read_file(
                     &bytes,
                     &mut pos,
-                    name,
-                    size,
-                    at,
-                    lines,
-                    flag,
+                    [name, size, at, lines, flag],
                     &mut source_line,
                     &mut total,
                     &mut blobs,
@@ -473,16 +465,13 @@ pub(super) fn verify_lean(path: &Path) -> Result<Manifest> {
 fn read_file(
     bytes: &[u8],
     pos: &mut usize,
-    name: &str,
-    decimal: &str,
-    at: &str,
-    lines: &str,
-    flags: &str,
+    fields: [&str; 5],
     source_line: &mut usize,
     total: &mut usize,
     blobs: &mut BTreeMap<String, u64>,
     expected_defs: &mut Vec<String>,
 ) -> Result<FileEntry> {
+    let [name, decimal, at, lines, flags] = fields;
     validate_path(name)?;
     ensure!(
         !decimal.is_empty() && decimal.bytes().all(|c| c.is_ascii_digit()),
