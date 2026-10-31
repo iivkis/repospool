@@ -98,3 +98,16 @@ recorded in [CORPUS_2026-10-31.md](../benchmarks/stage1/CORPUS_2026-10-31.md).
 The recorded generated RGP checksums matched the earlier pinned Gate B
 corpus files. A newer workflow also enforces that matching automatically.
 The first run by itself is not proof of that newer regression assertion.
+
+
+## Transport 1.1 checkpoint handling
+
+The historical Gate B corpus checkpoint records exact bytes for **RGP/1.0**.
+A guided **RGP/1.1** artifact deliberately differs in its plaintext header,
+so the v1.0 SHA-256 and file size are **not** valid expected bytes for v1.1.
+Stage 1 continues to require two byte-identical generations in the same run,
+Rust verification, trusted Reader validation, the pinned Git source commit,
+included-file counts and exact read/search source matches. The report marks
+`pinned_v1_format_compatibility=SOURCE_EQUIVALENCE_ONLY` for v1.1 instead
+of claiming an exact legacy byte match. The old frozen checkpoint is preserved;
+an independently pinned RGP/1.1 artifact hash is still future evidence.
