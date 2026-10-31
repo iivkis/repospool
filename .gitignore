@@ -25,10 +25,7 @@ Thumbs.db
 /.env.*
 !/.env.example
 
-# REPO_CONTEXT.rgp is tracked and refreshed by the first-party dogfood workflow.
-*.rgp.tmp
+# .repospool is tracked and refreshed by the first-party dogfood workflow.
+/.repospool.*.tmp
 /result
 /result-*
-
-# Assistant-only benchmark notes, unreviewed before publication
-/benchmarks/gate_b/observations.local.json

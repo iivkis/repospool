@@ -1,8 +1,8 @@
 use anyhow::{anyhow, ensure, Context, Result};
 use clap::{Parser, Subcommand};
 
-mod lean;
-mod rgpignore;
+mod format;
+mod ignore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashSet};
@@ -18,7 +18,7 @@ const MAX_TOTAL: usize = 128 * 1024 * 1024;
 const MAX_ENTRIES: usize = 50_000;
 
 #[derive(Parser)]
-#[command(about = "Create and verify deterministic Repository Graph Packs")]
+#[command(about = "Create and verify deterministic Git source snapshots for AI agents")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -228,9 +228,9 @@ fn snapshot(repo: &Path, rev: &str) -> Result<(Manifest, BTreeMap<String, Vec<u8
         &["rev-parse", "--verify", &format!("{rev}^{{commit}}")],
     )?;
     let listing = git(root, &["ls-tree", "--full-tree", "-r", "-l", "-z", &commit])?;
-    let ignored = rgpignore::ignored_paths(root, &commit, &listing)?;
+    let ignored = ignore::ignored_paths(root, &commit, &listing)?;
     let mut manifest = Manifest {
-        schema_version: "3.0".into(),
+        schema_version: "1.0".into(),
         source_commit: commit,
         github_repo: github_locator(root),
         input_tree_digest: String::new(),
@@ -251,7 +251,7 @@ fn snapshot(repo: &Path, rev: &str) -> Result<(Manifest, BTreeMap<String, Vec<u8
             seen_paths.insert(path.to_lowercase()),
             "UNSAFE_PATH: case-colliding paths"
         );
-        if path == "REPO_CONTEXT.rgp" {
+        if path == ".repospool" {
             manifest.excluded.push(Exclusion {
                 path: path.into(),
                 reason: "self_artifact".into(),
@@ -268,7 +268,7 @@ fn snapshot(repo: &Path, rev: &str) -> Result<(Manifest, BTreeMap<String, Vec<u8
         if ignored.contains(path) {
             manifest.excluded.push(Exclusion {
                 path: path.into(),
-                reason: "rgpignore".into(),
+                reason: "repospoolignore".into(),
             });
             continue;
         }
@@ -288,7 +288,7 @@ fn snapshot(repo: &Path, rev: &str) -> Result<(Manifest, BTreeMap<String, Vec<u8
         ensure!(kind == "blob", "unsupported Git object: {kind}");
         let object_size: usize = size.parse().context("invalid blob size")?;
         // Reserve one index entry for the source list. Even if Git contains
-        // more than 49,999 distinct blobs, the emitted RGP must remain
+        // more than 49,999 distinct blobs, the emitted RepoSpool must remain
         // bounded by the format's 50,000-file ceiling.
         // Exclusions are recorded explicitly, never silently dropped.
         if manifest.files.len() >= MAX_ENTRIES - 1 {
@@ -369,7 +369,7 @@ fn tree_digest(files: &[FileEntry]) -> Result<String> {
 }
 
 // A unique, create_new() staging file prevents parallel writers from
-// sharing a fixed ".rgp.tmp" name. Drop removes it after any failure.
+// sharing a fixed ".repospool.tmp" name. Drop removes it after any failure.
 struct StagedOutput {
     path: PathBuf,
 }
@@ -409,7 +409,7 @@ fn generate(repo: &Path, output: &Path, rev: &str) -> Result<()> {
     // A single versioned UTF-8 transport: an auto-generated generic guide,
     // compact index, and byte-framed original source text.
     let (staged, mut file) = StagedOutput::create(output)?;
-    let artifact_size = lean::write_lean(&mut file, &manifest, &blobs)?;
+    let artifact_size = format::write_snapshot(&mut file, &manifest, &blobs)?;
     drop(blobs);
     drop(manifest);
     file.sync_all()?;
@@ -422,12 +422,12 @@ fn generate(repo: &Path, output: &Path, rev: &str) -> Result<()> {
 }
 
 fn verify(path: &Path) -> Result<Manifest> {
-    lean::verify_lean(path)
+    format::verify_snapshot(path)
 }
 
 fn verify_manifest(manifest: Manifest, blobs: BTreeMap<String, u64>) -> Result<Manifest> {
     ensure!(
-        manifest.schema_version == "3.0",
+        manifest.schema_version == "1.0",
         "UNSUPPORTED_FORMAT: manifest version"
     );
     ensure!(
@@ -494,7 +494,7 @@ fn verify_manifest(manifest: Manifest, blobs: BTreeMap<String, u64>) -> Result<M
                     | "size_limit"
                     | "entry_limit"
                     | "non_text"
-                    | "rgpignore"
+                    | "repospoolignore"
             ),
             "UNSUPPORTED_FORMAT: exclusion reason"
         );
@@ -514,7 +514,7 @@ fn verify_manifest(manifest: Manifest, blobs: BTreeMap<String, u64>) -> Result<M
 }
 
 fn output_path(repo: &Path, output: Option<PathBuf>) -> PathBuf {
-    output.unwrap_or_else(|| repo.join("REPO_CONTEXT.rgp"))
+    output.unwrap_or_else(|| repo.join(".repospool"))
 }
 
 fn main() -> Result<()> {
@@ -569,7 +569,7 @@ mod tests {
     #[test]
     fn only_safe_github_origins_are_recorded() {
         // The generator never embeds arbitrary remote URLs or credentials.
-        let root = std::env::temp_dir().join(format!("rgp-origin-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("repospool-origin-{}", std::process::id()));
         fs::create_dir_all(&root).unwrap();
         assert!(Command::new("git")
             .arg("-C")
@@ -613,26 +613,26 @@ mod tests {
 
     #[test]
     fn generated_guide_is_generic_and_versioned() {
-        let guide = lean::generated_guide();
-        assert!(guide.contains("RGP/0.3.0"));
+        let guide = format::generated_guide();
+        assert!(guide.contains("REPOSPOOL/1.0"));
         assert!(guide.contains("F ="));
         assert!(guide.contains("The agent interprets"));
         assert!(!guide.contains("D ="));
         assert!(guide.contains("independent"));
         assert!(!guide.contains("github.com/iivkis"));
-        assert!(!guide.contains("REPO_CONTEXT.rgp"));
+        assert!(!guide.contains(".repospool"));
     }
 
     #[test]
     fn generate_accepts_positional_repository_and_defaults_to_its_root() {
-        let parsed = Cli::try_parse_from(["rgp", "generate", "some-project"]).unwrap();
+        let parsed = Cli::try_parse_from(["repospool", "generate", "some-project"]).unwrap();
         match parsed.command {
             Commands::Generate { repo, output, rev } => {
                 assert_eq!(repo, PathBuf::from("some-project"));
                 assert_eq!(rev, "HEAD");
                 assert_eq!(
                     output_path(&repo, output),
-                    PathBuf::from("some-project/REPO_CONTEXT.rgp")
+                    PathBuf::from("some-project/.repospool")
                 );
             }
             _ => panic!("expected generate"),
@@ -642,7 +642,7 @@ mod tests {
     #[test]
     fn real_git_snapshot_is_self_contained() {
         let repo = std::env::temp_dir().join(format!(
-            "rgp-git-test-{}-{}",
+            "repospool-git-test-{}-{}",
             std::process::id(),
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -666,12 +666,13 @@ mod tests {
             "pub fn hello() {\n    let value = 1;\n}\n",
         )
         .unwrap();
-        run_git(&["add", "source.txt", "lib.rs"]);
+        fs::write(repo.join(".repospool"), "old generated artifact\n").unwrap();
+        run_git(&["add", "source.txt", "lib.rs", ".repospool"]);
         run_git(&[
             "-c",
-            "user.name=RGP Test",
+            "user.name=RepoSpool Test",
             "-c",
-            "user.email=rgp@example.invalid",
+            "user.email=repospool@example.invalid",
             "commit",
             "-q",
             "-m",
@@ -681,9 +682,10 @@ mod tests {
         generate(&repo, &output, "HEAD").unwrap();
         let verified = verify(&output).unwrap();
         assert_eq!(verified.files.len(), 2);
+        assert!(verified.excluded.iter().any(|e| e.path == ".repospool" && e.reason == "self_artifact"));
         assert_eq!(verified.files[0].path, "lib.rs");
         let artifact = fs::read_to_string(&output).unwrap();
-        assert!(artifact.starts_with("RGP/0.3.0\n"));
+        assert!(artifact.starts_with("REPOSPOOL/1.0\n"));
         assert!(artifact.contains("FILE\tsource.txt\nHello from another repository!\n"));
         assert!(!artifact.lines().any(|line| line.starts_with("D\t")));
         let index = artifact
@@ -695,18 +697,18 @@ mod tests {
         assert_eq!(artifact.lines().nth(at - 1), Some("pub fn hello() {"));
         assert_eq!(fields[4], "3");
         assert_eq!(verified.source_commit.len(), 40);
-        let mut legacy = artifact.as_bytes().to_vec();
-        legacy[..9].copy_from_slice(b"RGP/0.2.0");
-        fs::write(repo.join("legacy.rgp"), legacy).unwrap();
-        assert!(verify(&repo.join("legacy.rgp")).is_err());
-        assert!(artifact.contains("Purpose: RGP only locates and preserves source"));
+        let mut invalid = artifact.as_bytes().to_vec();
+        invalid[0] = b'X';
+        fs::write(repo.join("invalid.repospool"), invalid).unwrap();
+        assert!(verify(&repo.join("invalid.repospool")).is_err());
+        assert!(artifact.contains("Purpose: RepoSpool only locates and preserves source"));
         fs::remove_dir_all(&repo).unwrap();
     }
 
     #[test]
     fn staging_files_are_unique_and_cleaned_on_drop() {
         let output = std::env::temp_dir().join(format!(
-            "rgp-staging-{}-{}",
+            "repospool-staging-{}-{}",
             std::process::id(),
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)

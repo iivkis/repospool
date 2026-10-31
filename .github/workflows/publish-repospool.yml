@@ -1,4 +1,4 @@
-name: Publish standalone RGP snapshot
+name: Publish RepoSpool snapshot
 on:
   push:
     branches: [main]
@@ -8,12 +8,12 @@ permissions:
   contents: write
 
 concurrency:
-  group: publish-rgp-${{ github.ref }}
+  group: publish-repospool-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   snapshot:
-    name: Generate and publish REPO_CONTEXT.rgp
+    name: Generate and publish .repospool
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,7 +26,7 @@ jobs:
         run: |
           set -euo pipefail
           changed="$(git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA")"
-          if [ "$changed" = "REPO_CONTEXT.rgp" ]; then
+          if [ "$changed" = ".repospool" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
             echo "Only the tracked artifact changed; preserve its original source revision"
           fi
@@ -40,29 +40,30 @@ jobs:
         run: |
           set -euo pipefail
           cargo build --locked --release
-          target/release/rgp generate . --rev "$GITHUB_SHA" --output "$RUNNER_TEMP/REPO_CONTEXT.rgp"
-          target/release/rgp verify --artifact "$RUNNER_TEMP/REPO_CONTEXT.rgp" --repo .
+          target/release/repospool generate . --rev "$GITHUB_SHA" --output "$RUNNER_TEMP/.repospool"
+          target/release/repospool verify --artifact "$RUNNER_TEMP/.repospool" --repo .
           echo "Source commit: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
-          sha256sum "$RUNNER_TEMP/REPO_CONTEXT.rgp" >> "$GITHUB_STEP_SUMMARY"
+          sha256sum "$RUNNER_TEMP/.repospool" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: steps.changes.outputs.skip != 'true'
         with:
-          name: standalone-rgp-${{ github.sha }}
-          path: ${{ runner.temp }}/REPO_CONTEXT.rgp
+          name: repospool-${{ github.sha }}
+          path: ${{ runner.temp }}/.repospool
           retention-days: 7
+          include-hidden-files: true
           if-no-files-found: error
-      - name: Refresh tracked RGP only when source changes
+      - name: Refresh tracked RepoSpool only when source changes
         if: github.ref == 'refs/heads/main' && steps.changes.outputs.skip != 'true'
         shell: bash
         run: |
           set -euo pipefail
-          if test -f REPO_CONTEXT.rgp && cmp -s REPO_CONTEXT.rgp "$RUNNER_TEMP/REPO_CONTEXT.rgp"; then
+          if test -f .repospool && cmp -s .repospool "$RUNNER_TEMP/.repospool"; then
             echo "Snapshot is already current"
             exit 0
           fi
-          cp "$RUNNER_TEMP/REPO_CONTEXT.rgp" REPO_CONTEXT.rgp
-          git add -- REPO_CONTEXT.rgp
+          cp "$RUNNER_TEMP/.repospool" .repospool
+          git add -- .repospool
           git -c user.name="github-actions[bot]" \
               -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-              commit -m "chore(rgp): refresh tracked source context for $GITHUB_SHA"
+              commit -m "chore(repospool): refresh tracked source context for $GITHUB_SHA"
           git push origin HEAD:main

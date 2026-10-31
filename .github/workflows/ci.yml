@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-rgp3-${{ github.workflow }}-${{ github.ref }}
+  group: ci-repospool-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -33,11 +33,11 @@ jobs:
         run: |
           set -euo pipefail
           cargo build --locked
-          target/debug/rgp generate . --output "$RUNNER_TEMP/a.rgp"
-          target/debug/rgp generate . --output "$RUNNER_TEMP/b.rgp"
-          cmp "$RUNNER_TEMP/a.rgp" "$RUNNER_TEMP/b.rgp"
-          target/debug/rgp verify --artifact "$RUNNER_TEMP/a.rgp" --repo .
-          test "$(head -n 1 "$RUNNER_TEMP/a.rgp")" = "RGP/0.3.0"
+          target/debug/repospool generate . --output "$RUNNER_TEMP/a.repospool"
+          target/debug/repospool generate . --output "$RUNNER_TEMP/b.repospool"
+          cmp "$RUNNER_TEMP/a.repospool" "$RUNNER_TEMP/b.repospool"
+          target/debug/repospool verify --artifact "$RUNNER_TEMP/a.repospool" --repo .
+          test "$(head -n 1 "$RUNNER_TEMP/a.repospool")" = "REPOSPOOL/1.0"
 
   nix:
     name: Nix package build and external-style invocation
@@ -49,11 +49,11 @@ jobs:
           persist-credentials: false
       - uses: DeterminateSystems/nix-installer-action@v17
       - run: nix flake check --no-update-lock-file --show-trace
-      - run: nix build --no-update-lock-file .#rgp --out-link "$RUNNER_TEMP/rgp-package"
+      - run: nix build --no-update-lock-file .#repospool --out-link "$RUNNER_TEMP/repospool-package"
       - name: Nix-installed CLI generates and verifies a standalone artifact
         shell: bash
         run: |
           set -euo pipefail
-          "$RUNNER_TEMP/rgp-package/bin/rgp" generate . --output "$RUNNER_TEMP/nix.rgp"
-          "$RUNNER_TEMP/rgp-package/bin/rgp" verify --artifact "$RUNNER_TEMP/nix.rgp" --repo .
-          test "$(head -n 1 "$RUNNER_TEMP/nix.rgp")" = "RGP/0.3.0"
+          "$RUNNER_TEMP/repospool-package/bin/repospool" generate . --output "$RUNNER_TEMP/nix.repospool"
+          "$RUNNER_TEMP/repospool-package/bin/repospool" verify --artifact "$RUNNER_TEMP/nix.repospool" --repo .
+          test "$(head -n 1 "$RUNNER_TEMP/nix.repospool")" = "REPOSPOOL/1.0"

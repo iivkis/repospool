@@ -1,4 +1,4 @@
-//! Match a committed .rgpignore using Git's own gitignore rules.
+//! Match a committed .repospoolignore using Git's own gitignore rules.
 //! The pinned Git tree is the only configuration source.
 use super::*;
 use std::io::ErrorKind;
@@ -12,7 +12,7 @@ impl ScratchRepo {
         let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
         for attempt in 0..32 {
             let path = std::env::temp_dir().join(format!(
-                "rgpignore-{}-{stamp}-{attempt}",
+                "repospoolignore-{}-{stamp}-{attempt}",
                 std::process::id()
             ));
             match fs::create_dir(&path) {
@@ -35,10 +35,10 @@ impl Drop for ScratchRepo {
 
 pub(super) fn ignored_paths(root: &Path, commit: &str, listing: &[u8]) -> Result<HashSet<String>> {
     // Zero allocations and no second per-path processing for repositories
-    // without a pinned .rgpignore (including synthetic 50k member fixtures).
+    // without a pinned .repospoolignore (including synthetic 50k member fixtures).
     if !listing
         .split(|byte| *byte == 0)
-        .any(|entry| entry.ends_with(b"\t.rgpignore"))
+        .any(|entry| entry.ends_with(b"\t.repospoolignore"))
     {
         return Ok(HashSet::new());
     }
@@ -51,11 +51,11 @@ pub(super) fn ignored_paths(root: &Path, commit: &str, listing: &[u8]) -> Result
             .split_once_byte(b'\t')
             .ok_or_else(|| anyhow!("UNSUPPORTED_FORMAT: Git tree entry"))?;
         let path = std::str::from_utf8(raw_path).context("UNSAFE_PATH: non-UTF8 Git path")?;
-        if path == ".rgpignore" {
+        if path == ".repospoolignore" {
             let metadata = std::str::from_utf8(meta)?;
             ensure!(
                 metadata.starts_with("100644 blob ") || metadata.starts_with("100755 blob "),
-                "UNSUPPORTED_FORMAT: .rgpignore must be a regular tracked text file"
+                "UNSUPPORTED_FORMAT: .repospoolignore must be a regular tracked text file"
             );
             found = true;
             continue; // Configuration always describes itself in the snapshot.
@@ -69,17 +69,17 @@ pub(super) fn ignored_paths(root: &Path, commit: &str, listing: &[u8]) -> Result
         return Ok(HashSet::new());
     }
 
-    // Ignore a dirty local .rgpignore; only the pinned Git version matters.
-    let rules = git(root, &["show", &format!("{commit}:.rgpignore")])?;
+    // Ignore a dirty local .repospoolignore; only the pinned Git version matters.
+    let rules = git(root, &["show", &format!("{commit}:.repospoolignore")])?;
     ensure!(
         rules.len() <= MAX_IGNORE_BYTES
             && !rules.contains(&0)
             && std::str::from_utf8(&rules).is_ok(),
-        "RESOURCE_LIMIT: .rgpignore must be UTF-8 text <= 64 KiB without NUL"
+        "RESOURCE_LIMIT: .repospoolignore must be UTF-8 text <= 64 KiB without NUL"
     );
     // Native Git implements gitignore ! negations, **, anchoring and
     // directory patterns. A scratch repo prevents local/global .gitignore
-    // files or checkout changes from affecting the RGP snapshot.
+    // files or checkout changes from affecting the RepoSpool snapshot.
     let scratch = ScratchRepo::create()?;
     git(&scratch.0, &["init", "-q"])?;
     fs::write(scratch.0.join(".gitignore"), rules)?;
@@ -145,7 +145,7 @@ mod tests {
         git(&dir.0, &["init", "-q"])?;
         add_file(
             &dir.0,
-            ".rgpignore",
+            ".repospoolignore",
             "/benchmarks/\n/docs/*.log\n*.lock\n!important.lock\n**/generated/\n",
         )?;
         for (name, contents) in [
@@ -164,9 +164,9 @@ mod tests {
             &dir.0,
             &[
                 "-c",
-                "user.name=RGP Test",
+                "user.name=RepoSpool Test",
                 "-c",
-                "user.email=rgp@example.invalid",
+                "user.email=repospool@example.invalid",
                 "commit",
                 "-qm",
                 "source",
@@ -175,7 +175,7 @@ mod tests {
         let pin = git_text(&dir.0, &["rev-parse", "HEAD"])?;
         let (manifest, _) = snapshot(&dir.0, &pin)?;
         let included: HashSet<_> = manifest.files.iter().map(|f| f.path.as_str()).collect();
-        assert!(included.contains(".rgpignore"));
+        assert!(included.contains(".repospoolignore"));
         assert!(included.contains("src/main.rs"));
         assert!(included.contains("docs/notes.md"));
         assert!(included.contains("important.lock")); // Negation works.
@@ -189,35 +189,35 @@ mod tests {
             assert!(manifest
                 .excluded
                 .iter()
-                .any(|e| e.path == ignored && e.reason == "rgpignore"));
+                .any(|e| e.path == ignored && e.reason == "repospoolignore"));
         }
         // A dirty working tree must NEVER influence the pinned Git rules.
-        add_file(&dir.0, ".rgpignore", "*\n")?;
+        add_file(&dir.0, ".repospoolignore", "*\n")?;
         let (pinned_again, _) = snapshot(&dir.0, &pin)?;
         assert_eq!(manifest.input_tree_digest, pinned_again.input_tree_digest);
         assert_eq!(manifest.excluded.len(), pinned_again.excluded.len());
 
-        git(&dir.0, &["add", ".rgpignore"])?;
+        git(&dir.0, &["add", ".repospoolignore"])?;
         git(
             &dir.0,
             &[
                 "-c",
-                "user.name=RGP Test",
+                "user.name=RepoSpool Test",
                 "-c",
-                "user.email=rgp@example.invalid",
+                "user.email=repospool@example.invalid",
                 "commit",
                 "-qm",
                 "change ignore scope",
             ],
         )?;
         let (new_manifest, _) = snapshot(&dir.0, "HEAD")?;
-        assert_eq!(new_manifest.files.len(), 1); // Forced .rgpignore only.
-        assert_eq!(new_manifest.files[0].path, ".rgpignore");
+        assert_eq!(new_manifest.files.len(), 1); // Forced .repospoolignore only.
+        assert_eq!(new_manifest.files[0].path, ".repospoolignore");
         Ok(())
     }
 
     #[test]
-    fn repositories_without_rgpignore_keep_default_inclusion() -> Result<()> {
+    fn repositories_without_repospoolignore_keep_default_inclusion() -> Result<()> {
         let dir = ScratchRepo::create()?;
         git(&dir.0, &["init", "-q"])?;
         add_file(&dir.0, "src/code.py", "print('source')\n")?;
@@ -226,9 +226,9 @@ mod tests {
             &dir.0,
             &[
                 "-c",
-                "user.name=RGP Test",
+                "user.name=RepoSpool Test",
                 "-c",
-                "user.email=rgp@example.invalid",
+                "user.email=repospool@example.invalid",
                 "commit",
                 "-qm",
                 "source",

@@ -219,8 +219,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "rgp"
-version = "0.3.0"
+name = "repospool"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "clap",

@@ -1,10 +1,10 @@
 [package]
-name = "rgp"
-version = "0.3.0"
+name = "repospool"
+version = "1.0.0"
 edition = "2021"
 rust-version = "1.85"
 license = "MIT"
-description = "Reproducible repository snapshots for AI agents"
+description = "Deterministic, addressable Git source snapshots for AI agents"
 
 [dependencies]
 anyhow = "1"

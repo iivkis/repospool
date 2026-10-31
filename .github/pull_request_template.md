@@ -1,10 +1,10 @@
 ## Change and acceptance
 
 - [ ] Goal stated in observable terms
-- [ ] RGP remains language-agnostic and does not infer code meaning
+- [ ] RepoSpool remains language-agnostic and does not infer code meaning
 - [ ] No semantic symbols, file-role guesses or per-file hashes in artifact
-- [ ] Single `rgp generate .` artifact still reads without companion tools
-- [ ] Included files, byte framing, RGP line coordinates and omission coverage remain correct
+- [ ] Single `repospool generate .` artifact still reads without companion tools
+- [ ] Included files, byte framing, RepoSpool line coordinates and omission coverage remain correct
 
 ## Verification
 

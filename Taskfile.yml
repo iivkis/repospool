@@ -2,7 +2,7 @@ version: '3'
 
 vars:
   REPO: '{{.REPO | default "."}}'
-  ARTIFACT: '{{.ARTIFACT | default "REPO_CONTEXT.rgp"}}'
+  ARTIFACT: '{{.ARTIFACT | default ".repospool"}}'
 
 tasks:
   default:
@@ -31,10 +31,10 @@ tasks:
         set -eu
         work="$(mktemp -d)"
         trap 'rm -rf "$work"' EXIT
-        cargo run --locked -- generate . --output "$work/a.rgp"
-        cargo run --locked -- generate . --output "$work/b.rgp"
-        cmp "$work/a.rgp" "$work/b.rgp"
-        cargo run --locked -- verify --artifact "$work/a.rgp" --repo .
+        cargo run --locked -- generate . --output "$work/a.repospool"
+        cargo run --locked -- generate . --output "$work/b.repospool"
+        cmp "$work/a.repospool" "$work/b.repospool"
+        cargo run --locked -- verify --artifact "$work/a.repospool" --repo .
   check:
     desc: Run Rust checks and snapshot smoke test
     cmds:
@@ -43,7 +43,7 @@ tasks:
       - task: test
       - task: smoke
   generate:
-    desc: Generate RGP from a Git repository
+    desc: Generate RepoSpool from a Git repository
     cmds:
       - cargo run --locked -- generate '{{.REPO}}' --output '{{.ARTIFACT}}'
   verify:
@@ -54,16 +54,16 @@ tasks:
     desc: Inspect the internal source index
     cmds:
       - cargo run --locked -- inspect --artifact '{{.ARTIFACT}}'
-  rgp:refresh:
+  repospool:refresh:
     desc: Regenerate the tracked snapshot
     cmds:
       - cargo run --locked -- generate .
-  rgp:check:
+  repospool:check:
     desc: Verify the tracked snapshot against HEAD
     cmds:
-      - cargo run --locked -- verify --artifact REPO_CONTEXT.rgp --repo .
+      - cargo run --locked -- verify --artifact .repospool --repo .
   nix:check:
     desc: Build and check the distributable Nix flake
     cmds:
       - nix flake check --no-update-lock-file --show-trace
-      - nix build --no-update-lock-file .#rgp
+      - nix build --no-update-lock-file .#repospool
