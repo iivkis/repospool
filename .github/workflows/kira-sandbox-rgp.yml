@@ -37,6 +37,9 @@ jobs:
             --artifact "$RUNNER_TEMP/REPO_CONTEXT.rgp" --repo .
           python3 python/rgp_reader.py \
             --artifact "$RUNNER_TEMP/REPO_CONTEXT.rgp" validate
+          python3 python/rgpmi.py \
+            --metadata "$RUNNER_TEMP/REPO_CONTEXT.rgpmi" \
+            --expected-commit "$GITHUB_SHA"
       - name: Publish out-of-band source SHA and digest to Actions job summary
         id: attest
         shell: bash
@@ -116,10 +119,11 @@ jobs:
           name: kira-sandbox-rgp-${{ github.sha }}
           path: |
             ${{ runner.temp }}/REPO_CONTEXT.rgp
+            ${{ runner.temp }}/REPO_CONTEXT.rgpmi
             ${{ runner.temp }}/snapshot-provenance.json
           retention-days: 7
           if-no-files-found: error
-      - name: Keep REPO_CONTEXT.rgp in main for normal agent development
+      - name: Keep REPO_CONTEXT.rgp and .rgpmi in main for normal agent development
         if: github.ref == 'refs/heads/main'
         shell: bash
         run: |
@@ -132,13 +136,20 @@ jobs:
             exit 0
           fi
           cp "$RUNNER_TEMP/REPO_CONTEXT.rgp" REPO_CONTEXT.rgp
-          git add -- REPO_CONTEXT.rgp
+          cp "$RUNNER_TEMP/REPO_CONTEXT.rgpmi" REPO_CONTEXT.rgpmi
+          git add -- REPO_CONTEXT.rgp REPO_CONTEXT.rgpmi
           if git diff --cached --quiet; then
             echo "Tracked RGP bytes unchanged"
             python3 scripts/repo_dogfood.py check --repo .
             exit 0
           fi
-          test "$(git diff --cached --name-only)" = "REPO_CONTEXT.rgp"
+          # Only the archive and its sidecar may change in this publication.
+          while IFS= read -r changed; do
+            case "$changed" in
+              REPO_CONTEXT.rgp|REPO_CONTEXT.rgpmi) ;;
+              *) echo "Unexpected staged change: $changed" >&2; exit 1 ;;
+            esac
+          done < <(git diff --cached --name-only)
           git -c user.name="github-actions[bot]" \
               -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
               commit -m "chore(rgp): refresh tracked source context for $GITHUB_SHA"
