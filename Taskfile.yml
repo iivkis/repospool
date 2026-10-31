@@ -136,7 +136,7 @@ tasks:
       - python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp tree --prefix python/
 
   rgp:refresh:
-    desc: Regenerate tracked standalone RGP/2.1
+    desc: Regenerate tracked token-lean RGP/3.0
     cmds:
       - cargo run --locked -- generate --repo . --rev HEAD --output REPO_CONTEXT.rgp
       - python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp validate

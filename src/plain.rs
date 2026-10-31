@@ -19,6 +19,7 @@ fn next_line<'a>(bytes: &'a [u8], offset: &mut usize) -> Result<&'a [u8]> {
     Ok(&bytes[start..start + newline])
 }
 
+#[allow(dead_code)] // Historical RGP/2.1 writer retained for backwards-compatible test vectors.
 pub(super) fn write_plain(
     output: &mut fs::File,
     manifest: &Manifest,

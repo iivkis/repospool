@@ -130,7 +130,7 @@ jobs:
           root = Path(os.environ["RUNNER_TEMP"])
           path = root / "REPO_CONTEXT.rgp"
           reader = Reader(path)
-          assert reader.manifest["source_commit"] == os.environ["SRC_COMMIT"]
+          assert reader.manifest["source_commit"] is None, "RGP/3.0 must not embed commit IDs"
           plan_path = Path("benchmarks/gate_b/plan.json")
           from scripts.gate_b import digest_plan, strict_json
           report = {
@@ -167,24 +167,55 @@ jobs:
               archive.write(folder / "REPO_CONTEXT.rgp", "REPO_CONTEXT.rgp")
               archive.write(folder / "provenance.json", "provenance.json")
           PY
-          python3 scripts/stage1_delivery.py \
-            --actions-zip "$RUNNER_TEMP/local-actions-wrapper.zip" \
-            --repository "$SRC_REPO" \
-            --source-repo "$RUNNER_TEMP/source" \
-            --output "$RUNNER_TEMP/recovered.rgp" \
-            --report "$RUNNER_TEMP/delivery-check.json"
-          cmp "$RUNNER_TEMP/recovered.rgp" "$RUNNER_TEMP/REPO_CONTEXT.rgp"
+          # RGP/3.0 is an incompatible transport: frozen 1.x/2.x SHA
+          # checkpoints MUST NOT be reused. Compare against pinned Git
+          # bytes instead; don't report independent artifact authentication.
           python3 - <<'PY'
-          import json, os
+          import hashlib, json, os, subprocess, sys
           from pathlib import Path
-          report = json.loads((Path(os.environ["RUNNER_TEMP"]) / "delivery-check.json").read_text())
-          assert (report["status"] == "PASS" and
-                  report["task_reference_sets"] == 4 and
-                  report["source_comparison"] == "PASS" and
-                  report["gate_b"] == "HOLD")
-          print("STAGE1_DELIVERY_SHA256=" + report["rgp_sha256"])
-          print("STAGE1_DELIVERY_PINNED_SOURCE=" + report["source_commit"])
-          print("STAGE1_DELIVERY_RESULT=PASS")
+          root = Path(os.environ["RUNNER_TEMP"])
+          sys.path.insert(0, "python")
+          from rgp_bootstrap import bootstrap
+          from rgp_reader import Reader
+          from scripts.gate_b import strict_json
+          source = root / "REPO_CONTEXT.rgp"
+          wrapper = root / "local-actions-wrapper.zip"
+          provenance = strict_json(root / "provenance.json")
+          pinned = provenance["source_commit"]
+          digest = hashlib.sha256(source.read_bytes()).hexdigest()
+          assert digest == provenance["rgp_sha256"], "runtime artifact disagreement"
+          result = bootstrap(wrapper, root / "recovered.rgp", trusted_sha256=digest)
+          reader = Reader(root / "recovered.rgp")
+          assert reader.overview()["transport"] == "RGP/3.0"
+          assert reader.overview()["source_commit"] is None
+          assert reader.overview()["snapshot_complete"]
+          matched = 0
+          for entry in reader.manifest["files"]:
+              raw = subprocess.check_output([
+                  "git", "-C", str(root / "source"), "show",
+                  f"{pinned}:{entry['path']}"
+              ])
+              assert raw == reader.read_bytes(entry["path"]), entry["path"]
+              matched += 1
+          assert matched > 0
+          plan = strict_json(Path("benchmarks/gate_b/plan.json"))
+          tasks = [t for t in plan["tasks"] if t["repository"] == os.environ["SRC_REPO"]]
+          assert len(tasks) == 4
+          report = {
+              "status": "PASS", "gate_b": "HOLD",
+              "repository": os.environ["SRC_REPO"],
+              "source_commit": pinned,
+              "source_comparison": "PASS",
+              "files_compared_to_independent_pinned_git": matched,
+              "task_reference_sets": len(tasks),
+              "rgp_sha256": digest,
+              "independent_whole_artifact_authenticity": "NOT_ATTESTED",
+              "frozen_checkpoint": "SKIP_FORMAT_CHANGED",
+              "method": "runtime ZIP transport integrity and full bytewise Git source comparison"
+          }
+          (root / "delivery-check.json").write_text(json.dumps(report, indent=2) + "\n")
+          print("STAGE1_DELIVERY_GIT_SOURCE_MATCH=PASS")
+          print("STAGE1_DELIVERY_FROZEN_CHECKPOINT=SKIP_FORMAT_CHANGED")
           PY
       - name: Agent question to source-context to pinned-Git evidence
         env:
@@ -269,7 +300,8 @@ jobs:
           assert value["files_exported"] == value["source_files_compared_byte_for_byte_to_git"]
           assert value["valid_but_stale_commit_rejected"]
           assert value["expected_commit_matches_pinned_git"]
-          assert value["artifact_sha256_matched_committed_external_checkpoint"]
+          assert not value["artifact_sha256_matched_committed_external_checkpoint"]
+          assert value["source_bytes_compared_to_independent_git"]
           assert value["all_file_executable_bits_cleared"]
           assert value["source_code_execution"] == "NONE"
           assert value["model_task_quality"] == "NOT_MEASURED_BY_THIS_SCRIPT"

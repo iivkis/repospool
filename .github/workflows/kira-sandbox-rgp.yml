@@ -43,8 +43,8 @@ jobs:
           from rgp_reader import Reader
           from pathlib import Path
           reader = Reader(Path(os.environ["RUNNER_TEMP"]) / "REPO_CONTEXT.rgp")
-          assert reader.overview()["transport"] == "RGP/2.1"
-          assert reader.overview()["source_commit"] == os.environ["GITHUB_SHA"]
+          assert reader.overview()["transport"] == "RGP/3.0"
+          assert reader.overview()["source_commit"] is None
           assert reader.overview()["embedded_instructions"]
           print("RGP_INLINE_GUIDE_AND_PROVENANCE=PASS")
           PY
@@ -66,7 +66,7 @@ jobs:
           reader = Reader(path)
           overview = reader.overview()
           commit = os.environ["GITHUB_SHA"]
-          assert overview["source_commit"] == commit
+          assert overview["source_commit"] is None, "hash-free transport must not embed commit"
           assert overview["snapshot_complete"], "unsafe partial default sandbox snapshot"
           sha = hashlib.sha256(path.read_bytes()).hexdigest()
           report = {
@@ -106,6 +106,7 @@ jobs:
             --artifact "$RUNNER_TEMP/REPO_CONTEXT.rgp" \
             --trusted-sha256 "$TRUSTED_SHA256" \
             --expected-commit "$GITHUB_SHA" \
+            --attested-source-commit "$GITHUB_SHA" \
             --output "$RUNNER_TEMP/rgp-local-source"
           python3 - <<'PY'
           import json

@@ -8,6 +8,7 @@ No archived code is imported or executed.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import subprocess
 import sys
@@ -29,20 +30,27 @@ def run(repository: str, artifact: Path, source_repo: Path, output: Path) -> dic
     anchor = next(r for r in checkpoints["artifacts"] if r["repository"] == repository)
     assert anchor["source_commit"] == pinned["commit"], "inconsistent external trust anchor"
     start = time.perf_counter_ns()
+    reader = Reader(artifact)
+    hash_free = reader.overview()["source_commit"] is None
+    # The historic SHA checkpoint is frozen to the old transport. In
+    # RGP/3.0 we can only check this run's artifact hash locally, then
+    # independently compare every exported file to pinned Git.
+    trusted = hashlib.sha256(artifact.read_bytes()).hexdigest() if hash_free else anchor["sha256"]
     # An authenticated RGP from the wrong commit must be rejected before
     # any workspace is created. Verify this on genuine pinned artifacts.
     other_commit = ("f" if pinned["commit"][0] != "f" else "e") * len(pinned["commit"])
     try:
-        export_workspace(artifact, output, anchor["sha256"],
-                         expected_commit=other_commit)
+        export_workspace(artifact, output, trusted,
+                         expected_commit=other_commit,
+                         attested_source_commit=pinned["commit"])
     except RgpError as error:
         assert error.code == "STALE_SNAPSHOT", f"wrong error: {error}"
     else:
         raise AssertionError("stale but authentic RGP was accepted")
     assert not output.exists(), "stale RGP created a workspace"
-    report = export_workspace(artifact, output, anchor["sha256"],
-                              expected_commit=pinned["commit"])
-    reader = Reader(artifact)
+    report = export_workspace(artifact, output, trusted,
+                              expected_commit=pinned["commit"],
+                              attested_source_commit=pinned["commit"])
     assert report["source_commit"] == pinned["commit"]
     assert report["snapshot_complete"] is True, "pinned repo unexpectedly partial"
     assert report["files_exported"] == anchor["included_files"]
@@ -65,7 +73,9 @@ def run(repository: str, artifact: Path, source_repo: Path, output: Path) -> dic
         "status": "PASS",
         "repository": repository,
         "source_commit": pinned["commit"],
-        "artifact_sha256_matched_committed_external_checkpoint": True,
+        "artifact_sha256_matched_committed_external_checkpoint": not hash_free,
+        "whole_artifact_authenticated_independently": not hash_free,
+        "source_bytes_compared_to_independent_git": True,
         "valid_but_stale_commit_rejected": True,
         "expected_commit_matches_pinned_git": report["expected_commit"] == pinned["commit"],
         "files_exported": len(asserted),

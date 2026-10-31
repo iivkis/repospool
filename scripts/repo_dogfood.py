@@ -62,6 +62,32 @@ def check(repo: Path, artifact: Path | None = None) -> dict:
     _require(overview["snapshot_complete"], "PARTIAL_SNAPSHOT",
              "in-repository source snapshot is not complete")
     source = overview["source_commit"]
+    if source is None and overview["transport"] == "RGP/3.0":
+        # RGP/3.0 intentionally contains no commit/hash text. Recover the
+        # source revision ONLY from independently trusted local Git history.
+        # The publication bot makes a one-file RGP commit after source HEAD.
+        parent_result = git(repo, "rev-parse", "HEAD^")
+        source = head
+        if parent_result.returncode == 0:
+            parent = parent_result.stdout.decode().strip()
+            changed = checked_git(repo, "diff", "--name-only", parent, head).decode().splitlines()
+            if changed == [NAME]:
+                source = parent
+        # Check all included source bytes against Git at the chosen revision.
+        # The RGP's in-memory derived SHA is never accepted as provenance.
+        cursor = None
+        seen = 0
+        while True:
+            page = reader.tree(limit=200, cursor=cursor)
+            for path in page["paths"]:
+                committed_source = checked_git(repo, "show", f"{source}:{path}")
+                _require(reader.read_bytes(path) == committed_source, "HASH_MISMATCH",
+                         f"RGP source differs from trusted Git: {path}")
+                seen += 1
+            cursor = page["next_cursor"]
+            if cursor is None:
+                break
+        _require(seen == overview["file_count"], "HASH_MISMATCH", "RGP file index incomplete")
     checked_git(repo, "cat-file", "-e", f"{source}^{{commit}}")
     ancestor = git(repo, "merge-base", "--is-ancestor", source, head)
     _require(ancestor.returncode == 0, "STALE_SNAPSHOT",
@@ -125,6 +151,7 @@ def main() -> int:
             output = export_workspace(
                 Path(args.repo).resolve() / NAME, args.output,
                 report["artifact_sha256"], expected_commit=report["source_commit"],
+                attested_source_commit=report["source_commit"],
                 prefix=args.prefix, max_files=args.max_files,
                 max_bytes=args.max_bytes)
             report["export"] = {

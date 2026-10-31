@@ -8,7 +8,6 @@
 ```sh
 python3 scripts/repo_dogfood.py check --repo .
 python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp overview
-python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp overview
 python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp tree --prefix python/
 python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp search 'Reader' --prefix python/
 python3 scripts/repo_dogfood.py export --repo . --output /tmp/rgp-context
@@ -21,28 +20,26 @@ python3 scripts/repo_dogfood.py export --repo . --output /tmp/rgp-context
 `rgp:check` может вернуть `STALE_SNAPSHOT` до обновления
 снимка: нельзя выдавать предыдущий архив за новый код.
 
-## Зачем источник commit иногда не равен HEAD
+## Git-происхождение без SHA внутри RGP
 
-Снимок не может включать собственные байты и одновременно
-указывать на Git commit, содержащий само это приложение, без
-рекурсии. Генератор **всегда исключает `REPO_CONTEXT.rgp`**.
-Автоматическое обновление делается двумя коммитами:
+RGP/3.0 содержит только исходный текст и компактный индекс. SHA,
+`source_commit` и криптографические подтверждения удалены ради
+экономии токенов. Поэтому источник должен быть **получен извне**:
+из фиксированного Git-коммита, а подлинность файла проверяется
+по Git blob или независимой контрольной сумме.
 
-1. **A**: исходники проекта (например, объединённый PR).
-2. Сборка детерминированного RGP на A, где `source_commit=A`.
+Публикация использует два коммита:
+
+1. **A**: исходники и настройки проекта.
+2. Генерация RGP по исходникам A.
 3. **B**: коммит только `REPO_CONTEXT.rgp`.
 
-Поэтому `HEAD=B`, а манифест RGP честно указывает `A`.
-`scripts/repo_dogfood.py check` проверяет, что A является
-предком B, а `git diff A B` **не содержит никаких изменений,
-кроме одного файла публикации, `.rgp`**. Только тогда RGP применим как
-контекст исходников B. При изменении любого другого файла
-после A отказ с `STALE_SNAPSHOT` и явная повторная сборка.
-
-Проверка также требует, чтобы локальный RGP точно совпал
-с **Git-tracked blob в HEAD**, Reader прошёл проверку
-целостности и снимок был полным. Одна только контрольная сумма,
-записанная внутри самого файла, не доказывает подлинность.
+`scripts/repo_dogfood.py check` получает A по Git-истории,
+проверяет ancestry, отсутствие других изменений между A и B,
+сравнивает включённые исходные файлы побайтово с Git и
+проверяет соответствие локального .rgp файлу в HEAD.
+Для обычного потребителя одного только Reader недостаточно:
+изменение текста той же длины RGP/3.0 сам не выявляет.
 
 ## Автоматическое обслуживание
 
@@ -50,7 +47,7 @@ python3 scripts/repo_dogfood.py export --repo . --output /tmp/rgp-context
 при обновлении main создаёт снимок точного `GITHUB_SHA`,
 проверяет Rust и Python Reader, экспортирует файлы в песочницу,
 публикует независимый SHA в Actions summary, загружает ZIP,
-а затем **коммитит оба файла, `.rgp`, в main**. GitHub Actions не требуется для чтения файла напрямую из Git.
+а затем **коммитит один файл `.rgp` в main**. GitHub Actions не требуется для чтения файла напрямую из Git.
 
 Бот создаёт commit только при изменении снимка, не переписывает
 другие файлы, не использует force push. Коммит бота сделан

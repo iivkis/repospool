@@ -36,7 +36,7 @@ def _sha256(path: Path) -> str:
 
 
 def export_workspace(artifact: Path, output: Path, trusted_sha256: str, *,
-                     expected_commit: str,
+                     expected_commit: str, attested_source_commit: str | None = None,
                      prefix: str = "", allow_partial: bool = False,
                      max_files: int = DEFAULT_MAX_FILES,
                      max_bytes: int = DEFAULT_MAX_BYTES) -> dict:
@@ -70,8 +70,19 @@ def export_workspace(artifact: Path, output: Path, trusted_sha256: str, *,
     overview = reader.overview()
     # Even authentic source bytes may be stale relative to the GitHub commit
     # the agent intends to edit. The caller must separately obtain that SHA.
-    _require(overview["source_commit"] == expected_commit, "STALE_SNAPSHOT",
+    # In RGP/3.0 the source revision was deliberately removed from the
+    # transport to save tokens. Trusted external digest must be tied to the
+    # separately supplied Git commit by the publisher; no in-band claim exists.
+    _require(overview["source_commit"] in (None, expected_commit), "STALE_SNAPSHOT",
              "snapshot commit differs from expected Git revision; acquire a matching RGP")
+    if overview["source_commit"] is None:
+        # RGP/3.0 contains NO provenance. Fail closed unless an independent
+        # Git/attestation source binds its full-file digest to the source SHA.
+        _require(isinstance(attested_source_commit, str) and
+                 bool(COMMIT.fullmatch(attested_source_commit)),
+                 "STALE_SNAPSHOT", "RGP/3.0 requires external source attestation")
+        _require(attested_source_commit == expected_commit, "STALE_SNAPSHOT",
+                 "expected Git revision differs from external source attestation")
     _require(overview["snapshot_complete"] or allow_partial, "PARTIAL_SNAPSHOT",
              "snapshot is incomplete; explicit allow_partial required")
     entries = [e for e in reader.manifest["files"] if e["path"].startswith(prefix)]
@@ -107,9 +118,10 @@ def export_workspace(artifact: Path, output: Path, trusted_sha256: str, *,
                 symlink_text_paths.append(entry["path"])
         report = {
             "kind": "rgp_sandbox_workspace",
-            "source_commit": overview["source_commit"],
+            "source_commit": expected_commit if overview["source_commit"] is None else overview["source_commit"],
+            "provenance_source": "external_attestation_only" if overview["source_commit"] is None else "embedded_and_external",
             "expected_commit": expected_commit,
-            "commit_match": "matched_caller_supplied_commit",
+            "commit_match": "externally_attested" if overview["source_commit"] is None else "matched_caller_supplied_commit",
             "current_github_head_checked_by_exporter": False,
             "input_tree_digest": overview["input_tree_digest"],
             "rgp_sha256": observed,
@@ -145,6 +157,8 @@ def main() -> int:
     parser.add_argument("--trusted-sha256", required=True)
     parser.add_argument("--expected-commit", required=True,
                         help="GitHub commit this snapshot must represent; obtain HEAD separately")
+    parser.add_argument("--attested-source-commit",
+                        help="independently authenticated source SHA; mandatory for hash-free RGP/3.0")
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--prefix", default="")
     parser.add_argument("--allow-partial", action="store_true")
@@ -154,7 +168,8 @@ def main() -> int:
     try:
         result = export_workspace(
             args.artifact, args.output, args.trusted_sha256,
-            expected_commit=args.expected_commit, prefix=args.prefix, allow_partial=args.allow_partial,
+            expected_commit=args.expected_commit, attested_source_commit=args.attested_source_commit,
+            prefix=args.prefix, allow_partial=args.allow_partial,
             max_files=args.max_files, max_bytes=args.max_bytes)
     except (RgpError, OSError, ValueError) as exc:
         parser.exit(2, f"{exc}\n")

@@ -96,7 +96,7 @@ def bootstrap(zip_path: Path, output: Path, trusted_sha256: str | None = None) -
     _require(trusted_sha256 is None or trusted_sha256 == digest, "HASH_MISMATCH", "external trusted SHA-256")
     reader = Reader(received)
     if provenance is not None:
-        _require(provenance.get("source_commit") == reader.manifest["source_commit"],
+        _require(reader.manifest["source_commit"] in (None, provenance.get("source_commit")),
                  "HASH_MISMATCH", "provenance source commit")
         overview = provenance.get("reader_overview")
         _require(isinstance(overview, dict) and

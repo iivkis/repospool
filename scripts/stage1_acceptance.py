@@ -58,17 +58,17 @@ def check(repo: Path, rust_cli: Path) -> dict:
         data = first.read_bytes()
         assert data == second.read_bytes(), "nondeterministic RGP bytes"
         inline = Reader(first).overview()
-        assert inline["transport"] == "RGP/2.1", "missing standalone transport"
+        assert inline["transport"] == "RGP/3.0", "missing standalone transport"
         assert inline["embedded_instructions"], "missing inline agent instructions"
-        assert inline["source_commit"] == commit, "inline Git provenance"
-        evidence["checks"].append("RGP-MI full-artifact SHA and Git commit agreement")
+        assert inline["source_commit"] is None, "RGP must not contain Git hash"
+        evidence["checks"].append("hash-free RGP; externally verified Git source")
         evidence["artifact_sha256"] = hashlib.sha256(data).hexdigest()
         evidence["artifact_bytes"] = len(data)
         evidence["checks"].append("deterministic RGP generated twice")
         run(str(rust_cli), "verify", "--artifact", str(first), "--repo", str(repo))
         reader = Reader(first)
         assert reader.validate()["valid"] is True
-        assert reader.overview()["source_commit"] == commit
+        assert reader.overview()["source_commit"] is None
         assert reader.coverage("index")["status"] == "not_indexed"
         assert reader.coverage("graph")["status"] == "not_indexed"
         assert reader.coverage("investigation")["status"] == "unknown"
@@ -105,16 +105,13 @@ def check(repo: Path, rust_cli: Path) -> dict:
         evidence["checks"].append("three predefined source tasks matched independent Git source")
 
         # Negative cases on the *actual* generated output, not only fixtures.
-        bad_hash = re.sub(
-            rb"(manifest_sha256=)[0-9a-f]{64}",
-            lambda match: match.group(1) + b"0" * 64,
-            data, count=1,
-        )
-        assert bad_hash != data
+        oversized_index = re.sub(rb"index_bytes=[0-9]+", b"index_bytes=999999999",
+                                 data, count=1)
+        assert oversized_index != data
         for label, bad, code in (
             ("truncation", data[:-10], "TRUNCATED_ARTIFACT"),
             ("unknown version", data.replace(data.split(b"\n", 1)[0], b"RGP/9.0", 1), "UNSUPPORTED_FORMAT"),
-            ("modified payload hash", bad_hash, "HASH_MISMATCH"),
+            ("oversized index", oversized_index, "RESOURCE_LIMIT"),
         ):
             try:
                 Reader(bad)
@@ -128,7 +125,7 @@ def check(repo: Path, rust_cli: Path) -> dict:
             assert exc.code == "PARTIAL_SNAPSHOT"
         else:
             raise AssertionError("missing source unexpectedly readable")
-        evidence["checks"].append("truncation, unsupported version, invalid payload hash and absent file rejected")
+        evidence["checks"].append("truncation, unsupported version, oversized index and absent file rejected")
 
         # Concurrent writers to the *same* destination must not share a
         # temporary filename. The published artifact must stay verifiable.

@@ -61,8 +61,10 @@ def run(artifact: Path, source_repo: Path, repository: str,
     repo_row = next(r for r in plan["repositories"] if r["id"] == repository)
     reader = Reader(artifact)
     overview = reader.overview()
-    commit = overview["source_commit"]
-    assert commit == repo_row["commit"], "RGP was built at the wrong pinned commit"
+    # The source revision for RGP/3.0 comes from the independent pinned
+    # benchmark plan. Verify actual cited bytes against that Git revision.
+    commit = repo_row["commit"]
+    assert overview["source_commit"] in (None, commit), "RGP revision contradicts pinned Git"
     assert overview["snapshot_complete"], "a partial archive cannot ground the full task plan"
 
     source_cache: dict[str, bytes] = {}
