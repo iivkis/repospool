@@ -17,7 +17,7 @@ def sha(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def fixture(path="src/example.py", content=b"hello\nworld\n", extra=None, guided=False):
+def fixture(path="src/example.py", content=b"hello\nworld\n", extra=None, guided=False, transport=None):
     blob_name = "files/" + sha(content)
     tree = hashlib.sha256(path.encode() + b"\x00100644\x00" + bytes.fromhex(sha(content))).hexdigest()
     manifest = {
@@ -35,7 +35,7 @@ def fixture(path="src/example.py", content=b"hello\nworld\n", extra=None, guided
     b64 = base64.b64encode(payload).decode()
     prefix = (
         "RGP/1.1\n" + (ROOT / "docs" / "RGP_AGENT_GUIDE.txt").read_text(encoding="ascii")
-        if guided else "RGP/1.0\n"
+        if guided else (transport or "RGP/1.0") + "\n"
     )
     data = (
         f"{prefix}payload_length={len(payload)}\npayload_sha256={sha(payload)}\n"
@@ -78,6 +78,18 @@ class ReaderTest(unittest.TestCase):
         bad_version = artifact.replace(b"RGP/1.1\n", b"RGP/1.2\n", 1)
         with self.assertRaisesRegex(RgpError, "UNSUPPORTED_FORMAT"):
             Reader(bad_version)
+
+    def test_lean_v12_has_no_instructions_and_is_readable(self):
+        data = fixture(transport="RGP/1.2")
+        header = data.split(b"\n--\n", 1)[0]
+        self.assertEqual(header.split(b"\n")[0], b"RGP/1.2")
+        self.assertNotIn(b"AGENT QUICKSTART", header)
+        reader = Reader(data)
+        self.assertEqual(reader.read("src/example.py")["content"], "hello\nworld\n")
+        self.assertTrue(reader.validate()["valid"])
+        injected = data.replace(b"payload_length=", b"agent_guide_begin\npayload_length=", 1)
+        with self.assertRaisesRegex(RgpError, "UNSUPPORTED_FORMAT"):
+            Reader(injected)
 
     def test_oversized_header_is_rejected(self):
         artifact = fixture(guided=True)
