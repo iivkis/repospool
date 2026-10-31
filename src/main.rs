@@ -699,7 +699,7 @@ mod tests {
         legacy[..9].copy_from_slice(b"RGP/0.2.0");
         fs::write(repo.join("legacy.rgp"), legacy).unwrap();
         assert!(verify(&repo.join("legacy.rgp")).is_err());
-        assert!(artifact.contains("The guide describes only the format"));
+        assert!(artifact.contains("Purpose: RGP only locates and preserves source"));
         fs::remove_dir_all(&repo).unwrap();
     }
 
