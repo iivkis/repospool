@@ -29,7 +29,7 @@ MAX_HEADER = 4096
 AGENT_GUIDE_SHA256 = "9585596e0f091096bac8c67163a50fb40ab789ee72f49089f80557acbec4740d"
 HEX = re.compile(r"[0-9a-f]{64}\Z")
 COMMIT = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
-EXCLUSION_REASONS = frozenset({"self_artifact", "sensitive_path", "submodule_unavailable", "size_limit", "entry_limit"})
+EXCLUSION_REASONS = frozenset({"self_artifact", "sensitive_path", "submodule_unavailable", "size_limit", "entry_limit", "non_text"})
 
 
 class RgpError(ValueError):
@@ -167,6 +167,75 @@ def decode_transport(source: bytes) -> bytes:
     return payload
 
 
+def decode_plain(source: bytes) -> tuple[bytes, dict[str, int], dict[str, tuple[int, int]]]:
+    """Read exact UTF-8 source spans from a length-framed RGP/2.0."""
+    _require(len(source) <= 192 * 1024 * 1024, "RESOURCE_LIMIT", "RGP/2.0 too large")
+    try:
+        source.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise RgpError("UNSUPPORTED_FORMAT", "non-UTF8 plain RGP") from exc
+    _require(b"\x00" not in source, "UNSUPPORTED_FORMAT", "binary RGP")
+    pos = 0
+
+    def line() -> bytes:
+        nonlocal pos
+        end = source.find(b"\n", pos)
+        _require(end >= 0, "TRUNCATED_ARTIFACT", "plain line")
+        part = source[pos:end]
+        pos = end + 1
+        return part
+
+    _require(line() == b"RGP/2.0", "UNSUPPORTED_FORMAT", "plain version")
+    field = line()
+    digest_field = line()
+    _require(field.startswith(b"manifest_length=") and
+             digest_field.startswith(b"manifest_sha256="), "UNSUPPORTED_FORMAT", "plain header")
+    number = field[len(b"manifest_length="):]
+    digest = digest_field[len(b"manifest_sha256="):]
+    _require(bool(re.fullmatch(rb"[0-9]+", number)) and
+             bool(re.fullmatch(rb"[0-9a-f]{64}", digest)), "UNSUPPORTED_FORMAT", "plain header fields")
+    count = int(number)
+    _require(count <= MAX_MANIFEST, "RESOURCE_LIMIT", "manifest too large")
+    _require(line() == b"--", "UNSUPPORTED_FORMAT", "plain separator")
+    manifest_bytes = source[pos:pos + count]
+    _require(len(manifest_bytes) == count, "TRUNCATED_ARTIFACT", "plain manifest")
+    _require(_digest(manifest_bytes).encode() == digest, "HASH_MISMATCH", "plain manifest hash")
+    pos += count
+    _require(source[pos:pos + 1] == b"\n", "TRUNCATED_ARTIFACT", "manifest delimiter")
+    pos += 1
+    try:
+        manifest = json.loads(manifest_bytes)
+    except (ValueError, UnicodeError) as exc:
+        raise RgpError("UNSUPPORTED_FORMAT", "plain manifest JSON") from exc
+    _require(isinstance(manifest, dict) and isinstance(manifest.get("files"), list) and
+             len(manifest["files"]) < MAX_ENTRIES, "UNSUPPORTED_FORMAT", "plain file list")
+    sizes = {}
+    offsets = {}
+    total = 0
+    for record in manifest["files"]:
+        _require(isinstance(record, dict), "UNSUPPORTED_FORMAT", "plain file record")
+        path, size, digest = (record.get("path"), record.get("size"), record.get("sha256"))
+        _require(_safe_path(path) and type(size) is int and 0 <= size <= MAX_FILE and
+                 isinstance(digest, str) and bool(HEX.fullmatch(digest)),
+                 "UNSUPPORTED_FORMAT", "plain source description")
+        total += size
+        _require(total <= MAX_TOTAL, "RESOURCE_LIMIT", "source bytes")
+        path_json = json.dumps(path, ensure_ascii=False, separators=(",", ":"))
+        expected = f"FILE\t{path_json}\t{size}\t{digest}".encode("utf-8")
+        _require(line() == expected, "UNSUPPORTED_FORMAT", "plain file ordering/header")
+        raw = source[pos:pos + size]
+        _require(len(raw) == size, "TRUNCATED_ARTIFACT", "plain source")
+        _require(_digest(raw) == digest, "HASH_MISMATCH", "plain source SHA")
+        sizes[f"files/{digest}"] = size
+        offsets[f"files/{digest}"] = (pos, size)
+        pos += size
+        _require(source[pos:pos + 1] == b"\n", "TRUNCATED_ARTIFACT", "plain file separator")
+        pos += 1
+    _require(line() == b"END RGP" and pos == len(source),
+             "TRUNCATED_ARTIFACT", "plain terminal marker/trailing data")
+    return manifest_bytes, sizes, offsets
+
+
 class Reader:
     """Verifies the complete RGP on construction. RGP content is *data*, never code."""
 
@@ -175,40 +244,47 @@ class Reader:
             source = artifact
         else:
             path = Path(artifact)
-            _require(path.stat().st_size <= 2 * MAX_ARTIFACT, "RESOURCE_LIMIT", "artifact too large")
+            _require(path.stat().st_size <= 192 * 1024 * 1024, "RESOURCE_LIMIT", "artifact too large")
             source = path.read_bytes()
-        payload = decode_transport(source)
-        # Validate every source blob eagerly, but retain only its length and
-        # the compressed ZIP payload. Reads and searches decompress on demand.
-        blobs: dict[str, int] = {}
-        try:
-            archive = zipfile.ZipFile(io.BytesIO(payload))
-            with archive:
-                infos = archive.infolist()
-                _require(0 < len(infos) <= MAX_ENTRIES, "RESOURCE_LIMIT", "ZIP entry count")
-                names: set[str] = set()
-                total = 0
-                for index, info in enumerate(infos):
-                    name = info.filename
-                    _require(_safe_path(name), "UNSAFE_PATH", f"invalid ZIP path: {name!r}")
-                    _require(not stat.S_ISLNK(info.external_attr >> 16), "UNSAFE_PATH", "ZIP symlink entry")
-                    _require(name.lower() not in names, "UNSAFE_PATH", "duplicate ZIP path")
-                    names.add(name.lower())
-                    _require(name == "manifest.json" or name.startswith("files/"), "UNSAFE_PATH", "unexpected ZIP member")
-                    _require(info.file_size <= (MAX_MANIFEST if name == "manifest.json" else MAX_FILE), "RESOURCE_LIMIT", "oversized ZIP member")
-                    _require(info.file_size <= max(4096, info.compress_size * MAX_RATIO), "RESOURCE_LIMIT", "compression ratio")
-                    total += info.file_size
-                    _require(total <= MAX_TOTAL, "RESOURCE_LIMIT", "expanded ZIP size")
-                    contents = archive.read(info)
-                    _require(len(contents) == info.file_size, "HASH_MISMATCH", "ZIP entry length")
-                    if name == "manifest.json":
-                        _require(index == 0, "UNSUPPORTED_FORMAT", "manifest must be first")
-                        manifest_data = contents
-                    else:
-                        _require(name == f"files/{_digest(contents)}", "HASH_MISMATCH", "blob mismatch")
-                        blobs[name] = len(contents)
-        except (zipfile.BadZipFile, RuntimeError, EOFError) as exc:
-            raise RgpError("UNSUPPORTED_FORMAT", "invalid ZIP archive") from exc
+        self._plain = None
+        self._plain_offsets = {}
+        if source.startswith(b"RGP/2.0\n"):
+            manifest_data, blobs, self._plain_offsets = decode_plain(source)
+            self._plain = source
+            payload = None
+        else:
+            payload = decode_transport(source)
+            # Validate every source blob eagerly, but retain only its length and
+            # the compressed ZIP payload. Reads and searches decompress on demand.
+            blobs: dict[str, int] = {}
+            try:
+                archive = zipfile.ZipFile(io.BytesIO(payload))
+                with archive:
+                    infos = archive.infolist()
+                    _require(0 < len(infos) <= MAX_ENTRIES, "RESOURCE_LIMIT", "ZIP entry count")
+                    names: set[str] = set()
+                    total = 0
+                    for index, info in enumerate(infos):
+                        name = info.filename
+                        _require(_safe_path(name), "UNSAFE_PATH", f"invalid ZIP path: {name!r}")
+                        _require(not stat.S_ISLNK(info.external_attr >> 16), "UNSAFE_PATH", "ZIP symlink entry")
+                        _require(name.lower() not in names, "UNSAFE_PATH", "duplicate ZIP path")
+                        names.add(name.lower())
+                        _require(name == "manifest.json" or name.startswith("files/"), "UNSAFE_PATH", "unexpected ZIP member")
+                        _require(info.file_size <= (MAX_MANIFEST if name == "manifest.json" else MAX_FILE), "RESOURCE_LIMIT", "oversized ZIP member")
+                        _require(info.file_size <= max(4096, info.compress_size * MAX_RATIO), "RESOURCE_LIMIT", "compression ratio")
+                        total += info.file_size
+                        _require(total <= MAX_TOTAL, "RESOURCE_LIMIT", "expanded ZIP size")
+                        contents = archive.read(info)
+                        _require(len(contents) == info.file_size, "HASH_MISMATCH", "ZIP entry length")
+                        if name == "manifest.json":
+                            _require(index == 0, "UNSUPPORTED_FORMAT", "manifest must be first")
+                            manifest_data = contents
+                        else:
+                            _require(name == f"files/{_digest(contents)}", "HASH_MISMATCH", "blob mismatch")
+                            blobs[name] = len(contents)
+            except (zipfile.BadZipFile, RuntimeError, EOFError) as exc:
+                raise RgpError("UNSUPPORTED_FORMAT", "invalid ZIP archive") from exc
         _require("manifest_data" in locals(), "UNSUPPORTED_FORMAT", "missing manifest")
         try:
             def no_duplicate_keys(pairs):
@@ -269,6 +345,9 @@ class Reader:
 
     def _blob(self, path: str) -> bytes:
         """Read a verified source blob on demand, without caching all raw files."""
+        if self._plain is not None:
+            start, size = self._plain_offsets[self._files[path]["blob"]]
+            return self._plain[start:start + size]
         with zipfile.ZipFile(io.BytesIO(self._payload)) as archive:
             return archive.read(self._files[path]["blob"])
 
