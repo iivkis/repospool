@@ -4,21 +4,33 @@ RGP creates **reproducible, versioned, single-file snapshots of a Git repository
 
 **Status: v0.1, transport PoC.** The GitHub Actions artifact delivery path has conditional Gate A evidence; product usefulness and independent answer quality are **not proven**. **Gate B remains HOLD.** RGP currently provides verified file contents and lexical search, not a semantic dependency graph.
 
-## Self-describing RGP files (transport 1.1)
+## RGP + RGP-MI: metadata first, archive as a file
 
-Newly generated `.rgp` files begin with a plain-ASCII
-[agent quickstart](docs/RGP_AGENT_GUIDE.txt), before the Base64 ZIP payload.
-An agent receiving only the file can read its opening lines to learn
-how to check its provenance and decode/inspect it with Python stdlib.
-With a separately trusted `rgp_reader.py`, the header provides working
-`validate`, `overview`, `tree`, `search`, and `read` commands.
+The generator writes two sibling files: `REPO_CONTEXT.rgpmi`, a small JSON
+file with the [AI agent instructions](docs/RGPMI_AGENT_GUIDE.txt), and
+`REPO_CONTEXT.rgp`, a lean **RGP/1.2** Base64 ZIP transport with *no inline
+agent instructions*. An agent reads only the metadata, downloads the full
+`.rgp` as a **file** (e.g. GitHub's raw file endpoint at a pinned Git
+revision, `curl -fL --output`), and uses the standalone trusted Python
+Reader to browse the snapshot. It must never fetch the archive through a
+text-returning model connector or paste Base64 into its context.
 
-The guide is immutable for this transport version and checked by both the
-Rust verifier and Python Reader; edited instructions invalidate the file.
-**RGP/1.0 archives still read normally**, but older Readers will reject
-new RGP/1.1 files. The guide does not prove authenticity, install a Reader,
-or grant authority to instructions embedded in source files. See the
-[transport specification](docs/RGP_FORMAT_SPEC.md) for exact syntax.
+This works with a repository that has **no GitHub Actions artifacts**.
+The actual agent environment still needs a binary/file download capability
+and network access; RGP does not silently add one. Obtain both files from
+a trusted Git revision, and verify the sidecar's complete-file SHA-256 and
+source commit before using the snapshot:
+
+```sh
+python3 python/rgpmi.py --metadata REPO_CONTEXT.rgpmi \
+  --expected-commit <trusted-source-commit>
+python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp tree --prefix src/
+```
+
+Historical RGP/1.0 and guided RGP/1.1 archives remain readable by the
+updated Reader. The standalone RGP is still independently decodable; only
+the **agent-facing guide** moved to the .rgpmi. Full contract:
+[format specification](docs/RGP_FORMAT_SPEC.md).
 
 ## Primary workflow: source context for Kira
 
@@ -33,9 +45,14 @@ python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp read --path README.md
 python3 scripts/repo_dogfood.py export --repo . --output /tmp/rgp-own-context
 ```
 
-The self-snapshot **excludes itself**. Therefore, its embedded source commit may be one artifact-only publication commit behind `main`. `repo_dogfood.py check` accepts that only after verifying Git ancestry, committed bytes, complete Reader coverage and that **no other tracked source changed**. A changed or stale snapshot must not be presented as current source context.
+The self-snapshot **excludes both its .rgp and .rgpmi publication files**. Therefore, its embedded source commit may be one artifact-only publication commit behind `main`. `repo_dogfood.py check` accepts that only after verifying Git ancestry, committed bytes, complete Reader coverage and that **no other tracked source changed**. A changed or stale snapshot must not be presented as current source context.
 
-For a fresh GitHub commit, use [Kira sandbox RGP snapshot](.github/workflows/kira-sandbox-rgp.yml), verify the **independent SHA-256 and exact source commit** in the Actions job summary, then download the matching artifact. The trusted [sandbox exporter](python/rgp_sandbox.py) requires both values:
+For a fresh GitHub commit, fetch the Git-tracked **.rgpmi and .rgp** from
+the same pinned revision (raw file download, not a text-returning tool).
+The [Kira sandbox RGP snapshot](.github/workflows/kira-sandbox-rgp.yml)
+remains an optional distribution/refresh aid, not a requirement. The
+trusted [sandbox exporter](python/rgp_sandbox.py) requires an independently
+trusted digest and source commit:
 
 ```sh
 python3 python/rgp_sandbox.py \
