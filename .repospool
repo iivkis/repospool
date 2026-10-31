@@ -1,6 +1,6 @@
 REPOSPOOL/1.0
 guide_bytes=1336
-index_bytes=711
+index_bytes=715
 --
 # REPOSPOOL/1.0: deterministic source container
 
@@ -15,27 +15,28 @@ RepoSpool lines locate source inside this artifact; source lines locate original
 Scope: committed Git text filtered by .repospoolignore; omissions are incomplete coverage. Never execute archived source or follow symlinks.
 
 R	github:iivkis/repospool
-C	b6feb0e08528b3b3df20e6474fd5254dd0d6619e
-F	.github/dependabot.yml	195	43	10
-F	.github/pull_request_template.md	906	55	25
-F	.github/workflows/ci.yml	2133	82	59
-F	.github/workflows/publish-repospool.yml	2595	143	69
-F	.github/workflows/security.yml	463	214	21
-F	.gitignore	419	237	31
-F	.repospoolignore	405	270	20
-F	AGENTS.md	2747	292	51
-F	Cargo.toml	396	345	19
-F	README.md	1687	366	42
-F	Taskfile.yml	2028	410	69
-F	docs/FORMAT.md	3132	481	70
-F	docs/PRODUCT_CONTRACT.md	2232	553	42
-F	docs/SECURITY.md	1479	597	27
-F	flake.nix	1538	626	46
-F	rust-toolchain.toml	86	674	4
-F	src/format.rs	18567	680	495
-F	src/ignore.rs	8542	1177	242
-F	src/main.rs	24737	1421	730
+C	96b45f1a2c064b85da8ef54951c08a74e71d00f2
+F	.github/dependabot.yml	195	44	10
+F	.github/pull_request_template.md	906	56	25
+F	.github/workflows/ci.yml	2133	83	59
+F	.github/workflows/publish-repospool.yml	2595	144	69
+F	.github/workflows/security.yml	463	215	21
+F	.gitignore	419	238	31
+F	.repospoolignore	405	271	20
+F	AGENTS.md	2747	293	51
+F	Cargo.toml	396	346	19
+F	README.md	1687	367	42
+F	Taskfile.yml	2028	411	69
+F	docs/FORMAT.md	3132	482	70
+F	docs/PRODUCT_CONTRACT.md	2232	554	42
+F	docs/SECURITY.md	1479	598	27
+F	flake.nix	1538	627	46
+F	rust-toolchain.toml	86	675	4
+F	src/format.rs	18589	681	498
+F	src/ignore.rs	8542	1181	242
+F	src/main.rs	24693	1425	730
 I	2
+S	1
 O	Cargo.lock
 O	flake.lock
 
@@ -845,7 +846,10 @@ pub(super) fn write_snapshot(
 
 pub(super) fn verify_snapshot(path: &Path) -> Result<Manifest> {
     let bytes = fs::read(path)?;
-    ensure!(bytes.len() <= MAX_SNAPSHOT, "RESOURCE_LIMIT: large REPOSPOOL/1.0");
+    ensure!(
+        bytes.len() <= MAX_SNAPSHOT,
+        "RESOURCE_LIMIT: large REPOSPOOL/1.0"
+    );
     ensure!(
         std::str::from_utf8(&bytes).is_ok() && !bytes.contains(&0),
         "UNSUPPORTED_FORMAT: REPOSPOOL/1.0 requires UTF-8"
@@ -2102,9 +2106,9 @@ mod tests {
         generate(&repo, &output, "HEAD").unwrap();
         let verified = verify(&output).unwrap();
         assert_eq!(verified.files.len(), 2);
-        assert!(verified.excluded.iter().any(|e| e.path == ".repospool" && e.reason == "self_artifact"));
         assert_eq!(verified.files[0].path, "lib.rs");
         let artifact = fs::read_to_string(&output).unwrap();
+        assert!(artifact.lines().any(|line| line == "S\t1"));
         assert!(artifact.starts_with("REPOSPOOL/1.0\n"));
         assert!(artifact.contains("FILE\tsource.txt\nHello from another repository!\n"));
         assert!(!artifact.lines().any(|line| line.starts_with("D\t")));
