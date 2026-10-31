@@ -1,5 +1,13 @@
 # Stage 1: verified Actions delivery and source-answer proof
 
+> **Исторический материал:** этот отчёт описывает более ранние
+> форматы и/или измерения; для текущего RGP/3.0 см.
+> [канонический roadmap](PRODUCT_ROADMAP.md) и
+> [актуальное техническое ревью](REVIEW_2026-10-31.md).
+> Его ZIP/JSON/внутренние SHA выводы не переносятся на RGP/3.0
+> без повторного измерения и внешней проверки по Git.
+
+
 This is the Stage 1 delivery counterpart to the
 [pinned-corpus functional test](STAGE1_CORPUS_DIAGNOSTIC.md) and the
 [resource stress test](STAGE1_STRESS.md).
