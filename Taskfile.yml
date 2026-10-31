@@ -1,176 +1,69 @@
-# https://taskfile.dev
 version: '3'
 
 vars:
-  ARTIFACT: '{{.ARTIFACT | default "REPO_CONTEXT.rgp"}}'
   REPO: '{{.REPO | default "."}}'
+  ARTIFACT: '{{.ARTIFACT | default "REPO_CONTEXT.rgp"}}'
 
-# All commands work inside `nix develop`; Python inside an agent sandbox
-# requires only stdlib and never calls uv.
 tasks:
   default:
-    desc: List available project commands
     cmds:
       - task --list
-
   fmt:
-    desc: Format Rust sources
+    desc: Format Rust source
     cmds:
       - cargo fmt --all
-
   fmt:check:
-    desc: Verify Rust formatting
+    desc: Check Rust formatting
     cmds:
       - cargo fmt --all -- --check
-
   lint:
-    desc: Run Clippy with warnings treated as errors
+    desc: Clippy without warnings
     cmds:
       - cargo clippy --locked --all-targets -- -D warnings
-
-  test:rust:
-    desc: Run Rust unit and integration tests
+  test:
+    desc: Rust tests including real Git generation
     cmds:
       - cargo test --locked --all-targets
-
-  test:python:
-    desc: Run dependency-free Reader/bootstrap tests through uv
-    cmds:
-      - uv run --no-project --offline python3 -m unittest discover -s tests -p 'test_*.py' -v
-
-  test:
-    desc: Run all Rust and Python tests
-    cmds:
-      - task: test:rust
-      - task: test:python
-
   smoke:
-    desc: Run Rust generator, determinism, Rust verifier and Python Reader end-to-end
+    desc: Two deterministic source snapshots and Rust verification
     cmds:
       - |
         set -eu
         work="$(mktemp -d)"
         trap 'rm -rf "$work"' EXIT
-        cargo run --locked -- generate --repo . --output "$work/a.rgp"
-        cargo run --locked -- generate --repo . --output "$work/b.rgp"
+        cargo run --locked -- generate . --output "$work/a.rgp"
+        cargo run --locked -- generate . --output "$work/b.rgp"
         cmp "$work/a.rgp" "$work/b.rgp"
         cargo run --locked -- verify --artifact "$work/a.rgp" --repo .
-        python3 python/rgp_reader.py --artifact "$work/a.rgp" validate
-        python3 python/rgp_reader.py --artifact "$work/a.rgp" read --path README.md
-
-  stage1:acceptance:
-    desc: Real pinned Git source tasks, Reader results, rejection cases and parallel generation
-    cmds:
-      - cargo build --locked
-      - python3 scripts/stage1_acceptance.py --rust-cli target/debug/rgp
-
-  stage1:corpus:
-    desc: Run pinned corpus source acceptance and resource diagnostic (REPOSITORY=rgp|serde_json|itsdangerous)
-    vars:
-      REPOSITORY: '{{.REPOSITORY | default "rgp"}}'
-    cmds:
-      - cargo build --locked --release
-      - python3 scripts/stage1_corpus.py --repository '{{.REPOSITORY}}' --rust-cli target/release/rgp --report /tmp/rgp-stage1-corpus-{{.REPOSITORY}}.json
-
-  stage1:stress:
-    desc: Run the synthetic source stress profile (PROFILE=many-files|incompressible|compressible|oversized)
-    vars:
-      PROFILE: '{{.PROFILE | default "many-files"}}'
-    cmds:
-      - cargo build --locked --release
-      - python3 scripts/stage1_stress.py --profile '{{.PROFILE}}' --rust-cli target/release/rgp --report /tmp/rgp-stage1-stress-{{.PROFILE}}.json
-
-  stage1:scale:
-    desc: Run real Git 50k-member capacity and partial-snapshot acceptance
-    cmds:
-      - cargo build --locked --release
-      - python3 scripts/stage1_scale.py --rust-cli target/release/rgp --report /tmp/rgp-stage1-scale.json
-
   check:
-    desc: Run all checks, deterministic snapshot smoke and goal-level RGP acceptance
+    desc: Run Rust checks and snapshot smoke test
     cmds:
       - task: fmt:check
       - task: lint
       - task: test
       - task: smoke
-      - task: stage1:acceptance
-
-  rgp:check:
-    desc: Verify the Git-tracked RGP is complete and source-equivalent to current checkout
-    cmds:
-      - python3 scripts/repo_dogfood.py check --repo .
-
-  rgp:context:
-    desc: Read own RGP overview and navigate common Python sources before a change
-    cmds:
-      - task: rgp:check
-      - python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp overview
-      - python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp tree --prefix python/
-
-  rgp:refresh:
-    desc: Regenerate tracked RGP/0.1.0
-    cmds:
-      - cargo run --locked -- generate --repo . --rev HEAD --output REPO_CONTEXT.rgp
-      - python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp validate
-
   generate:
-    desc: Generate a snapshot (override REPO and ARTIFACT as needed)
+    desc: Generate RGP from a Git repository
     cmds:
-      - cargo run --locked -- generate --repo '{{.REPO}}' --output '{{.ARTIFACT}}'
-
+      - cargo run --locked -- generate '{{.REPO}}' --output '{{.ARTIFACT}}'
   verify:
-    desc: Verify a snapshot and its freshness relative to REPO
+    desc: Verify a snapshot's structure and selected Git sources
     cmds:
       - cargo run --locked -- verify --artifact '{{.ARTIFACT}}' --repo '{{.REPO}}'
-
   inspect:
-    desc: Inspect a snapshot's verified manifest
+    desc: Inspect the internal source index
     cmds:
       - cargo run --locked -- inspect --artifact '{{.ARTIFACT}}'
-
+  rgp:refresh:
+    desc: Regenerate the tracked snapshot
+    cmds:
+      - cargo run --locked -- generate .
+  rgp:check:
+    desc: Verify the tracked snapshot against HEAD
+    cmds:
+      - cargo run --locked -- verify --artifact REPO_CONTEXT.rgp --repo .
   nix:check:
-    desc: Check the pinned development flake
+    desc: Build and check the distributable Nix flake
     cmds:
       - nix flake check --no-update-lock-file --show-trace
-
-  benchmark:plan:
-    desc: Validate assistant-only Gate B v2 tasks (no inference)
-    cmds:
-      - python3 scripts/gate_b.py plan
-
-  benchmark:report:
-    desc: Evaluate assistant-observed GitHub/RGP source checks; incomplete remains HOLD
-    vars:
-      OBSERVATIONS: '{{.OBSERVATIONS | default "benchmarks/gate_b/observations.template.json"}}'
-    cmds:
-      - python3 scripts/gate_b.py report --observations '{{.OBSERVATIONS}}'
-
-  benchmark:review:pack:
-    desc: Generate arm-masked Gate B source review packet on stdout
-    cmds:
-      - python3 scripts/gate_b_review.py pack
-
-  benchmark:review:template:
-    desc: Generate an empty independent review JSON from PACKET
-    vars:
-      PACKET: '{{.PACKET | default "/tmp/gate-b-packet.json"}}'
-    cmds:
-      - python3 scripts/gate_b_review.py template --packet '{{.PACKET}}'
-
-  benchmark:review:check:
-    desc: Validate completed independent review (never auto-promote Gate B to GO)
-    vars:
-      PACKET: '{{.PACKET | default "/tmp/gate-b-packet.json"}}'
-      REVIEW: '{{.REVIEW | default "/tmp/gate-b-review.json"}}'
-    cmds:
-      - python3 scripts/gate_b_review.py check --packet '{{.PACKET}}' --review '{{.REVIEW}}'
-
-  benchmark:sensitivity:
-    desc: Model Gate B task-volume break-even from pinned source references (no new trials)
-    cmds:
-      - python3 scripts/gate_b_sensitivity.py
-
-  benchmark:test:
-    desc: Offline tests for assistant-only accounting and RGP source audit
-    cmds:
-      - python3 -m unittest discover -s tests -p 'test_gate_b*.py' -v
+      - nix build --no-update-lock-file .#rgp

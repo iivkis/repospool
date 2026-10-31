@@ -1,14 +1,24 @@
 # RGP
 
-**RGP/0.1.0** packs selected Git-tracked UTF-8 files for coding agents. Each read-only snapshot has an auto-generated, repository-neutral guide, file index, and byte-framed source.
+A single command generates a self-contained, read-only UTF-8 repository snapshot for a coding agent:
 
 ```sh
-cargo run --locked -- generate --repo . --output source.rgp
-cargo run --locked -- verify --artifact source.rgp --repo .
-python3 python/rgp_reader.py --artifact source.rgp tree
-python3 python/rgp_reader.py --artifact source.rgp read --path README.md
+rgp generate .
+# creates ./REPO_CONTEXT.rgp
 ```
 
-RGP embeds **no commit IDs or hashes**: verify provenance against trusted Git data. `.rgpignore` limits snapshot scope. Old format versions are unsupported.
+## Use from another Nix flake
 
-[Format](docs/RGP_FORMAT_SPEC.md) · [Reader](docs/READER_API.md) · [Security](docs/RGP_SECURITY_MODEL.md)
+Add `rgp.url = "github:iivkis/rgp";` to `inputs`. In your `outputs`, add `rgp.packages.${pkgs.system}.default` to your development shell's `packages`. Then run `nix develop` followed by `rgp generate .`
+
+Without changing a flake:
+
+```sh
+nix run github:iivkis/rgp -- generate .
+```
+
+The artifact includes a generated format guide, indexed paths and source bodies. The agent needs **only the .rgp file**, not a Python Reader, MCP or sandbox scripts.
+
+Only tracked Git text is captured; `.rgpignore` can limit scope. RGP has **no built-in authenticity/freshness proof**: authenticate its origin separately before relying on it for source changes.
+
+[Format](docs/RGP_FORMAT_SPEC.md) · [Security](docs/RGP_SECURITY_MODEL.md)

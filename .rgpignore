@@ -1,10 +1,10 @@
-# RGP/0.1.0 context filter. Gitignore syntax; evaluated at the pinned Git commit.
-# These paths stay in Git: an agent can fetch them directly when needed.
-# This file itself is ALWAYS included in the RGP and documents its scope.
-#
-# Historic measurements, checkpoints and long-form archived planning.
+# RGP/0.1.0 context filter; paths remain in Git.
+# Research archives are not needed to understand the Rust generator.
 /benchmarks/
-/docs/RGP_INLINE_AGENT_GUIDE.txt
+/docs/AGENT_FIRST_PILOT.md
+/docs/ENGINEERING_PRINCIPLES.md
+/docs/GATE_B_CORRECTION.md
+/docs/PRODUCT_NORTH_STAR.md
 /docs/REVIEW_*.md
 /docs/STAGE1_*.md
 /docs/AGENT_VALUE_TRIAL_*.md
@@ -12,16 +12,12 @@
 /docs/GATE_B_REVIEW.md
 /docs/gate-a/
 
-# Obsolete fixture directory, if restored for historical research.
-/tests/fixtures/
-
-# Workflow and repository automation: easy to read from GitHub on demand.
+# GitHub workflows and generated dependency locks are available separately.
 /.github/
-
-# Dependency resolution locks and generated/local build artifacts.
 /Cargo.lock
 /flake.lock
 /uv.lock
+
 **/node_modules/
 **/.next/
 **/dist/

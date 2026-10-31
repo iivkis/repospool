@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   rust:
-    name: Rust fmt, clippy, test and snapshot
+    name: Rust formatting, clippy, tests and generation
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,90 +25,36 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
-      - name: Formatting
-        run: cargo fmt --all -- --check
-      - name: Clippy
-        run: cargo clippy --locked --all-targets -- -D warnings
-      - name: Rust tests
-        run: cargo test --locked --all-targets
-      - name: Reader stdlib tests
-        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
-      - name: Assistant-only Gate B tests and HOLD
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo test --locked --all-targets
+      - name: CLI generation, verification and determinism
         shell: bash
         run: |
           set -euo pipefail
-          python3 scripts/gate_b.py plan
-          python3 scripts/gate_b_sensitivity.py > "$RUNNER_TEMP/sensitivity.json"
-          python3 -c 'import json,sys; v=json.load(open(sys.argv[1])); assert v["new_experimental_trials"] == 0 and v["total_nonempty_subsets"] == 4095 and v["full_run_measured_calls"] == {"github":13, "rgp":6} and v["decision"].startswith("HOLD")' "$RUNNER_TEMP/sensitivity.json"
-          python3 scripts/gate_b.py report > "$RUNNER_TEMP/hold.json"
-          python3 -c 'import json,sys; assert json.load(open(sys.argv[1]))["status"] == "HOLD"' "$RUNNER_TEMP/hold.json"
-      - name: Prepare arm-masked Gate B reviewer handoff and assert HOLD
-        shell: bash
-        run: |
-          set -euo pipefail
-          handoff="$RUNNER_TEMP/gate-b-review-handoff"
-          mkdir -p "$handoff"
-          python3 scripts/gate_b_source_lines.py --help > /dev/null
-          python3 scripts/gate_b_review.py pack > "$handoff/packet.json"
-          python3 scripts/gate_b_review.py template --packet "$handoff/packet.json" > "$handoff/review-template.json"
-          python3 scripts/gate_b_review.py check --packet "$handoff/packet.json" --review "$handoff/review-template.json" > "$handoff/initial-status.json"
-          python3 -c 'import json,sys; v=json.load(open(sys.argv[1])); assert v["status"]=="HOLD" and v["missing"]==24' "$handoff/initial-status.json"
-          # Self-recorded counts are not proof of provider calls.
-          # The new handoff contains 19 intentionally missing receipts.
-          python3 scripts/gate_b_call_audit.py template --output "$handoff/tool-receipt-template.json" > /dev/null
-          python3 scripts/gate_b_call_audit.py audit --ledger "$handoff/tool-receipt-template.json" --output "$handoff/tool-receipt-status.json" > /dev/null
-          python3 -c 'import json,sys; x=json.load(open(sys.argv[1])); assert x["status"]=="HOLD" and x["missing_receipts_total"]==19 and x["verified_connector_call_reduction"] is None' "$handoff/tool-receipt-status.json"
-          python3 scripts/gate_b_decision.py --packet "$handoff/packet.json" --review "$handoff/review-template.json" --ledger "$handoff/tool-receipt-template.json" --output "$handoff/final-gate-b-status.json" > /dev/null
-          python3 -c 'import json,sys; x=json.load(open(sys.argv[1])); assert x["official_status"]=="HOLD" and x["answer_review"]["missing"]==24 and x["tool_history"]["missing_receipts_total"]==19' "$handoff/final-gate-b-status.json"
-          # Integrity and discovery hashes are supplied, but no reviewer verdict is invented.
-          cp benchmarks/gate_b/source_line_counts.json "$handoff/source-line-counts.json"
-          cp benchmarks/gate_b/corpus_preparation.json "$handoff/corpus-checkpoint.json"
-          (cd "$handoff" && sha256sum packet.json review-template.json initial-status.json tool-receipt-template.json tool-receipt-status.json final-gate-b-status.json source-line-counts.json corpus-checkpoint.json > SHA256SUMS)
-          cp docs/GATE_B_REVIEW.md "$handoff/INSTRUCTIONS.md"
-      - name: Upload Gate B review handoff (not a reviewed result)
-        uses: actions/upload-artifact@v4
-        with:
-          name: gate-b-review-handoff
-          path: ${{ runner.temp }}/gate-b-review-handoff/
-          if-no-files-found: error
-          retention-days: 14
-      - name: Build current-format Rust verifier
-        run: cargo build --locked
-      - name: Canonical cross-language round-trip and determinism
-        shell: bash
-        run: |
-          set -euo pipefail
-          cargo run --locked -- generate --repo . --output "$RUNNER_TEMP/a.rgp"
-          cargo run --locked -- generate --repo . --output "$RUNNER_TEMP/b.rgp"
+          cargo build --locked
+          target/debug/rgp generate . --output "$RUNNER_TEMP/a.rgp"
+          target/debug/rgp generate . --output "$RUNNER_TEMP/b.rgp"
           cmp "$RUNNER_TEMP/a.rgp" "$RUNNER_TEMP/b.rgp"
-          cargo run --locked -- verify --artifact "$RUNNER_TEMP/a.rgp" --repo .
-          python3 python/rgp_reader.py --artifact "$RUNNER_TEMP/a.rgp" overview
-          python3 python/rgp_reader.py --artifact "$RUNNER_TEMP/a.rgp" read --path README.md
-      - name: Stage 1 agent-owned RGP acceptance against pinned Git sources
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 scripts/stage1_acceptance.py \
-            --rust-cli target/debug/rgp \
-            --report "$RUNNER_TEMP/stage1-acceptance.json"
-          python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); assert r["status"]=="PASS" and len(r["tasks"])==3 and r["gate_b"]=="HOLD"' "$RUNNER_TEMP/stage1-acceptance.json"
-      - name: Publish sanitized Stage 1 acceptance evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: stage1-acceptance
-          path: ${{ runner.temp }}/stage1-acceptance.json
-          if-no-files-found: warn
-          retention-days: 14
+          target/debug/rgp verify --artifact "$RUNNER_TEMP/a.rgp" --repo .
+          test "$(head -n 1 "$RUNNER_TEMP/a.rgp")" = "RGP/0.1.0"
 
   nix:
-    name: Nix flake dev-shell evaluation
+    name: Nix package build and external-style invocation
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           persist-credentials: false
       - uses: DeterminateSystems/nix-installer-action@v17
       - uses: DeterminateSystems/magic-nix-cache-action@v11
       - run: nix flake check --no-update-lock-file --show-trace
-      - run: nix develop --no-update-lock-file --command bash -c 'cargo --version && rustc --version && uv --version && python3 --version && task --version && task --list && task --dry check'
+      - run: nix build --no-update-lock-file .#rgp --out-link "$RUNNER_TEMP/rgp-package"
+      - name: Nix-installed CLI generates and verifies a standalone artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/rgp-package/bin/rgp" generate . --output "$RUNNER_TEMP/nix.rgp"
+          "$RUNNER_TEMP/rgp-package/bin/rgp" verify --artifact "$RUNNER_TEMP/nix.rgp" --repo .
+          test "$(head -n 1 "$RUNNER_TEMP/nix.rgp")" = "RGP/0.1.0"

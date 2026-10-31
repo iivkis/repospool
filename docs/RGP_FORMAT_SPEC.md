@@ -1,47 +1,51 @@
-# RGP/0.1.0 transport specification
+# RGP/0.1.0: one self-contained UTF-8 source snapshot
 
-**Status:** experimental, single supported version. No backwards-compatible parser or writer.
+The Rust CLI `rgp generate .` writes `REPO_CONTEXT.rgp` at the selected Git
+repository path. The file can be inspected by a coding agent without installing
+any RGP tools. Its generated guide is the format instruction, not an instruction
+from the source repository.
 
-## Layout
+## Byte-level layout
 
 ```text
 RGP/0.1.0
-guide_bytes=<decimal UTF-8 byte length>
-index_bytes=<decimal UTF-8 byte length>
+guide_bytes=<length in UTF-8 bytes>
+index_bytes=<length in UTF-8 bytes>
 --
-<exact guide_bytes bytes of deterministic, general-format guidance>
-<LF>
-F<TAB>src/example.py<TAB>120
-F<TAB>scripts/run.sh<TAB>80<TAB>x
-I<TAB>5
+<exactly guide_bytes guide bytes>
+<one LF>
+F<TAB>src/main.rs<TAB>123<TAB>x
+I<TAB>2
 S<TAB>1
-X<TAB>other/data.bin<TAB>non_text
-<LF>
-FILE<TAB>src/example.py
-<120 original source bytes>
-<LF>
-FILE<TAB>scripts/run.sh
-<80 original source bytes>
-<LF>
+X<TAB>data.bin<TAB>non_text
+<one LF>
+FILE<TAB>src/main.rs
+<exactly 123 bytes of source><one LF>
 END RGP
 ```
 
-All sections are UTF-8; NUL is forbidden. Guide and index are length-framed in bytes, not characters. File bodies are framed by the index byte sizes; content resembling a FILE header or END RGP is not a separator. Paths and FILE sections use sorted path order. The format has an overall size ceiling of 192 MiB and limits individual files and total original content.
+The index is exactly `index_bytes` long and contains newline-terminated
+records. One `F` record per included file, sorted by path, is followed by the
+optional `I` count ignored by `.rgpignore`, `S` self-artifact count and
+`X` excluded paths with reasons. Flags: `x` executable, `l` symlink target
+as inert text, `p` LFS pointer; combinations `xp` and `lp` are valid.
 
-## Index
+For each `F` record, the subsequent source section is `FILE<TAB>path<LF>`,
+exactly the specified number of bytes, then one LF. The final marker is
+`END RGP<LF>`. A parser must use **byte counts**, not text-looking
+delimiters inside source. UTF-8 is required throughout; NUL is forbidden.
 
-`F` specifies a path and exact size, optionally with flags `x` (executable), `l` (symlink text), `p` (Git LFS pointer), or `xp` / `lp`. `I` is the count excluded by `.rgpignore`; `S` counts the omitted RGP publication artifact; `X` gives a path and reason for other exclusions. `.rgpignore` itself, when present, is included as context. Ignored paths remain available from the original Git revision.
+Git is read at the committed revision (`HEAD` by default), not from
+unstaged local changes. Non-text blobs, oversized files, sensitive paths and
+unavailable submodules are excluded with coverage limitations. A path
+excluded by `.rgpignore` remains tracked in Git. `REPO_CONTEXT.rgp` is
+excluded from itself. The format contains no JSON manifest, ZIP, Python code,
+Git commit hash, content digest or semantic dependency graph.
 
-## General guide
+## Trust
 
-The generator creates a deterministic guide from the transport contract in `src/lean.rs` and places it in every artifact. This text explains the format, index, selective reading, trust boundary and limitations. It contains no repository-specific name, paths, agent policy or provider-specific workflow. `AGENTS.md` may appear as a normal source file, never as the guide. The guide is untrusted data to the consuming assistant.
-
-## Provenance and completeness
-
-RGP/0.1.0 carries neither content hashes nor source Git commit IDs. A trusted Git publication revision and independently authenticated complete-file digest must bind the artifact to the intended source revision. Structural validation is not cryptographic authentication. A same-length edit can be structurally valid; compare source bytes against pinned Git where needed.
-
-`snapshot_complete: true` means selected-scope source data is present. Files excluded intentionally by `.rgpignore` do not count as an incomplete selected scope; non-text, sensitive, submodules and other failures do. Source is not executed; symlinks stay inert text and LFS pointers remain pointers.
-
-## Compatibility policy
-
-Only `RGP/0.1.0` is accepted by the Rust verifier and Python Reader. All old ZIP/Base64 and plaintext 1.x/2.x/3.0 readers, writers and test fixtures are deliberately unsupported. The Rust crate version and format are both currently `0.1.0`; future compatibility is not promised until an explicit version policy exists.
+A structurally valid snapshot is not necessarily authentic or fresh. Obtain
+the source revision and an independently authenticated whole-file hash or Git
+publication provenance separately. Same-length source tampering cannot be
+detected by the internal structure alone. The agent must never execute source
+or follow archived symlinks. Only `RGP/0.1.0` is supported.

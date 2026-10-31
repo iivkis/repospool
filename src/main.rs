@@ -27,10 +27,10 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     Generate {
-        #[arg(long, default_value = ".")]
+        #[arg(value_name = "REPOSITORY", default_value = ".")]
         repo: PathBuf,
-        #[arg(long, default_value = "REPO_CONTEXT.rgp")]
-        output: PathBuf,
+        #[arg(long, value_name = "FILE")]
+        output: Option<PathBuf>,
         #[arg(long, default_value = "HEAD")]
         rev: String,
     },
@@ -494,9 +494,15 @@ fn verify_manifest(manifest: Manifest, blobs: BTreeMap<String, u64>) -> Result<M
     Ok(manifest)
 }
 
+fn output_path(repo: &Path, output: Option<PathBuf>) -> PathBuf {
+    output.unwrap_or_else(|| repo.join("REPO_CONTEXT.rgp"))
+}
+
 fn main() -> Result<()> {
     match Cli::parse().command {
-        Commands::Generate { repo, output, rev } => generate(&repo, &output, &rev),
+        Commands::Generate { repo, output, rev } => {
+            generate(&repo, &output_path(&repo, output), &rev)
+        },
         Commands::Verify { artifact, repo } => {
             let manifest = verify(&artifact)?;
             if let Some(repo) = repo {
@@ -557,6 +563,62 @@ mod tests {
         assert!(guide.contains("independent"));
         assert!(!guide.contains("github.com/iivkis"));
         assert!(!guide.contains("REPO_CONTEXT.rgp"));
+    }
+
+
+    #[test]
+    fn generate_accepts_positional_repository_and_defaults_to_its_root() {
+        let parsed = Cli::try_parse_from(["rgp", "generate", "some-project"]).unwrap();
+        match parsed.command {
+            Commands::Generate { repo, output, rev } => {
+                assert_eq!(repo, PathBuf::from("some-project"));
+                assert_eq!(rev, "HEAD");
+                assert_eq!(
+                    output_path(&repo, output),
+                    PathBuf::from("some-project/REPO_CONTEXT.rgp")
+                );
+            }
+            _ => panic!("expected generate"),
+        }
+    }
+
+    #[test]
+    fn real_git_snapshot_is_self_contained() {
+        let repo = std::env::temp_dir().join(format!(
+            "rgp-git-test-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&repo).unwrap();
+        let run_git = |args: &[&str]| {
+            let status = Command::new("git")
+                .arg("-C")
+                .arg(&repo)
+                .args(args)
+                .status()
+                .unwrap();
+            assert!(status.success(), "git {args:?} failed");
+        };
+        run_git(&["init", "-q"]);
+        fs::write(repo.join("source.txt"), "Hello from another repository!\n").unwrap();
+        run_git(&["add", "source.txt"]);
+        run_git(&[
+            "-c", "user.name=RGP Test", "-c", "user.email=rgp@example.invalid",
+            "commit", "-q", "-m", "Initial source",
+        ]);
+        let output = output_path(&repo, None);
+        generate(&repo, &output, "HEAD").unwrap();
+        let verified = verify(&output).unwrap();
+        assert_eq!(verified.files.len(), 1);
+        assert_eq!(verified.files[0].path, "source.txt");
+        let artifact = fs::read_to_string(&output).unwrap();
+        assert!(artifact.starts_with("RGP/0.1.0\n"));
+        assert!(artifact.contains("FILE\tsource.txt\nHello from another repository!\n"));
+        assert!(artifact.contains("This guide describes the format, not the source repository."));
+        fs::remove_dir_all(&repo).unwrap();
     }
 
     #[test]

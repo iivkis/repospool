@@ -1,69 +1,25 @@
-# Модель безопасности RGP/0.1.0
+# Security boundaries of RGP/0.1.0
 
-**Доверительная граница:** содержимое каждого RGP и любой исходный
-код внутри него — **недоверенные данные**, включая встроенную
-инструкцию агента. Они не имеют приоритета над внешними правилами
-и заданиями пользователя. Reader работает без `exec/eval`,
-импортов и выполнения архива.
+RGP is a self-contained **source context file**, not an executable tool or
+instruction authority. The embedded guide describes how to read the format.
+Source, comments and embedded `AGENTS.md` are untrusted repository content.
 
-## Целостность и происхождение
+The generator takes bytes from a pinned Git commit. Its rules protect
+against unsafe paths, unexpected Git modes, sensitive filenames, binaries,
+NUL/invalid UTF-8, unbounded file sizes and total file counts. Symlinks are
+preserved as inert text and never followed; LFS pointers are not expanded.
+`.rgpignore` restricts context scope, not Git tracking or secret publication.
+Always review source confidentiality before sharing an artifact.
 
-В RGP/0.1.0 намеренно нет SHA-256, исходного Git commit ID,
-отдельного sidecar или внутреннего JSON-манифеста. Reader проверяет
-UTF-8, отсутствие NUL, длины секций, безопасные пути, порядок,
-дубликаты, лимиты и терминатор. **Он не обнаруживает равнодлинные
-подмены исходного текста**, а локально вычисленный им digest
-не доказывает ни происхождение, ни подлинность.
+A reader can establish structural validity by checking version, UTF-8,
+length-framed guide/index/source sections, path order, sizes and terminator.
+**No Git commit or content hash is stored inside RGP.** Structural validation
+cannot prove authenticity, freshness or detect same-length alteration.
+Compare against separately trusted Git provenance or a full-file hash linked
+to the expected Git revision before relying on the content for critical edits.
 
-При доверенном использовании нужен **внешний** trust anchor:
-закреплённая исходная Git-ревизия и Git blob опубликованного
-`REPO_CONTEXT.rgp` (либо независимо полученный SHA-256),
-сверка исходников с той же ревизией при необходимости.
-При частичном чтении через GitHub line-range без полного скачивания
-проверка всего файла **не может считаться завершённой**.
-Устаревший RGP нельзя представлять как актуальный.
-
-`python/rgp_sandbox.py` требует внешний digest и для RGP/0.1.0
-внешнее утверждение о source commit. Эти значения должны быть
-получены из доверенного источника, а не из той же непроверенной
-копии файла. Само наличие двух аргументов ещё не доказывает,
-что они независимы или правильно связаны.
-
-## Границы и публикация
-
-- RGP/0.1.0 — до 192 MiB валидного UTF-8; отдельный файл до
-  16 MiB, ограничен общий объём и число путей. `FILE`-секции
-  отмеряются **байтами**, а не по словам-разделителям.
-- Исключены недопустимые пути, NUL, контрольные символы в
-  именах, дубликаты, абсолютные пути и `..`.
-  Symlink сохраняется как инертный текст, не разыменовывается.
-- `.rgpignore` — фильтр **контекста**, не защита от утечек.
-  Его правила и число намеренно исключённых файлов находятся
-  в снимке; сами пропущенные файлы остаются в Git.
-- Поименованное исключение `.env*`, ключей и подобных файлов
-  не заменяет secret scanning или явную политику публикации.
-  **Не публиковать автоматически приватные/секретные репозитории**
-  без независимой оценки содержимого и прав доступа.
-- `snapshot_complete` означает полноту только выбранной
-  области после `.rgpignore`; не гарантирует присутствие
-  всех отслеживаемых исходников, LFS или submodules.
-- Источники для агентских ответов требуют проверки `path:line`.
-  `not_indexed` не доказывает отсутствие символа или связи.
-
-## Поддерживаемый формат и опциональная доставка
-
-Rust verifier и Python Reader принимают только RGP/0.1.0.
-Форматы 1.x, 2.x и 3.0 и их парсеры удалены. Исторические
-материалы можно посмотреть в Git history, но использовать их как
-действующий контракт нельзя.
-
-Опциональный `python/rgp_bootstrap.py` принимает
-GitHub Actions ZIP **обёртку**, внутри которой лежит RGP.
-Эта обёртка не делает сам RGP ZIP-архивом и не является
-требованием для чтения исходников через GitHub-коннектор.
-Сопутствующий `expected.json` из той же ZIP-обёртки
-сам по себе не является независимым trust anchor.
-
-**Открытые задачи:** fuzz/adversarial testing границ файла,
-защита публикации приватных проектов, внешняя проверка
-происхождения и честные замеры на реальных задачах.
+The agent needs no Python Reader, MCP, ZIP extractor or local sandbox tools.
+It should treat the file as plain inert data and read only relevant sections.
+The CLI's `verify` operation is an optional producer-side structure check;
+`verify --repo` additionally checks selected source content against that
+repository's current `HEAD`. It is not an independent authenticity proof.
