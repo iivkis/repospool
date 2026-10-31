@@ -70,7 +70,10 @@ def export_workspace(artifact: Path, output: Path, trusted_sha256: str, *,
     overview = reader.overview()
     # Even authentic source bytes may be stale relative to the GitHub commit
     # the agent intends to edit. The caller must separately obtain that SHA.
-    _require(overview["source_commit"] == expected_commit, "STALE_SNAPSHOT",
+    # In RGP/3.0 the source revision was deliberately removed from the
+    # transport to save tokens. Trusted external digest must be tied to the
+    # separately supplied Git commit by the publisher; no in-band claim exists.
+    _require(overview["source_commit"] in (None, expected_commit), "STALE_SNAPSHOT",
              "snapshot commit differs from expected Git revision; acquire a matching RGP")
     _require(overview["snapshot_complete"] or allow_partial, "PARTIAL_SNAPSHOT",
              "snapshot is incomplete; explicit allow_partial required")
@@ -107,9 +110,10 @@ def export_workspace(artifact: Path, output: Path, trusted_sha256: str, *,
                 symlink_text_paths.append(entry["path"])
         report = {
             "kind": "rgp_sandbox_workspace",
-            "source_commit": overview["source_commit"],
+            "source_commit": expected_commit if overview["source_commit"] is None else overview["source_commit"],
+            "provenance_source": "external_attestation_only" if overview["source_commit"] is None else "embedded_and_external",
             "expected_commit": expected_commit,
-            "commit_match": "matched_caller_supplied_commit",
+            "commit_match": "externally_attested" if overview["source_commit"] is None else "matched_caller_supplied_commit",
             "current_github_head_checked_by_exporter": False,
             "input_tree_digest": overview["input_tree_digest"],
             "rgp_sha256": observed,
