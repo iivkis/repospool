@@ -125,7 +125,7 @@ class PlainReaderTest(unittest.TestCase):
         with self.assertRaisesRegex(RgpError, "HASH_MISMATCH"):
             Reader(raw.replace(b"snapshot_complete=true",
                                b"snapshot_complete=false", 1))
-        with self.assertRaisesRegex(RgpError, "TRUNCATED_ARTIFACT"):
+        with self.assertRaisesRegex(RgpError, "HASH_MISMATCH"):
             Reader(raw.replace(b"RGP/2.1: Read selected Git files",
                                b"RGP/2.1: Read selected Git file", 1))
 
