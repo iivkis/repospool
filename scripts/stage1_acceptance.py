@@ -106,7 +106,7 @@ def check(repo: Path, rust_cli: Path) -> dict:
 
         # Negative cases on the *actual* generated output, not only fixtures.
         bad_hash = re.sub(
-            rb"(payload_sha256=)[0-9a-f]{64}",
+            rb"(manifest_sha256=)[0-9a-f]{64}",
             lambda match: match.group(1) + b"0" * 64,
             data, count=1,
         )
