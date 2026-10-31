@@ -64,14 +64,19 @@ def check(repo: Path, artifact: Path | None = None) -> dict:
     if source is None and overview["transport"] == "RGP/0.1.0":
         # RGP/0.1.0 intentionally contains no commit/hash text. Recover the
         # source revision ONLY from independently trusted local Git history.
-        # The publication bot makes a one-file RGP commit after source HEAD.
-        parent_result = git(repo, "rev-parse", "HEAD^")
-        source = head
-        if parent_result.returncode == 0:
-            parent = parent_result.stdout.decode().strip()
-            changed = checked_git(repo, "diff", "--name-only", parent, head).decode().splitlines()
-            if changed == [NAME]:
-                source = parent
+        # Find the last publication commit, even if later source commits exist.
+        publication = checked_git(repo, "log", "-1", "--format=%H", "HEAD",
+                                  "--", NAME).decode().strip()
+        source = publication or head
+        if publication:
+            parent_result = git(repo, "rev-parse", f"{publication}^")
+            if parent_result.returncode == 0:
+                parent = parent_result.stdout.decode().strip()
+                changed = checked_git(repo, "diff", "--name-only",
+                                      parent, publication).decode().splitlines()
+                if changed == [NAME]:
+                    source = parent
+
         # Check all included source bytes against Git at the chosen revision.
         # The RGP's in-memory derived SHA is never accepted as provenance.
         cursor = None
