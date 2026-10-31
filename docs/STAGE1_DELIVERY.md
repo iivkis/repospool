@@ -100,7 +100,7 @@ Actions artifact ZIPs** through the connected GitHub app, verified
 their RGP SHA-256 against the committed checkpoint, and independently
 matched all 13 frozen reference Git blob identifiers. The observed
 artifact IDs, hashes, source commitments, limits and run links are
-in [CONNECTED_DELIVERY_2026-10-31.md](../benchmarks/stage1/CONNECTED_DELIVERY_2026-10-31.md).
+in исторический отчёт по Actions ZIP (доступен в Git history).
 This is distinct from the workflow's simulated local ZIP replay.
 
 ## Gate B cannot be auto-approved
