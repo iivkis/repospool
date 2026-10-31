@@ -1,4 +1,4 @@
-//! RGP/2.0: canonical, readable, UTF-8 source transport.
+//! RGP/2.1: self-describing, canonical, readable, UTF-8 source transport.
 //! Sections are framed by exact UTF-8 byte lengths, never by a sentinel
 //! inside source text. No compression, Base64 or escaping of source bytes.
 use super::*;
@@ -90,7 +90,7 @@ pub(super) fn verify_plain(path: &Path) -> Result<Manifest> {
     // This enables a text-returning GitHub connector and line-scoped reads.
     ensure!(
         std::str::from_utf8(&bytes).is_ok() && !bytes.contains(&0),
-        "UNSUPPORTED_FORMAT: RGP/2.0 must be readable UTF-8"
+        "UNSUPPORTED_FORMAT: plaintext RGP must be readable UTF-8"
     );
     let mut pos = 0;
     let version = next_line(&bytes, &mut pos)?;
