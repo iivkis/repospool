@@ -106,6 +106,7 @@ jobs:
             --artifact "$RUNNER_TEMP/REPO_CONTEXT.rgp" \
             --trusted-sha256 "$TRUSTED_SHA256" \
             --expected-commit "$GITHUB_SHA" \
+            --attested-source-commit "$GITHUB_SHA" \
             --output "$RUNNER_TEMP/rgp-local-source"
           python3 - <<'PY'
           import json
