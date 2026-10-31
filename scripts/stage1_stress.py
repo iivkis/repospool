@@ -22,7 +22,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
 sys.path.insert(0, str(ROOT / "scripts"))
-from rgp_reader import Reader, RgpError, decode_transport  # noqa: E402
+from rgp_reader import Reader, RgpError  # noqa: E402
 from stage1_corpus import measured  # noqa: E402
 
 MIB = 1024 * 1024
@@ -110,7 +110,7 @@ def run(profile: str, binary: Path) -> dict:
         overview = reader.overview()
         insist(overview["source_commit"] is None and reader.validate()["valid"],
                "source revision or RGP integrity mismatch")
-        insist(first_bytes.startswith(b"RGP/3.0\n"), "expected readable transport")
+        insist(first_bytes.startswith(b"RGP/0.1.0\n"), "expected readable transport")
         insist(b"\nFILE\t" in first_bytes, "missing plaintext file sections")
 
         observed_source_sha = {}
