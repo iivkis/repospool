@@ -23,7 +23,7 @@ pub(super) fn write_plain(
     manifest: &Manifest,
     blobs: &BTreeMap<String, Vec<u8>>,
 ) -> Result<usize> {
-    let manifest_data = serde_json::to_vec(manifest)?;
+    let manifest_data = serde_json::to_vec_pretty(manifest)?;
     ensure!(
         manifest_data.len() <= MAX_MANIFEST,
         "RESOURCE_LIMIT: manifest too large"
