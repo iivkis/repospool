@@ -594,7 +594,6 @@ fn generate(repo: &Path, output: &Path, rev: &str) -> Result<()> {
     let (staged, mut file) = StagedOutput::create(output)?;
     let artifact_size = plain::write_plain(&mut file, &manifest, &blobs)?;
     drop(blobs);
-    drop(manifest_data);
     drop(manifest);
     file.sync_all()?;
     drop(file);
