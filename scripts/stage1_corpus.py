@@ -29,8 +29,8 @@ from gate_b import strict_json, validate_plan  # noqa: E402
 # Each plan reference path must be exercised, otherwise fail closed.
 ANCHORS = {
     "rgp-transport-hash": {
-        "python/rgp_reader.py": ("manifest_sha256=",),
-        "src/main.rs": ("manifest_sha256=",),
+        "python/rgp_reader.py": ("payload_sha256=",),
+        "src/main.rs": ("payload_sha256=",),
     },
     "rgp-git-snapshot": {"src/main.rs": ("fn snapshot(",)},
     "rgp-search-cursor": {
