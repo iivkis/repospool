@@ -2,8 +2,8 @@ use anyhow::{anyhow, ensure, Context, Result};
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use clap::{Parser, Subcommand};
 
-mod plain;
 mod lean;
+mod plain;
 mod rgpignore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
