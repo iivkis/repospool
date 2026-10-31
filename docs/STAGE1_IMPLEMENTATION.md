@@ -1,5 +1,13 @@
 # Stage 1 implementation: reliability and agent-owned acceptance
 
+> **Исторический материал:** этот отчёт описывает более ранние
+> форматы и/или измерения; для текущего RGP/3.0 см.
+> [канонический roadmap](PRODUCT_ROADMAP.md) и
+> [актуальное техническое ревью](REVIEW_2026-10-31.md).
+> Его ZIP/JSON/внутренние SHA выводы не переносятся на RGP/3.0
+> без повторного измерения и внешней проверки по Git.
+
+
 **Scope:** first large implementation slice of [Stage 1](PRODUCT_ROADMAP.md).
 **Status:** in progress; **Gate B remains HOLD**. This document describes
 the implementation and checks to reproduce, not a declaration of Stage 1 GO.
