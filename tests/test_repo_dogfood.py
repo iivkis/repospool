@@ -1,4 +1,6 @@
 """End-to-end dogfood freshness against real temporary Git history (no Rust needed)."""
+import hashlib
+import json
 import subprocess
 import sys
 import tempfile
@@ -46,6 +48,24 @@ class RepoDogfoodTests(unittest.TestCase):
         self.assertEqual(report["source_commit"], self.source_commit)
         self.assertEqual(report["checkout_commit"], self.publish_commit)
         self.assertEqual(report["file_count"], 1)
+
+    def test_v12_pair_is_valid_only_when_both_published_unchanged(self):
+        data = self.snapshot.read_bytes().replace(b"RGP/1.0\\n", b"RGP/1.2\\n", 1)
+        self.snapshot.write_bytes(data)
+        sidecar = self.repo / "REPO_CONTEXT.rgpmi"
+        metadata = {
+            "format": "RGP-MI/1.0", "artifact": "REPO_CONTEXT.rgp",
+            "transport": "RGP/1.2", "artifact_sha256": hashlib.sha256(data).hexdigest(),
+            "artifact_bytes": len(data), "source_commit": self.source_commit,
+            "snapshot_complete": True, "instructions": "Read metadata before artifact.",
+        }
+        sidecar.write_text(json.dumps(metadata), encoding="utf-8")
+        self.call("add", "REPO_CONTEXT.rgp", "REPO_CONTEXT.rgpmi")
+        self.call("commit", "-qm", "publish paired RGP v1.2")
+        self.assertEqual(check(self.repo)["source_commit"], self.source_commit)
+        sidecar.write_text(json.dumps(dict(metadata, artifact_sha256="0" * 64)))
+        with self.assertRaisesRegex(RgpError, "HASH_MISMATCH"):
+            check(self.repo)
 
     def test_source_edit_after_publication_is_stale(self):
         (self.repo / "src/file.txt").write_text("changed after RGP publication\n")
