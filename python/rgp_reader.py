@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import contextlib
 import hashlib
 import io
 import json
@@ -486,13 +487,18 @@ class Reader:
         _require(position is None or (position[0] in selected and position[1] >= 1), "UNSUPPORTED_FORMAT", "search cursor position")
         page = []
         last = None
-        # Open the already verified ZIP once per search, not once per file.
-        with zipfile.ZipFile(io.BytesIO(self._payload)) as archive:
+        # Reuse one ZIP handle for legacy transports; RGP/2.0 reads the
+        # verified source spans directly from the original plaintext buffer.
+        source = (zipfile.ZipFile(io.BytesIO(self._payload)) if self._plain is None
+                  else contextlib.nullcontext())
+        with source as archive:
             for path in selected:
                 if position is not None and path < position[0]:
                     continue
                 try:
-                    text = archive.read(self._files[path]["blob"]).decode("utf-8")
+                    raw = (archive.read(self._files[path]["blob"]) if archive is not None
+                           else self._blob(path))
+                    text = raw.decode("utf-8")
                 except UnicodeDecodeError:
                     continue
                 for number, line in enumerate(text.splitlines(), start=1):
