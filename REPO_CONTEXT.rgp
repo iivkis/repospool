@@ -1,6 +1,6 @@
 RGP/0.1.0
 guide_bytes=1246
-index_bytes=330
+index_bytes=315
 --
 # RGP/0.1.0: read-only repository snapshot
 
@@ -23,7 +23,6 @@ F	docs/PRODUCT_ROADMAP.md	1513
 F	docs/RGP_FORMAT_SPEC.md	2096
 F	docs/RGP_SECURITY_MODEL.md	1535
 F	flake.nix	1454
-F	justfile	168
 F	rust-toolchain.toml	86
 F	src/lean.rs	12912
 F	src/main.rs	21586
@@ -406,20 +405,6 @@ FILE	flake.nix
         };
       });
 }
-
-FILE	justfile
-# Backwards-compatible aliases; Taskfile.yml is the command source of truth.
-default:
-    @task --list
-
-fmt:
-    task fmt
-
-check:
-    task check
-
-smoke:
-    task smoke
 
 FILE	rust-toolchain.toml
 [toolchain]
