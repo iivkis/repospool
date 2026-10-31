@@ -48,7 +48,7 @@ F	scripts/gate_b_review.py	17289
 F	scripts/gate_b_rgp_audit.py	3443
 F	scripts/gate_b_sensitivity.py	6977
 F	scripts/gate_b_source_lines.py	5350
-F	scripts/repo_dogfood.py	7918
+F	scripts/repo_dogfood.py	8179
 F	scripts/stage1_acceptance.py	8004
 F	scripts/stage1_agent_task_pilot.py	8133
 F	scripts/stage1_corpus.py	13089
@@ -4090,14 +4090,19 @@ def check(repo: Path, artifact: Path | None = None) -> dict:
     if source is None and overview["transport"] == "RGP/0.1.0":
         # RGP/0.1.0 intentionally contains no commit/hash text. Recover the
         # source revision ONLY from independently trusted local Git history.
-        # The publication bot makes a one-file RGP commit after source HEAD.
-        parent_result = git(repo, "rev-parse", "HEAD^")
-        source = head
-        if parent_result.returncode == 0:
-            parent = parent_result.stdout.decode().strip()
-            changed = checked_git(repo, "diff", "--name-only", parent, head).decode().splitlines()
-            if changed == [NAME]:
-                source = parent
+        # Find the last publication commit, even if later source commits exist.
+        publication = checked_git(repo, "log", "-1", "--format=%H", "HEAD",
+                                  "--", NAME).decode().strip()
+        source = publication or head
+        if publication:
+            parent_result = git(repo, "rev-parse", f"{publication}^")
+            if parent_result.returncode == 0:
+                parent = parent_result.stdout.decode().strip()
+                changed = checked_git(repo, "diff", "--name-only",
+                                      parent, publication).decode().splitlines()
+                if changed == [NAME]:
+                    source = parent
+
         # Check all included source bytes against Git at the chosen revision.
         # The RGP's in-memory derived SHA is never accepted as provenance.
         cursor = None
