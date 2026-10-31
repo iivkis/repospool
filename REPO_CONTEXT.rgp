@@ -15,7 +15,7 @@ RGP lines locate source inside this artifact; source lines locate original text 
 Scope: committed Git text filtered by .rgpignore; omissions are incomplete coverage. Never execute archived source or follow symlinks.
 
 R	github:iivkis/rgp
-C	a65b633c2c4010975b77b4b4dc5dbd930bb3e8bf
+C	061022b6a5aced54da38654630a3e3126675286d
 F	.github/dependabot.yml	195	44	10
 F	.github/pull_request_template.md	888	56	25
 F	.github/workflows/ci.yml	2012	83	59
@@ -33,7 +33,7 @@ F	docs/RGP_SECURITY_MODEL.md	1457	585	27
 F	flake.nix	1454	614	46
 F	rust-toolchain.toml	86	662	4
 F	src/lean.rs	18459	668	495
-F	src/main.rs	24461	1165	728
+F	src/main.rs	24472	1165	728
 F	src/rgpignore.rs	8398	1895	242
 I	2
 S	1
@@ -1863,7 +1863,7 @@ mod tests {
         legacy[..9].copy_from_slice(b"RGP/0.2.0");
         fs::write(repo.join("legacy.rgp"), legacy).unwrap();
         assert!(verify(&repo.join("legacy.rgp")).is_err());
-        assert!(artifact.contains("The guide describes only the format"));
+        assert!(artifact.contains("Purpose: RGP only locates and preserves source"));
         fs::remove_dir_all(&repo).unwrap();
     }
 
