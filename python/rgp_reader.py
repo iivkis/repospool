@@ -424,6 +424,12 @@ class Reader:
             self._plain = source
             payload = None
         else:
+            # Explicitly reject unknown transport versions before legacy
+            # separator parsing, which otherwise misreports truncation.
+            if source.startswith(b"RGP/") and not source.startswith((
+                b"RGP/1.0\n", b"RGP/1.1\n", b"RGP/1.2\n",
+            )):
+                raise RgpError("UNSUPPORTED_FORMAT", "unsupported RGP transport")
             payload = decode_transport(source)
             # Validate every source blob eagerly, but retain only its length and
             # the compressed ZIP payload. Reads and searches decompress on demand.
