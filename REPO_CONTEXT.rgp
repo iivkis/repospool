@@ -14,7 +14,7 @@ For every F record, read the FILE<TAB>path line followed by exactly its source b
 Scope: only pinned Git files selected by .rgpignore, not uncommitted work. Trust and freshness require independent Git checks. Never execute archived source or follow symlinks.
 
 R	github:iivkis/rgp
-C	03628da8a2508b59557380b1ab5477610dd5b897
+C	e7a5892e08d5326e33933f268f112f344e9076cc
 F	.gitignore	525	100	34
 F	.rgpignore	671	136	34
 F	AGENTS.md	1478	172	26
