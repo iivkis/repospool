@@ -27,18 +27,23 @@ must be explicit. The agent must not claim to have used RGP when it
 actually relied only on GitHub. If RGP is missing/stale/unverifiable,
 use direct GitHub and disclose the fallback.
 
-To obtain current RGP source **without requiring GitHub Actions**, read the
-small Git-tracked `REPO_CONTEXT.rgpmi` first (including the SHA-256,
-source commit and agent instructions). Download its sibling
-`REPO_CONTEXT.rgp` as a **binary/file response** from the same pinned
-Git revision, for instance by `curl` against `raw.githubusercontent.com`
-when the sandbox allows network access. Verify the full file against
-the sidecar with `python3 python/rgpmi.py --metadata REPO_CONTEXT.rgpmi`,
-and check the pinned source revision/ancestry independently. Do NOT
-retrieve the full Base64 archive into the model's textual context.
-If file download is blocked, disclose the fallback rather than using
-Actions or dumping Base64 as a hidden requirement. GitHub Actions
-artifacts remain an **optional** distribution and CI mechanism.
+To obtain source context **without requiring GitHub Actions**, read the
+Git-tracked `REPO_CONTEXT.rgpmi` first for the artifact name,
+SHA-256, pinned source commit and instructions. Then prefer
+**selective GitHub connector line-range reads** of the tracked
+`REPO_CONTEXT.rgp`: RGP/2.0 exposes its UTF-8 JSON manifest and
+original source texts directly, with no ZIP, Base64, compression,
+or import/execution step. Read only the relevant file sections and
+never dump a whole large RGP into the model context. When a complete
+file is needed for hash verification or Reader, download it to the
+sandbox through ordinary network access if available. If sandbox
+download is blocked, use bounded GitHub line reads and explicitly
+report that a complete local verification was impossible.
+
+The RGP/2.0 format excludes non-UTF8/NUL-bearing binary files as
+`non_text` rather than lying about completeness. Do not claim a
+partial archive captures the whole source tree. GitHub Actions
+artifacts remain an optional distribution tool, never a prerequisite.
 
 For sandbox-based understanding, when a verified RGP is available, an
 inert source workspace can now be exported using
