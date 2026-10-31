@@ -80,7 +80,7 @@ class PlainReaderTest(unittest.TestCase):
     def test_rgpignore_explicitly_excludes_without_reducing_scope_completeness(self):
         excluded = [{"path": "benchmarks/old.md", "reason": "rgpignore"}]
         raw = build_plain(
-            {".rgpignore": b"/benchmarks/\\n", "src/code.py": b"answer = 42\\n"},
+            {".rgpignore": b"/benchmarks/\n", "src/code.py": b"answer = 42\n"},
             excluded=excluded,
         )
         reader = Reader(raw)
@@ -90,7 +90,7 @@ class PlainReaderTest(unittest.TestCase):
         self.assertEqual(report["intentionally_ignored_files"], 1)
         self.assertEqual(report["excluded_by_reason"]["rgpignore"], 1)
         self.assertEqual(report["excluded_files"], 0)
-        self.assertEqual(reader.read_bytes(".rgpignore"), b"/benchmarks/\\n")
+        self.assertEqual(reader.read_bytes(".rgpignore"), b"/benchmarks/\n")
         with self.assertRaisesRegex(RgpError, "PARTIAL_SNAPSHOT"):
             reader.read_bytes("benchmarks/old.md")
 
