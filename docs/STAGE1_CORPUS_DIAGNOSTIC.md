@@ -1,5 +1,13 @@
 # Stage 1: three-repository pinned corpus diagnostic
 
+> **Исторический материал:** этот отчёт описывает более ранние
+> форматы и/или измерения; для текущего RGP/3.0 см.
+> [канонический roadmap](PRODUCT_ROADMAP.md) и
+> [актуальное техническое ревью](REVIEW_2026-10-31.md).
+> Его ZIP/JSON/внутренние SHA выводы не переносятся на RGP/3.0
+> без повторного измерения и внешней проверки по Git.
+
+
 **Status:** Stage 1 functional acceptance extension, **not** Gate B GO.
 The canonical plan remains [PRODUCT_ROADMAP.md](PRODUCT_ROADMAP.md).
 
