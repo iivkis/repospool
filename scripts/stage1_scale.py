@@ -24,7 +24,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
 sys.path.insert(0, str(ROOT / "scripts"))
-from rgp_reader import Reader, RgpError, decode_transport  # noqa: E402
+from rgp_reader import Reader, RgpError  # noqa: E402
 from stage1_corpus import measured  # noqa: E402
 
 FILES = 50_005
@@ -117,7 +117,7 @@ def run(binary: Path) -> dict:
                "entry-limit exclusions not disclosed")
         demand(summary["index_coverage"] == "not_indexed",
                "index coverage hallucinated at scale")
-        demand(raw.startswith(b"RGP/3.0\n"), "expected raw UTF-8 source transport")
+        demand(raw.startswith(b"RGP/0.1.0\n"), "expected raw UTF-8 source transport")
         source_sections = len(reader._files)
         demand(source_sections == CAP, "plaintext source section limit")
         # All paths are covered by the public paginated tree operation,
