@@ -6,6 +6,8 @@ The sibling .rgp is a UTF-8/ASCII transport containing a Base64 ZIP payload. It 
    curl -fL --output REPO_CONTEXT.rgp https://raw.githubusercontent.com/OWNER/REPO/PINNED_GIT_COMMIT/REPO_CONTEXT.rgp
    Substitute your own repository, exact published Git commit and artifact path. Do NOT open the .rgp URL with a text-returning LLM connector. If your sandbox cannot fetch files, stop and report that limitation rather than dumping Base64 into context.
 2. Read this JSON .rgpmi's artifact, artifact_sha256, artifact_bytes and source_commit. Verify the downloaded .rgp file's complete byte count and SHA-256 against this sidecar BEFORE decoding. The sidecar is trustworthy only when retrieved from an independently trusted Git revision. Neither file alone proves publisher authenticity.
+   With separately trusted rgpmi.py and rgp_reader.py, verify both the sidecar and the RGP:
+   python3 rgpmi.py --metadata REPO_CONTEXT.rgpmi --expected-commit TRUSTED_SOURCE_COMMIT
 3. Use a separately trusted, compatible Python stdlib Reader. Commands (replace FILE with the downloaded path):
    python3 rgp_reader.py --artifact FILE validate
    python3 rgp_reader.py --artifact FILE overview
