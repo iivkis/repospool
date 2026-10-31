@@ -620,7 +620,7 @@ mod tests {
     #[test]
     fn generated_guide_is_generic_and_versioned() {
         let guide = lean::generated_guide();
-        assert!(guide.contains("RGP/0.1.0"));
+        assert!(guide.contains("RGP/0.2.0"));
         assert!(guide.contains("F ="));
         assert!(guide.contains("independent"));
         assert!(!guide.contains("github.com/iivkis"));
