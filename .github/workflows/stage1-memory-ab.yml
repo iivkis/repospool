@@ -51,7 +51,7 @@ jobs:
           if x["status"] == "SKIP":
               assert x["reason"] == "TRANSPORT_VERSION_CHANGED"
               assert x["baseline_version"] != x["candidate_version"]
-              assert x["candidate_version"] == "RGP/1.2"
+              assert x["candidate_version"] == "RGP/2.0"
           else:
               assert x["status"] == "PASS"
               assert len(x["profiles"]) == 5
