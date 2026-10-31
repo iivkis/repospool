@@ -64,6 +64,27 @@ class Stage1CorpusTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "compatibility regression"):
                 corpus.match_checkpoint(checkpoints, damaged)
 
+    def test_new_transport_keeps_source_guard_without_fake_legacy_hash_parity(self):
+        checkpoints = json.loads(
+            (ROOT / "benchmarks/gate_b/corpus_preparation.json").read_text()
+        )
+        pinned = checkpoints["artifacts"][0]
+        summary = {
+            "repository": pinned["repository"],
+            "source_commit": pinned["source_commit"],
+            "included_files": pinned["included_files"],
+            "transport_version": "RGP/1.1",
+            "rgp_sha256": "1" * 64,
+            "rgp_bytes": pinned["rgp_bytes"] + 1300,
+        }
+        self.assertEqual(corpus.match_checkpoint(checkpoints, summary),
+                         "SOURCE_EQUIVALENCE_ONLY")
+        damaged = dict(summary, source_commit="0" * 40)
+        with self.assertRaisesRegex(ValueError, "compatibility regression"):
+            corpus.match_checkpoint(checkpoints, damaged)
+        with self.assertRaisesRegex(ValueError, "unsupported transport checkpoint"):
+            corpus.match_checkpoint(checkpoints, dict(summary, transport_version="RGP/9.0"))
+
     def test_generator_failure_is_a_failure_not_success(self):
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "invalid-time"
