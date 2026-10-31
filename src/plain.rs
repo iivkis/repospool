@@ -28,7 +28,7 @@ pub(super) fn write_plain(
         manifest_data.len() <= MAX_MANIFEST,
         "RESOURCE_LIMIT: manifest too large"
     );
-    let mut writer = BufWriter::with_capacity(256 * 1024, output);
+    let mut writer = BufWriter::with_capacity(256 * 1024, &mut *output);
     write!(
         writer,
         "RGP/2.0\nmanifest_length={}\nmanifest_sha256={}\n--\n",
