@@ -581,5 +581,4 @@ mod tests {
         drop(b);
         assert!(!a_path.exists() && !b_path.exists());
     }
-
 }
