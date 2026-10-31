@@ -179,8 +179,8 @@ def inspect(repo: dict, tasks: list[dict], source: Path, binary: Path, work: Pat
     # Invalid bytes must still fail before returning any source content.
     for damaged, expected_error in (
         (raw[:-10], "TRUNCATED_ARTIFACT"),
-        (raw.replace(raw.split(b"\n", 1)[0], b"RGP/2.0", 1), "UNSUPPORTED_FORMAT"),
-        (re.sub(rb"(payload_sha256=)[0-9a-f]{64}", lambda m: m.group(1) + b"0" * 64,
+        (raw.replace(raw.split(b"\n", 1)[0], b"RGP/9.0", 1), "UNSUPPORTED_FORMAT"),
+        (re.sub(rb"(manifest_sha256=)[0-9a-f]{64}", lambda m: m.group(1) + b"0" * 64,
                 raw, count=1), "HASH_MISMATCH"),
     ):
         try:
@@ -227,7 +227,7 @@ def match_checkpoint(corpus: dict, result: dict) -> str:
                              ("rgp_bytes", result["rgp_bytes"])):
             require(expected.get(key) == current, f"pinned compatibility regression: {key}")
         return "EXACT_LEGACY_BYTES"
-    require(version in ("RGP/1.1", "RGP/1.2"), "unsupported transport checkpoint version")
+    require(version in ("RGP/1.1", "RGP/1.2", "RGP/2.0"), "unsupported transport checkpoint version")
     # A v1.0 RGP hash cannot authenticate the intentionally changed v1.1
     # header. The run still verifies determinism, Git source truth and Reader.
     return "SOURCE_EQUIVALENCE_ONLY"

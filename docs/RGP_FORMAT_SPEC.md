@@ -1,44 +1,52 @@
 # RGP transport and snapshot specification (PoC)
 
-A RGP file is ASCII text with **LF-only** line endings. The generator
-emits **RGP/1.2** with *no agent instructions in the transport*:
+RGP/2.0 is a **plain UTF-8 file**, with original source texts directly
+visible to a human or text-reading coding agent. It contains NO ZIP, Base64,
+compression, escaped source content, or executable instructions:
 
 ```text
-RGP/1.2
-payload_length=<decimal byte length of ZIP>
-payload_sha256=<64 lowercase hex SHA-256 of ZIP>
-base64_line_width=76
+RGP/2.0
+manifest_length=<decimal UTF-8 bytes>
+manifest_sha256=<SHA-256 of exactly those JSON bytes>
 --
-<canonical padded base64 ZIP in 76-character lines except the final line>
+<compact manifest JSON occupying exactly manifest_length UTF-8 bytes>
+FILE	"src/main.rs"	<source byte length>	<source SHA-256>
+<exact original UTF-8 source bytes>
+FILE	"README.md"	<source byte length>	<source SHA-256>
+<exact original UTF-8 source bytes>
 END RGP
 ```
 
-Next to `example.rgp` the generator writes `example.rgpmi`, a small
-deterministic UTF-8 JSON file (`format: RGP-MI/1.0`) containing:
-`artifact` (sibling basename), `transport`, `artifact_sha256` (SHA-256 of
-the **complete RGP text bytes**), `artifact_bytes`, `source_commit`,
-`snapshot_complete` and `instructions`. The instructions come from
-[docs/RGPMI_AGENT_GUIDE.txt](RGPMI_AGENT_GUIDE.txt). A sidecar is read first,
-then the RGP can be downloaded as a **file** from an ordinary Git HTTP
-endpoint or any other file delivery method. GitHub Actions is not required.
-Neither the sidecar nor a raw URL proves authenticity; pin the Git revision
-that published both files. The stdlib-only `python/rgpmi.py` checks the
-sidecar, complete artifact hash, manifest commit, coverage and Reader
-validation.
+After the JSON manifest and each source, there is **one transport LF
+delimiter**, not part of the content. Source sections are sorted by Git path.
+Source content is delimited by its exact **UTF-8 byte count**, not by lines,
+Markdown fences, sentinel strings or a guessed terminator. Embedded `END RGP`,
+tab, CRLF and blank lines in source cannot terminate sections. The file
+must be valid UTF-8 and contain no NUL characters.
 
-**Compatibility:** RGP/1.0 retains its exact historical four-line header;
-RGP/1.1 retains its exact 1331-byte embedded canonical guide solely for
-reading older files. The unchanged
-[legacy guide](RGP_AGENT_GUIDE.txt) is checked byte-for-byte by Rust and by
-the SHA-256 pinned in the Python Reader. RGP/1.2 has no inline guide and
-does not require a sidecar to be decoded by the Reader, though the sidecar
-is needed for the standard agent bootstrap and external authenticity check.
-Old Readers do not support 1.2 without upgrading. The immutable 1.0 golden
-fixtures remain untouched.
+The unchanged manifest schema `1.0` lists included files, their original
+Git SHA-256, modes, paths and explicitly excluded files. Non-UTF8 and
+NUL-bearing binary files are excluded with reason `non_text`; these cannot
+be represented as readable text without encoding. A partial snapshot is
+reported honestly, not called complete. The safe source rules and size
+caps still apply. Symlink targets are represented as text only, never
+followed or executed.
 
-`payload_length` counts **decoded ZIP bytes**, not the outer text; hash is on the ZIP bytes. The Base64 portion is nonempty, uses RFC 4648 standard alphabet with padding, and has one LF after each line. An exact terminal `END RGP\n` marker is required. Reader decodes strictly, checks ZIP length and SHA **before** opening the ZIP. Any transport that can omit, reorder or duplicate bytes is unsupported until tested; a raw textual representation alone cannot guarantee correct delivery.
+The generator emits a sibling `.rgpmi` (RGP-MI/1.0 JSON): filename,
+`artifact_sha256` of the **whole RGP plaintext file**, byte length,
+source commit, snapshot completeness, transport `RGP/2.0`, and the
+[AI agent instructions](RGPMI_AGENT_GUIDE.txt). Both files should be
+obtained from a trusted pinned Git publication revision. A text-only
+GitHub connector can now read selective line windows of `.rgp` without
+decoding anything; requesting the **entire** .rgp still consumes context.
 
-ZIP/DEFLATE entries are ordered: `manifest.json`, then distinct content blobs `files/<sha256>` in lexicographic order. ZIP timestamps are normalized to 1980-01-01, file permissions are normalized to 0644 and entries have no directory traversal. Compression and ZIP headers must be deterministic for a given generator and dependency version. Blob content is stored **exactly**, including binary bytes, encoding and line endings. Equal content is deduplicated.
+**Compatibility:** The Rust verifier and Python stdlib Reader still
+read historical RGP/1.0, RGP/1.1 (with its exact pinned
+[legacy guide](RGP_AGENT_GUIDE.txt)) and RGP/1.2 (Base64 ZIP). The new
+format is a major version to reflect the incompatible transport change.
+Frozen legacy test vectors are unchanged. RGP/2.0 must be read by an
+updated Reader. RGP-MI/1.0 accepts both the last ZIP transport 1.2 and
+the new plaintext transport 2.0.
 
 `manifest.json` is compact UTF-8 JSON of this shape:
 
@@ -60,7 +68,7 @@ The actual fields are emitted in this order by the Rust serializer. `files` and 
 
 `mode=120000` has `kind=symlink` and stores the raw Git link-target bytes, not the dereferenced content. `status=pointer_only` denotes an unhydrated LFS pointer. Submodule gitlinks and files excluded due to conservative publication policy or size limits are reported in `excluded`. Paths must be relative, UTF-8, without backslash, control chars, `.`/`..`, empty segments or case-insensitive collisions. Paths outside this domain currently cause a clear generation failure. A single blob is limited to 16 MiB, total included content to 128 MiB; the transport ZIP is limited to 64 MiB. This is a software safety guardrail, **not** a demonstrated connector size limit.
 
-Schema and format are versioned separately from the Rust crate version. Unknown major versions are rejected; unknown optional future fields from compatible minor versions may be ignored. This proof-of-concept accepts manifest schema `1.0` and transport `RGP/1.0`, `RGP/1.1` or `RGP/1.2`. The sidecar is discoverability metadata and guidance, not an authority or code loader. The agent still needs an independently trusted Reader or a carefully bounded Python stdlib parser. No executable Reader is embedded or automatically imported.
+Schema and format are versioned separately from the Rust crate version. Unknown major versions are rejected; unknown optional future fields from compatible minor versions may be ignored. This proof-of-concept accepts manifest schema `1.0` and transports `RGP/1.0`, `RGP/1.1`, `RGP/1.2` or `RGP/2.0`. The sidecar provides discovery and guidance, not an instruction authority. The agent still needs an independently trusted Reader or a carefully bounded Python stdlib parser. No executable Reader is embedded or automatically imported.
 
 ## Compatibility test vectors and planned SQL index
 

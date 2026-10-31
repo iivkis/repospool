@@ -51,7 +51,7 @@ jobs:
           assert r["source_files"] == 50005
           assert r["included_files"] == 49999
           assert r["excluded_files"] == 6
-          assert r["zip_members_including_manifest"] == 50000
+          assert r["plain_source_sections"] == 49999
           assert r["gate_b"] == "HOLD"
           PY
       - name: Record results and honest coverage

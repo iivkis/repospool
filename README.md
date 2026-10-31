@@ -4,32 +4,39 @@ RGP creates **reproducible, versioned, single-file snapshots of a Git repository
 
 **Status: v0.1, transport PoC.** The GitHub Actions artifact delivery path has conditional Gate A evidence; product usefulness and independent answer quality are **not proven**. **Gate B remains HOLD.** RGP currently provides verified file contents and lexical search, not a semantic dependency graph.
 
-## RGP + RGP-MI: metadata first, archive as a file
+## Readable RGP/2.0 + small RGP-MI instructions
 
-The generator writes two sibling files: `REPO_CONTEXT.rgpmi`, a small JSON
-file with the [AI agent instructions](docs/RGPMI_AGENT_GUIDE.txt), and
-`REPO_CONTEXT.rgp`, a lean **RGP/1.2** Base64 ZIP transport with *no inline
-agent instructions*. An agent reads only the metadata, downloads the full
-`.rgp` as a **file** (e.g. GitHub's raw file endpoint at a pinned Git
-revision, `curl -fL --output`), and uses the standalone trusted Python
-Reader to browse the snapshot. It must never fetch the archive through a
-text-returning model connector or paste Base64 into its context.
+The generator publishes two Git-tracked siblings:
 
-This works with a repository that has **no GitHub Actions artifacts**.
-The actual agent environment still needs a binary/file download capability
-and network access; RGP does not silently add one. Obtain both files from
-a trusted Git revision, and verify the sidecar's complete-file SHA-256 and
-source commit before using the snapshot:
+- `REPO_CONTEXT.rgpmi`: a short JSON document with the agent
+  instructions, source commit and SHA-256 of the actual RGP.
+- `REPO_CONTEXT.rgp`: **readable UTF-8** with a JSON manifest and
+  each source file in its original text, **without ZIP, compression,
+  Base64 or escaped source contents**.
+
+A coding agent can now read **selected line ranges** of the `.rgp`
+using the existing GitHub text connector, without downloading the
+whole file, decoding an archive, or filling context with Base64.
+It should start with `.rgpmi`, then inspect `.rgp` header, manifest,
+and only the relevant paths/lines. Reading the entire artifact
+would *still* consume tokens. A real Git checkout and independent
+provenance remain necessary for editing code.
+
+For local verification or safe source browsing:
 
 ```sh
-python3 python/rgpmi.py --metadata REPO_CONTEXT.rgpmi \
-  --expected-commit <trusted-source-commit>
+python3 python/rgpmi.py --metadata REPO_CONTEXT.rgpmi
 python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp tree --prefix src/
+python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp read --path src/main.rs
 ```
 
-Historical RGP/1.0 and guided RGP/1.1 archives remain readable by the
-updated Reader. The standalone RGP is still independently decodable; only
-the **agent-facing guide** moved to the .rgpmi. Full contract:
+**UTF-8 only:** binary, NUL-bearing and non-UTF8 Git files cannot be
+displayed as raw readable source. They are explicitly excluded with
+`non_text`; the snapshot reports **partial** coverage rather than
+pretending they were preserved. Source files that are included retain
+their exact original UTF-8 bytes, even CRLF, tabs or missing final LF.
+Historical RGP/1.0, 1.1 and 1.2 ZIP+Base64 files remain readable in
+the upgraded Reader. See the
 [format specification](docs/RGP_FORMAT_SPEC.md).
 
 ## Primary workflow: source context for Kira
