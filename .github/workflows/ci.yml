@@ -28,16 +28,15 @@ jobs:
       - name: Formatting
         run: cargo fmt --all -- --check
       - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --locked --all-targets -- -D warnings
       - name: Rust tests
-        run: cargo test --all-targets
+        run: cargo test --locked --all-targets
       - name: Reader stdlib tests
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v
       - name: Reader bounded API and CLI smoke
         shell: bash
         run: |
           set -euo pipefail
-          python3 -m unittest discover -s tests -p 'test_reader_api.py' -v
           python3 python/rgp_reader.py --artifact tests/fixtures/v1/valid-mixed.rgp coverage --scope snapshot
           python3 python/rgp_reader.py --artifact tests/fixtures/v1/valid-mixed.rgp search 'return 42' --limit 1
       - name: Assistant-only Gate B tests and HOLD
@@ -45,7 +44,6 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/gate_b.py plan
-          python3 -m unittest discover -s tests -p 'test_gate_b*.py' -v
           python3 scripts/gate_b_sensitivity.py > "$RUNNER_TEMP/sensitivity.json"
           python3 -c 'import json,sys; v=json.load(open(sys.argv[1])); assert v["new_experimental_trials"] == 0 and v["total_nonempty_subsets"] == 4095 and v["full_run_measured_calls"] == {"github":13, "rgp":6} and v["decision"].startswith("HOLD")' "$RUNNER_TEMP/sensitivity.json"
           python3 scripts/gate_b.py report > "$RUNNER_TEMP/hold.json"
@@ -97,10 +95,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cargo run -- generate --repo . --output "$RUNNER_TEMP/a.rgp"
-          cargo run -- generate --repo . --output "$RUNNER_TEMP/b.rgp"
+          cargo run --locked -- generate --repo . --output "$RUNNER_TEMP/a.rgp"
+          cargo run --locked -- generate --repo . --output "$RUNNER_TEMP/b.rgp"
           cmp "$RUNNER_TEMP/a.rgp" "$RUNNER_TEMP/b.rgp"
-          cargo run -- verify --artifact "$RUNNER_TEMP/a.rgp" --repo .
+          cargo run --locked -- verify --artifact "$RUNNER_TEMP/a.rgp" --repo .
           python3 python/rgp_reader.py --artifact "$RUNNER_TEMP/a.rgp" overview
           python3 python/rgp_reader.py --artifact "$RUNNER_TEMP/a.rgp" read --path README.md
       - name: Stage 1 agent-owned RGP acceptance against pinned Git sources
@@ -129,5 +127,5 @@ jobs:
           persist-credentials: false
       - uses: DeterminateSystems/nix-installer-action@v17
       - uses: DeterminateSystems/magic-nix-cache-action@v11
-      - run: nix flake check --show-trace
+      - run: nix flake check --no-update-lock-file --show-trace
       - run: nix develop --no-update-lock-file --command bash -c 'cargo --version && rustc --version && uv --version && python3 --version && task --version && task --list && task --dry check'
