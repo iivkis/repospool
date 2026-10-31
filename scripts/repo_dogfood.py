@@ -151,6 +151,7 @@ def main() -> int:
             output = export_workspace(
                 Path(args.repo).resolve() / NAME, args.output,
                 report["artifact_sha256"], expected_commit=report["source_commit"],
+                attested_source_commit=report["source_commit"],
                 prefix=args.prefix, max_files=args.max_files,
                 max_bytes=args.max_bytes)
             report["export"] = {
