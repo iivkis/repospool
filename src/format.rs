@@ -166,7 +166,10 @@ pub(super) fn write_snapshot(
 
 pub(super) fn verify_snapshot(path: &Path) -> Result<Manifest> {
     let bytes = fs::read(path)?;
-    ensure!(bytes.len() <= MAX_SNAPSHOT, "RESOURCE_LIMIT: large REPOSPOOL/1.0");
+    ensure!(
+        bytes.len() <= MAX_SNAPSHOT,
+        "RESOURCE_LIMIT: large REPOSPOOL/1.0"
+    );
     ensure!(
         std::str::from_utf8(&bytes).is_ok() && !bytes.contains(&0),
         "UNSUPPORTED_FORMAT: REPOSPOOL/1.0 requires UTF-8"
