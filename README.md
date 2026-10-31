@@ -4,22 +4,50 @@ RGP creates **reproducible, versioned, single-file snapshots of a Git repository
 
 **Status: v0.1, transport PoC.** The GitHub Actions artifact delivery path has conditional Gate A evidence; product usefulness and independent answer quality are **not proven**. **Gate B remains HOLD.** RGP currently provides verified file contents and lexical search, not a semantic dependency graph.
 
-## Self-contained, readable RGP/2.1
+## Token-efficient RGP/3.0
 
-The generator now publishes **one file**, `REPO_CONTEXT.rgp`. Its first
-lines contain the transport version, pinned Git source commit, scoped
-`snapshot_complete`, length/hash of the **embedded agent guide**,
-length/hash of the JSON manifest, then the guide, manifest, and original
-UTF-8 source files. There is **no .rgpmi sidecar**, ZIP, Base64 or
-compression in the current transport.
+The default generator produces a **single, readable UTF-8 file**
+(`REPO_CONTEXT.rgp`). No ZIP, Base64, JSON manifest, embedded Git
+commit IDs, SHA-256 strings or source hashes waste model context.
+It starts with a short agent guide, a compact tab-separated index
+of source paths and byte sizes, then original source file contents.
+Only uncommon file modes need extra flags. Paths are present in FILE
+headings so a GitHub connector can read selected source ranges.
 
-Read the first eight header lines through the GitHub connector, then
-the short guide and manifest, and retrieve only the needed source FILE
-sections or line ranges. Do **not** load the entire RGP into model
-context. The standalone Python Reader verifies all lengths, guide/
-manifest/source hashes, and the agreement of header provenance and
-manifest. The embedded guide is repository data, not a trusted system
-instruction.
+```text
+RGP/3.0
+guide_bytes=...
+index_bytes=...
+--
+<short human-readable guide>
+F  src/main.rs  12345
+F  README.md  2048
+I  57
+S  1
+
+FILE  src/main.rs
+<exact source text>
+
+FILE  README.md
+<exact source text>
+END RGP
+```
+
+Tabs separate fields, and every source section is framed by the exact
+byte size from the index. `I` counts paths excluded by
+[.rgpignore](.rgpignore); `S` counts self-artifacts; `X` records
+other unavailable paths and reasons. The many deliberately ignored
+paths are no longer repeated individually inside RGP.
+
+**Trust comes from Git, not from RGP.** With no embedded hashes, a
+modified source of the same byte length cannot be detected by the
+Reader alone. Authenticate the complete RGP with a trusted Git blob
+or externally supplied SHA-256, and compare important source bytes to
+the intended Git revision. The Reader computes temporary in-memory
+digests for API compatibility and never serializes them into RGP.
+`overview.source_commit` is `null` for RGP/3.0 because the source
+revision is supplied externally. This deliberately weakens standalone
+integrity checks in exchange for lower context cost.
 
 ```sh
 python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp validate
@@ -28,22 +56,14 @@ python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp tree --prefix src/
 python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp read --path src/main.rs
 ```
 
-**Integrity:** The artifact cannot embed its own complete SHA-256
-without self-reference. For whole-file authenticity, compare its Git
-blob against a trusted publication commit or use an independently
-supplied SHA-256. The embedded SHA-256 values protect the guide, manifest,
-and individual sources from accidental corruption, but are not an
-independent authenticity guarantee.
-
-Historical RGP/1.0–1.2 and RGP/2.0 archives remain readable by the
-updated Reader. Binary, NUL-bearing and invalid-UTF-8 files remain
-excluded; these are reported as partial coverage within the configured
-source scope. See [format specification](docs/RGP_FORMAT_SPEC.md).
+Historical formats 1.0–1.2 and 2.0–2.1 remain readable; they retain
+their original internal integrity checks. The selected source scope
+still excludes binary/non-UTF8 files and follows .rgpignore.
 
 ## Selective context with .rgpignore
 
 The committed root [`.rgpignore`](.rgpignore) tells the generator which
-Git-tracked paths do **not** need to be bundled in readable RGP/2.1.
+Git-tracked paths do **not** need to be bundled in readable RGP/3.0.
 Like `.gitignore`, it accepts `*`, `**`, anchored patterns and
 `!` re-inclusion. Unlike `.gitignore`, it **does not change Git
 tracking**. It only controls what appears in RGP at the pinned Git
