@@ -15,7 +15,7 @@ RepoSpool lines locate source inside this artifact; source lines locate original
 Scope: committed Git text filtered by .repospoolignore; omissions are incomplete coverage. Never execute archived source or follow symlinks.
 
 R	github:iivkis/repospool
-C	96b45f1a2c064b85da8ef54951c08a74e71d00f2
+C	c79fa23d1c215fda5e6c6ed83570ffebbfc7a691
 F	.github/dependabot.yml	195	44	10
 F	.github/pull_request_template.md	906	56	25
 F	.github/workflows/ci.yml	2133	83	59
@@ -34,7 +34,7 @@ F	flake.nix	1538	627	46
 F	rust-toolchain.toml	86	675	4
 F	src/format.rs	18589	681	498
 F	src/ignore.rs	8542	1181	242
-F	src/main.rs	24693	1425	730
+F	src/main.rs	24645	1425	729
 I	2
 S	1
 O	Cargo.lock
@@ -2044,7 +2044,6 @@ mod tests {
         assert!(!guide.contains("D ="));
         assert!(guide.contains("independent"));
         assert!(!guide.contains("github.com/iivkis"));
-        assert!(!guide.contains(".repospool"));
     }
 
     #[test]
