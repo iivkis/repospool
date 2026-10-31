@@ -1,6 +1,6 @@
 RGP/3.0
 guide_bytes=1364
-index_bytes=2409
+index_bytes=2337
 --
 # RGP/3.0: readable repository snapshot
 
@@ -17,23 +17,23 @@ Provenance and authenticity MUST come from an independently trusted Git publicat
 The .rgpignore file is included. Ignored files can be fetched directly from GitHub. Snapshot completeness refers only to the selected context scope.
 
 F	.gitignore	525
-F	.rgpignore	1021
+F	.rgpignore	972
 F	AGENTS.md	11553
 F	Cargo.toml	470
-F	README.md	10440
-F	Taskfile.yml	8153
+F	README.md	10341
+F	Taskfile.yml	7313
 F	docs/AGENT_FIRST_PILOT.md	6284
-F	docs/ENGINEERING_PRINCIPLES.md	9636
+F	docs/ENGINEERING_PRINCIPLES.md	9642
 F	docs/GATE_B_CORRECTION.md	1027
 F	docs/INDEX_SCHEMA.md	3523
 F	docs/IN_REPO_DOGFOOD.md	5584
-F	docs/PRODUCT_NORTH_STAR.md	9300
-F	docs/PRODUCT_ROADMAP.md	20960
-F	docs/READER_API.md	6306
+F	docs/PRODUCT_NORTH_STAR.md	9209
+F	docs/PRODUCT_ROADMAP.md	12980
+F	docs/READER_API.md	7790
 F	docs/RGP_AGENT_GUIDE.txt	1331
 F	docs/RGP_FORMAT_SPEC.md	6891
 F	docs/RGP_MCP_AGENT.md	4747
-F	docs/RGP_SECURITY_MODEL.md	2379
+F	docs/RGP_SECURITY_MODEL.md	5444
 F	docs/SANDBOX_SOURCE_WORKSPACE.md	10157
 F	flake.nix	910
 F	justfile	168
@@ -64,12 +64,11 @@ F	scripts/stage1_memory_ab.py	7455
 F	scripts/stage1_sandbox_task_trial.py	5770
 F	scripts/stage1_scale.py	9381
 F	scripts/stage1_stress.py	10101
-F	scripts/transport_probe.py	6328
 F	src/lean.rs	11412
 F	src/main.rs	37897
 F	src/plain.rs	10508
 F	src/rgpignore.rs	8397
-F	tests/test_bootstrap.py	5635
+F	tests/test_bootstrap.py	5644
 F	tests/test_gate_b.py	7821
 F	tests/test_gate_b_cache.py	4719
 F	tests/test_gate_b_call_audit.py	7239
@@ -91,9 +90,8 @@ F	tests/test_rgp_sandbox.py	9020
 F	tests/test_rgpp_agent_context.py	3996
 F	tests/test_stage1_agent_task_pilot.py	2262
 F	tests/test_stage1_corpus.py	4535
-F	tests/test_stage1_delivery.py	4967
-F	tests/test_transport_probe.py	1886
-I	58
+F	tests/test_stage1_delivery.py	4976
+I	51
 S	1
 
 FILE	.gitignore
@@ -133,25 +131,23 @@ Thumbs.db
 /benchmarks/gate_b/observations.local.json
 
 FILE	.rgpignore
-# RGP/2.0 context filter. Gitignore syntax; evaluated at the pinned Git commit.
+# RGP/3.0 context filter. Gitignore syntax; evaluated at the pinned Git commit.
 # These paths stay in Git: an agent can fetch them directly when needed.
 # This file itself is ALWAYS included in the RGP and documents its scope.
 #
 # Historic measurements, checkpoints and long-form archived planning.
 /benchmarks/
 /docs/RGP_INLINE_AGENT_GUIDE.txt
-/docs/ROADMAP_v1.1.md
 /docs/REVIEW_*.md
 /docs/STAGE1_*.md
 /docs/AGENT_VALUE_TRIAL_*.md
-/docs/POC_TRANSPORT_REPORT.md
 /docs/RGP_BENCHMARK_BASELINE.md
 /docs/GATE_B_REVIEW.md
-/docs/TRANSPORT_PROBE_PROTOCOL.md
 /docs/gate-a/
 
 # Binary/encoded golden transports, which are especially wasteful in a text RGP.
 /tests/fixtures/
+/scripts/legacy_transport_fixture.py
 
 # Workflow and repository automation: easy to read from GitHub on demand.
 /.github/
@@ -406,9 +402,9 @@ strip = true
 FILE	README.md
 # RGP (Repository Graph Pack)
 
-RGP creates **reproducible, versioned, single-file snapshots of a Git repository**. Its purpose is to give a coding assistant trustworthy source context inside a Python sandbox without cloning the repository or installing runtime dependencies.
+RGP creates **reproducible, versioned, single-file source snapshots** of Git repositories. A coding assistant can read **selected source ranges directly through GitHub** without loading the full snapshot into model context. The optional local Python Reader needs no third-party runtime dependencies.
 
-**Status: v0.1, transport PoC.** The GitHub Actions artifact delivery path has conditional Gate A evidence; product usefulness and independent answer quality are **not proven**. **Gate B remains HOLD.** RGP currently provides verified file contents and lexical search, not a semantic dependency graph.
+**Status: RGP/3.0 readable-text PoC.** The default artifact has no ZIP, Base64, JSON manifest or in-band source hashes. Reader checks structure and limits; **authenticity requires independently trusted Git provenance**. Practical usefulness, measured token savings and independently assessed answer quality are **not established**. **Gate B remains HOLD.** RGP currently supports lexical source navigation, not a semantic dependency graph.
 
 ## Token-efficient RGP/3.0
 
@@ -538,7 +534,7 @@ python3 python/rgp_reader.py --artifact /tmp/rgp-example.rgp search 'RGP' --pref
 
 - **Generator/verifier:** [`src/main.rs`](src/main.rs), [format contract](docs/RGP_FORMAT_SPEC.md), [security limits](docs/RGP_SECURITY_MODEL.md).
 - **Trusted Reader:** [`python/rgp_reader.py`](python/rgp_reader.py) and [Reader API](docs/READER_API.md).
-- **Delivery:** [`python/rgp_bootstrap.py`](python/rgp_bootstrap.py), [transport protocol](docs/TRANSPORT_PROBE_PROTOCOL.md) and [authenticated delivery](docs/STAGE1_DELIVERY.md).
+- **Optional file delivery and Git provenance:** [`python/rgp_bootstrap.py`](python/rgp_bootstrap.py), [authenticated delivery](docs/STAGE1_DELIVERY.md), and [self-snapshot checks](docs/IN_REPO_DOGFOOD.md). The primary agent route is selective GitHub line-range reading.
 - **Optional agent interfaces:** [context helper](python/rgp_agent_context.py), [MCP adapter](python/rgp_mcp.py) and [MCP usage](docs/RGP_MCP_AGENT.md).
 
 Snapshots pin an actual Git commit; modified/untracked worktree files are not included. Git symlinks are stored as link text, submodules and unsafe paths are excluded, LFS pointers are labeled as pointers, and partial snapshots must not be mistaken for complete ones. The Reader bounds resource use and reports unavailable semantic indexing as `not_indexed`.
@@ -547,16 +543,24 @@ Run `python3 -m unittest discover -s tests -p 'test_*.py' -v` for the standard-l
 
 ## Roadmap and measured evidence
 
-The [three-stage product roadmap](docs/PRODUCT_ROADMAP.md) is canonical. The longer [v1.1 technical plan](docs/ROADMAP_v1.1.md) is background, not a competing release checklist. The [engineering principles](docs/ENGINEERING_PRINCIPLES.md) and [technical review](docs/REVIEW_2026-10-31.md) describe current constraints.
+The [three-stage roadmap](docs/PRODUCT_ROADMAP.md) and
+[current technical review](docs/REVIEW_2026-10-31.md) describe the
+**RGP/3.0 direction**. [Product north star](docs/PRODUCT_NORTH_STAR.md)
+sets the success criteria; the previous ZIP/Base64 research and
+v1.1 mega-roadmap are accessible via Git history, not active requirements.
+[Engineering principles](docs/ENGINEERING_PRINCIPLES.md) stay normative.
 
 | Area | Documentation and evidence |
 | --- | --- |
-| Gate A: Actions ZIP transport | [Report](docs/POC_TRANSPORT_REPORT.md), [experiment protocol](docs/TRANSPORT_PROBE_PROTOCOL.md), [workflow](.github/workflows/transport-probe.yml) |
-| Stage 1: format, real-source tasks, stress and scale | [Implementation](docs/STAGE1_IMPLEMENTATION.md), [corpus](docs/STAGE1_CORPUS_DIAGNOSTIC.md), [stress](docs/STAGE1_STRESS.md), [50k-member boundary](docs/STAGE1_SCALE.md), [measured reports](benchmarks/stage1/) |
-| Stage 1: delivery, memory and agent integration | [Delivery](docs/STAGE1_DELIVERY.md), [memory](docs/STAGE1_MEMORY.md), [adaptive ZIP](docs/STAGE1_ADAPTIVE_ZIP.md), [agent task pilot](docs/AGENT_FIRST_PILOT.md), [12-task trial](docs/AGENT_VALUE_TRIAL_2026-10-31.md) |
-| Gate B: agent usefulness and cost | [Evaluation protocol](docs/RGP_BENCHMARK_BASELINE.md), [frozen plan](benchmarks/gate_b/plan.json), [observations](benchmarks/gate_b/), [independent review requirements](docs/GATE_B_REVIEW.md), [correction](docs/GATE_B_CORRECTION.md) |
+| Current RGP/3.0, trust and scoped completeness | [Format](docs/RGP_FORMAT_SPEC.md), [security](docs/RGP_SECURITY_MODEL.md), [.rgpignore](.rgpignore) |
+| Generator, corpus, stress, scale | [Implementation](docs/STAGE1_IMPLEMENTATION.md), [corpus](docs/STAGE1_CORPUS_DIAGNOSTIC.md), [stress](docs/STAGE1_STRESS.md), [50k boundary](docs/STAGE1_SCALE.md) |
+| Agent navigation and optional sandbox/MCP | [Agent pilot](docs/AGENT_FIRST_PILOT.md), [12-task navigation](docs/AGENT_VALUE_TRIAL_2026-10-31.md), [sandbox provenance](docs/SANDBOX_SOURCE_WORKSPACE.md) |
+| Gate B: usefulness and cost | [Protocol](docs/RGP_BENCHMARK_BASELINE.md), [frozen plan](benchmarks/gate_b/plan.json), [observations](benchmarks/gate_b/), [review requirements](docs/GATE_B_REVIEW.md) |
 
-Gate A's 12 successful artifact transfers do not establish arbitrary connector delivery. Stage 1 tests validate a specific set of source tasks and boundary cases, not general model performance. The published Gate B diagnostic compares source acquisition for pinned repositories, but its earlier task judgments were unblinded and assistant-scored; independent correctness review and authenticated tool-history evidence are still missing. **No automatic Gate B GO or measured token improvement is claimed.**
+The frozen legacy Gate B numbers and old transport reports **do not
+measure RGP/3.0 model tokens**. Technical source checks establish
+byte fidelity, not proof that agents answer better. Gate B remains
+**HOLD** until a fair baseline and independent answer assessment.
 
 The repository intentionally retains the tracked `REPO_CONTEXT.rgp`, golden fixtures and pinned benchmark evidence: they are inputs and audit records, **not disposable build artifacts**. Generated local outputs, editor files and caches belong outside version control.
 
@@ -663,7 +667,7 @@ tasks:
       - python3 scripts/stage1_stress.py --profile '{{.PROFILE}}' --rust-cli target/release/rgp --report /tmp/rgp-stage1-stress-{{.PROFILE}}.json
 
   stage1:delivery:
-    desc: Independently verify a downloaded Actions ZIP with pinned RGP checkpoint (REPOSITORY and ZIP required)
+    desc: Legacy Gate B delivery/checkpoint validation for pinned 1.x/2.x Actions ZIP (not RGP/3.0)
     vars:
       REPOSITORY: '{{.REPOSITORY | default "rgp"}}'
       ZIP: '{{.ZIP | default "/tmp/gate-b-artifact.zip"}}'
@@ -703,7 +707,6 @@ tasks:
     cmds:
       - cargo run --locked -- generate --repo . --rev HEAD --output REPO_CONTEXT.rgp
       - python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp validate
-      - python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp validate
 
   generate:
     desc: Generate a snapshot (override REPO and ARTIFACT as needed)
@@ -719,26 +722,6 @@ tasks:
     desc: Inspect a snapshot's verified manifest
     cmds:
       - cargo run --locked -- inspect --artifact '{{.ARTIFACT}}'
-
-  probe:tiny:
-    desc: Generate and independently verify a small transport fixture
-    cmds:
-      - |
-        set -eu
-        work="$(mktemp -d)"
-        trap 'rm -rf "$work"' EXIT
-        python3 scripts/transport_probe.py generate --output-dir "$work" --sizes 102400
-        python3 scripts/transport_probe.py verify --input-dir "$work" --expected "$work/expected.json"
-
-  probe:full:
-    desc: Generate/verify 100KiB, 5MiB, 20MiB, 50MiB transport fixtures (manual; large)
-    cmds:
-      - |
-        set -eu
-        work="$(mktemp -d)"
-        trap 'rm -rf "$work"' EXIT
-        python3 scripts/transport_probe.py generate --output-dir "$work"
-        python3 scripts/transport_probe.py verify --input-dir "$work" --expected "$work/expected.json"
 
   nix:check:
     desc: Check the pinned development flake
@@ -967,7 +950,7 @@ MCP как таковой или 50 000 синтетических файлов.
   документировать в соответствующих спецификациях, не плодить
   конкурирующие описания. Канонический *трёхэтапный* продуктовый план:
   [PRODUCT_ROADMAP.md](PRODUCT_ROADMAP.md). Исторический подробный
-  [ROADMAP_v1.1.md](ROADMAP_v1.1.md) остаётся справочным.
+  [PRODUCT_ROADMAP.md](PRODUCT_ROADMAP.md) остаётся справочным.
 - Общие сценарии сборки/тестирования поддерживать через Taskfile/justfile,
   а не копировать длинные несогласованные команды в workflow.
 - **Исключение:** независимая проверка одних и тех же недоверенных байтов
@@ -1181,37 +1164,38 @@ RGP создаётся **Кирой для собственных рабочих
 файлов. Большие нагрузки допустимы как проверка безопасности и
 технических границ, **но не как самостоятельный продуктовый приоритет**.
 
-## Главный сценарий (dogfooding)
+## Главный сценарий (dogfooding, RGP/3.0)
 
-Когда пользователь просит изменить или разобраться с реальным GitHub-проектом,
-Кира должна, если поддерживаемый источник доступен:
+Когда пользователь просит разобраться с GitHub-проектом или изменить его:
 
-1. Определить нужный GitHub-репозиторий и зафиксировать **точный commit**.
-   Получить RGP через поддерживаемый GitHub-канал, сверить SHA-256 с
-   **независимым доверенным источником**, а не только с заголовком ZIP.
-2. Поместить проверенный RGP в **собственную Python-песочницу** и открыть
-   доверенным Python stdlib Reader. Проверить `validate`, `overview`,
-   `coverage`, commit и неполноту снимка; не исполнять исходники из RGP.
-3. Для конкретной задачи использовать `tree`, `search`, `read`,
-   `rgp_agent_context.py` или импорт Reader из доверенного проекта.
-   Выбирать слова поиска из **самой задачи**, а не заранее известных
-   правильных файлов. Находить не только нужный участок, но и возможные
-   последствия, соседние модули и тесты.
-4. Выработать план изменения с проверяемыми `path:line` цитатами.
-   **Изменять код через поддерживаемые GitHub-инструменты или рабочую
-   копию Git**: RGP является неизменяемым снимком для понимания,
-   **не редактором репозитория**. Учитывать актуальность commit и
-   изменение `main` после создания снимка.
-5. Прогнать применимые тесты и CI, сопоставить результат с ожидаемым
-   поведением и проверить, не затронуты ли другие участки.
-   Фиксировать ошибки, пропуски и ограничения, а не выдавать
-   совпадение текста за семантическую связь.
+1. Установить нужный репозиторий и **точную исходную Git-ревизию**.
+   Убедиться, что `REPO_CONTEXT.rgp` относится к нужной версии;
+   публикационный commit может идти отдельным коммитом после исходного.
+2. **Без обязательной загрузки в песочницу** прочитать небольшими
+   диапазонами строк заголовок, инструкцию и индекс читаемого
+   RGP/3.0 через GitHub-коннектор. Затем запросить только
+   релевантные FILE-секции. Дополнительные файлы после `.rgpignore`
+   можно читать прямо из Git на той же ревизии.
+3. Если требуется полный локальный Reader, получить **файл как файл**,
+   а не выводить содержимое в контекст модели. Прежде чем доверять ему,
+   удостоверить целостность по **независимому** Git blob/SHA-256 и
+   связать его с исходным Git commit. `Reader.validate` для RGP/3.0
+   проверяет только структуру, границы и ограничения, а не
+   аутентичность текста.
+4. Исследовать исходники для конкретной задачи, подтверждать
+   `path:line`, проверить соседние модули и тесты. Не выдавать
+   наличие слова в файле за доказательство семантической связи.
+5. Изменять **сам GitHub-репозиторий** через GitHub/Git, не
+   редактировать RGP как источник правды. Прогнать применимые
+   тесты/CI и проверить результаты на новом commit.
 
-Если RGP отсутствует, слишком стар, неполон или не может быть достоверно
-проверен, **работать через GitHub напрямую**, явно обозначив переход.
-Не выдавать работу GitHub за использование RGP. MCP-сервер служит лишь
-**необязательным адаптером**. Его запуск внутри Python-песочницы не
-регистрирует автоматически инструменты MCP в текущем ChatGPT.
+Когда невозможно достоверно подтвердить источник RGP,
+или выбранный RGP не содержит нужных файлов, **перейти к прямому
+GitHub** и явно сообщить об этом. Не выдавать фрагментарную
+проверку за полнофайловую. RGP/3.0 намеренно не содержит SHA
+или commit ID, и структурный Reader не обнаруживает равнодлинной
+подмены. MCP — необязательный локальный адаптер, а не встроенный
+ChatGPT-инструмент.
 
 ## Как измеряется успех
 
@@ -1261,244 +1245,171 @@ RGP создаётся **Кирой для собственных рабочих
 протоколов доставки.
 
 FILE	docs/PRODUCT_ROADMAP.md
-# RGP: продуктовая дорожная карта в 3 этапа
+# RGP: дорожная карта после перехода на читаемый RGP/3.0
 
-**Дата фиксации:** 31 октября 2026  
-**Цель:** Кира, ChatGPT coding-ассистент, разрабатывает RGP прежде всего
-**для собственной работы в Python-песочнице с GitHub-репозиториями**:
-лучше понимать контекст и структуру проекта, находить затронутый код
-и тесты, допускать меньше ошибок при реальных правках и эффективнее
-выполнять задачи пользователя. Надёжная доставка исходников и Reader
-нужны именно для этого сценария, а не как самостоятельный продукт.
+**Актуализирована:** 31 октября 2026 года. **Канонический план:** три этапа.
+**Решение:** основной формат — один текстовый `REPO_CONTEXT.rgp` версии
+**RGP/3.0**, а не ZIP, Base64, sidecar или обязательный GitHub Actions artifact.
+Технический аудит текущей реализации: [REVIEW_2026-10-31.md](REVIEW_2026-10-31.md).
+Критерий продукта: [PRODUCT_NORTH_STAR.md](PRODUCT_NORTH_STAR.md).
 
-Это **канонический краткий план из трёх этапов**. Детальные исследования и
-гипотезы из [ROADMAP_v1.1.md](ROADMAP_v1.1.md) не удаляются, но не образуют
-альтернативную последовательность продуктовых этапов. Реализованные функции
-нужно оценивать по кодовым и экспериментальным доказательствам, а не по
-историческим checklist.
+## Для чего RGP существует
 
-**Канонический критерий пользы и dogfooding:**
-[PRODUCT_NORTH_STAR.md](PRODUCT_NORTH_STAR.md). Основной пользователь —
-сама разрабатывающая Кира, а не абстрактный агент. RGP должен
-работать в её песочнице: `проверить снимок → понять исходники →
-спланировать изменение → исправить GitHub-проект → проверить тестами`.
-Первичны успешность реальной задачи и снижение ошибок, вторичны
-число вызовов GitHub, размер контекста, токены, время и стоимость.
-Тесты, где заранее известны правильные файлы, доказывают только
-доступ к исходникам. MCP — вспомогательный интерфейс; оптимизация
-огромных репозиториев не приоритет без настоящей потребности.
+RGP помогает Кире выполнять **настоящие GitHub-задачи**: видеть структуру
+репозитория, ориентироваться в исходниках, находить тесты и безопасно
+вносить изменения. RGP — только **read-only контекст**, не редактор,
+не замена Git и не доказательство корректности ответа модели.
 
-## Общие обязательные правила
+Приоритетный сценарий: прочитать небольшой заголовок и индекс RGP через
+GitHub-коннектор → запросить **только нужные диапазоны строк** →
+выяснить изменения и связанные тесты → исправить сам GitHub-проект →
+проверить тестами и CI. Если нужен **полный доверенный файл**, загрузить
+его как файл (без протаскивания текста через модель), удостоверить по
+независимому Git blob или внешнему SHA-256 и сверить исходники с
+закреплённым Git-коммитом. Нельзя выдавать структурную проверку Reader
+за проверку подлинности RGP/3.0.
 
-- Применять [Pragmatic Engineering / KISS / DRY](ENGINEERING_PRINCIPLES.md).
-- Текущий RGP — снимок кода и инструмент чтения, **не** LLM-runtime.
-  Разрабатывающий агент не должен перекладывать проверку результата на человека.
-- Каждый этап завершается **agent-owned E2E**: агент сам собирает RGP,
-  восстанавливает/валидирует его и использует Reader на заранее заданных задачах
-  с проверяемыми эталонами. Нужны команды, исходный commit, SHA-256, результаты,
-  негативные кейсы, ограничения и итог `PASS` / `FAIL` / `BLOCKED`.
-- В CI и артефактах нельзя публиковать исходники/секреты без отдельного
-  разрешения. Содержимое RGP всегда считается недоверенными данными.
-- Результаты benchmark отдельно различают целостность, корректность ответов,
-  число вызовов, токены, время и подтверждение происхождения.
-  Отсутствующее измерение обозначается `unknown`, не нулём.
-- `GO` на следующий этап только после его критериев. Иначе `HOLD` с
-  конкретными блокерами или `PIVOT` для неподтверждённой гипотезы.
+### Зафиксированная новая архитектура
 
----
+| Аспект | Основной путь |
+| --- | --- |
+| Транспорт | UTF-8, короткая инструкция, табличный индекс, исходный текст |
+| Файлы | Оригинальные UTF-8 байты, точные границы через длину в байтах |
+| Ненужные пути | Отфильтрованы закреплённым `.rgpignore`, доступны в Git по требованию |
+| SHA-256, Git SHA, JSON-манифест | **Не пишутся** в RGP/3.0 ради токенов |
+| Происхождение/доверие | Git-ревизия и контрольная сумма **вне файла** |
+| Чтение | GitHub line-range запросы; локальный Reader только если файл действительно получен |
+| GitHub Actions ZIP | Необязательный способ доставки; не определяет формат |
+| Legacy 1.x / 2.x | **Только чтение** через Reader и ограниченный набор immutable fixtures |
+| Индексы, MCP, граф | Не обязательны; создавать только после измеренной потребности |
 
-## Этап 1. Надёжное ядро + доказанная полезность MVP-A
+`snapshot_complete` отражает **выбранный объём** после `.rgpignore`,
+а не весь Git-репозиторий. В RGP/3.0 отсутствуют путь-специфичные
+доказательства всех проигнорированных файлов: в индексе хранится
+их количество и сам `.rgpignore`. Без внешнего Git-сверения изменения
+исходника той же длины Reader не выявляет. Это **сознательный компромисс**,
+который нужно явно предъявлять агенту и пользователю.
 
-**Цель:** пользователь и агент получают один достоверно описанный,
-детерминированный RGP от фиксированного commit и могут безопасно решать
-конкретные задачи навигации по исходникам. Не начинать дорогую семантику,
-пока не показана польза этого базового пути.
+## Этап 1. Минимальный надёжный контекст и доказательство ценности
 
-### Реализовать / довести
+**Статус: выполняется. Gate B = HOLD.**
 
-- [ ] Согласовать версионирование формата и границы совместимости Rust
-  Generator/Verifier, Python stdlib Reader и Actions ZIP bootstrap.
-- [ ] Закрыть найденные в [ревью](REVIEW_2026-10-31.md) пробелы:
-  конфликт временного файла при параллельной генерации; масштабируемость
-  `git cat-file` по одному blob и полного чтения blobs в Reader;
-  стандартизированные лимиты/ошибки.
-- [ ] Проверить замкнутый цикл `generate → verify → Reader.validate →
-  tree/read/search/coverage` на *закреплённых* реальных Git-репозиториях.
-  Сверить байты и результаты с исходной ревизией.
-- [ ] Добавить проверяемые негативные сценарии для повреждения, усечения,
-  неверных хешей, небезопасных путей, LFS/submodule/partial, неизвестной
-  версии, размера и ограничений результатов.
-- [ ] Сохранить воспроизводимые проверки доставки через конкретный
-  поддерживаемый GitHub-канал; не переносить подтверждённый предел размера
-  на непроверенные каналы.
-- [ ] Пройти ранний **Gate B**: агент лично выполняет 12 замороженных задач
-  на 3 pinned-репозиториях через baseline GitHub и через RGP, сверяет ответы
-  с исходниками, публикует честный журнал источников и затрат. Проверить
-  сравнение с учётом загрузки, кеширования и подготовки RGP.
-  Дополнительная независимая оценка остаётся обязательной для **официального
-  GO Gate B по текущему протоколу**, но не подменяет работу агента.
+**Уже есть:**
+- RGP/3.0: текст без ZIP/Base64 и без технических SHA-полей; один файл;
+  `.rgpignore`; детерминированный генератор и Reader.
+- Legacy Reader 1.0–2.1 с сохранёнными golden fixtures.
+- Проверки Rust/Python, негативные сценарии, закреплённые корпуса,
+  стресс-тесты и тест границы 50k. Это свидетельствует о
+  **технической работоспособности**, но не о пользе для модели.
+- Локальные MCP и sandbox-интерфейсы как опциональные адаптеры.
 
-### Выходные артефакты
+**Нужно довести:**
+- [ ] Протестировать доступ агента к заголовку, индексу и **точным
+  строковым диапазонам** через имеющийся GitHub-коннектор. Для двух-трёх
+  небольших репозиториев записать, где запросы из RGP быстрее и где
+  прямой `fetch_file` оказывается проще.
+- [ ] Привести весь конвейер к общему **внешнему trust anchor**:
+  фиксированный исходный Git SHA, Git blob опубликованного RGP,
+  при необходимости отдельный full-file SHA-256. Указывать, какие
+  звенья цепи не проверены. Файл сам себя не аутентифицирует.
+- [ ] Измерить реальные **токены**: основной вывод в модель, долю
+  служебных строк, число чтений и расход контекста. Сам по себе
+  размер в байтах не является измерением токенов.
+- [ ] Обновить негативные тесты для RGP/3.0: неверные длины,
+  неожиданные delimiters, UTF-8, опасные пути, подмену длины;
+  **явно тестировать**, что равнодлинная подмена не обнаруживается
+  без Git, и обеспечить её отбраковку в доверенном потоке.
+- [ ] Выполнить независимый, ослеплённый **Gate B**: те же
+  12 зафиксированных задач и новые незнакомые задачи, RGP и
+  GitHub-only с честным кешированием, оценка человеком/внешней
+  процедурой корректности и полной стоимости. Старые наблюдения
+  остаются историческим baseline, не доказательством RGP/3.0.
+- [ ] Отдельно проверить ограничения безопасной публикации:
+  чувствительные файлы, подмодули, LFS, изменения `.rgpignore`,
+  неполные снимки и ошибочные утверждения об актуальности.
 
-Релиз-кандидат `MVP-A`, воспроизводимый тестовый набор RGP,
-полный протокол agent E2E, результаты и статус Gate B, документация
-поддерживаемых путей доставки, формата и известных ограничений.
+**Критерий закрытия:** воспроизводимый Git→RGP/3.0→выборочный
+контекст→проверенные решения задач; известные отрицательные кейсы
+закрыты; независимый Gate B даёт обоснованный **GO**. Пока результатов
+такого теста нет, **HOLD**, даже если весь CI зелёный. Не расширять
+масштабирование или формат ради самих бенчмарков.
 
-**Критерий перехода:** все тесты/CI зелёные; RGP дважды генерируется
-идентично при одном commit; Rust/Python обнаруживают валидные и
-отрицательные fixtures; агент из **готового RGP** правильно отвечает на
-оговорённые задачи и фиксирует доказательства. Для продуктового решения о
-семантике Gate B должен достичь обоснованного `GO` по существующему протоколу
-(включая независимую проверку заявлений), иначе `HOLD/PIVOT`.
+## Этап 2. Реальные изменения кода и индекс только при необходимости
 
-**Практический опыт на малых репозиториях, 31.10.2026:**
-[12 исходно обоснованных задач](AGENT_VALUE_TRIAL_2026-10-31.md)
-прошли Git→RGP→Reader→контекст→сверку с исходным Git в CI;
-72 фрагмента на трёх закреплённых Git-коммитах совпали с исходниками.
-Модель в этой беседе написала 12 ответов со строками кода, но
-**не получила независимой оценки**. Наблюдения по 6 RGP-операциям
-против 13 GitHub-файлов не подтверждают снижение полной стоимости:
-реальные Actions ZIP тяжелее выбранных исходных файлов.
-Поэтому Stage 1 **не закрыт**, Gate B = **HOLD**. Для перехода к
-семантической индексации требуется независимый A/B на новых
-вопросах; повторять оптимизацию 50k файлов вместо этого не нужно.
+**Зависимость:** Gate B подтвердил, что отобранный контекст помогает.
 
-**Статус на 31.10.2026:** **В работе**. Ряд транспортных и форматных
-проверок уже существует; README называет систему `v0.1 / transport PoC`.
-Gate B остаётся **HOLD**, поэтому этап не закрыт.
+- [ ] Кира выполняет реальные PR: сначала читает RGP/3.0
+  выборочными фрагментами, затем меняет **GitHub-репозиторий** и
+  запускает тесты; сравнить с эквивалентным GitHub-only baseline.
+- [ ] Измерить ошибки, повторные правки, полноту выбранных тестов,
+  GitHub-вызовы, время и **токены**; отдельно считать подготовку,
+  обновление и загрузку RGP.
+- [ ] Определить, достаточно ли перечня путей и лексического поиска.
+  Если нет, добавить минимальные `symbols/definitions/references`
+  с точными `path:line`, `parsed/partial/unsupported` и
+  доказуемым происхождением.
+- [ ] `dependencies/impact` строить только из подтверждённых
+  связей и нужных проекту языков. Не принимать упоминания за
+  реальный граф вызовов.
+- [ ] Зафиксировать границы stale-снимков, работу с исключёнными
+  файлами и fallback при отсутствии RGP.
 
----
+**Критерий:** на честных задачах реальной разработки корректность
+не хуже GitHub-only и измерены цена/выигрыш. Без пользы от индекса
+**PIVOT** к простому текстовому Reader, без навязывания графа.
 
-## Этап 2. Контекст для реальных правок Киры, индексация при необходимости
+## Этап 3. Эксплуатация, безопасность и выпуск
 
-**Зависимость:** решение Stage 1 / Gate B подтвердило ценность системы.
-**Цель:** Кира использует RGP **в своей песочнице для настоящих GitHub-правок**:
-понимает структуру репозитория, выбирает изменяемые файлы и тесты,
-проверяет возможные последствия и снижает число ошибок.
-Навигация по определениям, использованиям и зависимостям с честным
-покрытием добавляется только при доказанной потребности.
+**Зависимость:** этап 2 подтвердил нужный сценарий и интерфейс.
 
-### Реализовать / довести
+- [ ] Версионированный CLI/Reader, правила совместимости 1.x/2.x
+  и миграции в RGP/3.0 без прежнего ZIP/sidecar в новых файлах.
+- [ ] Автоматическое обновление Git-tracked RGP с атомарной
+  публикацией, подтверждением Git blob и проверкой актуальности.
+- [ ] Определить политику разрешённых публикаций, работу с
+  приватными репозиториями, ограничениями коннектора и секретами.
+- [ ] Ограничения ресурсов и security-регрессии: большие пути,
+  NUL/UTF-8, границы байтов, повторные записи, необнаружимые
+  без внешнего якоря подмены; **старые ZIP-бомбы** проверять
+  только для сохранённого legacy-reader.
+- [ ] Честная эксплуатационная диагностика и восстановление при
+  недоступном файле или частичном RGP.
+- [ ] Полный release rehearsal на фиксированном Git-коммите,
+  включая внешнюю проверку подлинности и результат настоящей
+  пользовательской задачи; затем только объявлять v1.0.
 
-- [ ] Кира лично выполняет новую **настоящую задачу изменения GitHub-кода**,
-  предварительно изучая проверенный RGP в собственной Python-песочнице.
-  Фиксирует исходный commit, найденные пути и тесты, выполненную правку,
-  результаты тестов, пропуски контекста и причины ошибок.
-- [ ] Сравнить итог и цену этого пути с честным GitHub-only baseline
-  с кешированием на сопоставимой задаче. Отдельно учитывать подготовку
-  и загрузку RGP. Улучшение качества ответов/правок нельзя выводить
-  из самостоятельной оценки агента или одного набора source anchors.
-- [ ] Минимально необходимый индекс: пути, символы, определения,
-  диапазоны исходного кода, происхождение данных. Сначала поддержать
-  небольшое измеряемое множество языков и конфигураций.
-- [ ] Обеспечить вызовы Reader `symbols` / `definitions` / `references`,
-  а затем `dependencies` / `impact` только для данных, которые можно
-  действительно подтвердить. Индексаторы (Tree-sitter/SCIP) добавлять по
-  экспериментально подтверждённой необходимости.
-- [ ] Явно учитывать `parsed` / `partial` / `failed` / `unsupported`,
-  неразрешённые связи, точные доказательные source ranges и параметры анализа.
-  Не превращать импорт/упоминание в гарантированный runtime call graph.
-- [ ] Выдавать компактный контекст под задачу и бюджет агента, указывая
-  релевантные файлы, тесты и пробелы покрытия; предусмотреть работу
-  без семантического индекса.
-- [ ] Автоматизировать agent E2E для задач `найти определение`,
-  `найти использования`, `выявить затронутые тесты`,
-  `объяснить подтверждённый путь зависимостей`.
-  Эталонные результаты и допустимые неизвестные фиксировать заранее.
-- [ ] Сравнивать новый Reader с MVP-A и базовым GitHub-чтением:
-  корректность не ниже baseline, стоимость и задержка измерены
-  вместе с созданием/передачей артефакта.
+**Критерий релиза:** полезность доказана, trust boundary проверен,
+нужные регрессии зелёные, известные ограничения опубликованы;
+нет подмены измеренных токенов уменьшением размера в байтах.
 
-### Выходные артефакты
+## Что не нужно переносить в новый основной путь
 
-Версионированный индекс, расширенный Reader API, таблица покрытий,
-golden-fixtures для языков, журналы agent E2E и сравнительный benchmark.
+Ранние ZIP/Base64-транспортные PoC и старые отчёты о сжатии описывают
+**историю разработки**, но не действующий продуктовый формат.
+Сырые замороженные Gate B-наблюдения, протокол независимой проверки,
+план задач и golden fixtures **оставлены как аудит и обратная
+совместимость**. Удалённые исторические файлы доступны в Git history.
 
-**Критерий перехода:** агент лично выполняет предопределённые задачи через
-сгенерированный RGP с проверяемыми source references; отсутствующие
-отношения возвращаются как неизвестные, регрессий корректности относительно
-закреплённого baseline нет, накладные расходы приемлемы для выбранного
-сценария. Если индекс не приносит пользы, сохранить простой Reader и
-принять `PIVOT`, а не расширять систему ради архитектуры.
-
-**Статус на 31.10.2026:** **Запущен ограниченный интеграционный прототип**:
-локальный MCP stdio сервер открыл пять read-only инструментов
-проверенного RGP. [Реальные MCP вызовы на 12 задачах](../benchmarks/gate_b/MCP_AGENT_TRIAL_2026-10-31.md)
-успешно вернули и независимо подтвердили **72 исходных фрагмента** на
-трёх небольших репозиториях. Это проверка инструментов, **не запуск
-нейросети через MCP в CI**. Символьный/семантический индекс,
-`symbols`/`definitions`/`references` и call graph **не реализованы**.
-Stage 1 / Gate B по-прежнему **HOLD**. Продолжать Stage 2
-следует по результатам реального независимого модельного A/B,
-а не просто из-за завершённой интеграции.
-
----
-
-## Этап 3. Продуктовая эксплуатация и выпуск v1.0
-
-**Зависимость:** поддерживаемый Stage 2 API прошёл целевые сценарии.
-**Цель:** воспроизводимая поставка и работа в реальном CI/agent workflow,
-включая откаты, инкрементальное обновление и понятные сбои.
-
-### Реализовать / довести
-
-- [ ] Поддерживаемый путь установки/использования Generator и Reader,
-  инструкции для разработчика и агента, версия CLI/API/формата,
-  правила совместимости и миграции.
-- [ ] Проверяемая генерация/обновление RGP для новых commits;
-  актуальность по `input_tree_digest`; безопасная атомарная публикация и
-  восстановление после неудачных сборок.
-- [ ] Практическая интеграция GitHub Actions/поддерживаемого коннектора:
-  явная аутентификация, проверка SHA-256 с внешним trust anchor,
-  права доступа, срок хранения и допустимые размеры.
-- [ ] Нагрузочные, fuzz/security, adversarial и регрессионные тесты:
-  большие репозитории, zip bomb, path ambiguity, повторяющиеся объекты,
-  неполные snapshots, деградация ресурсов, утечки секретов.
-- [ ] Операционные свойства: структурированные ошибки, диагностика,
-  наблюдаемость полноты/производительности, инструкции по восстановлению.
-- [ ] Агент выполняет финальный **release rehearsal** от чистого
-  Git commit: сборка релизного RGP, доставка поддерживаемым путём,
-  проверка хеша/подлинности, чтение и решение набора пользовательских задач,
-  негативные проверки; сохраняет полный результат.
-- [ ] Выпустить документированные ограничения, changelog и v1.0 только
-  после прохождения acceptance matrix и действующих product gates.
-
-### Выходные артефакты
-
-Версия `v1.0`, воспроизводимые CLI/Reader и Release Pipeline,
-матрица совместимости, отчёт безопасности, полный agent-owned release
-rehearsal, эксплуатационная документация.
-
-**Критерий релиза:** предопределённые пользовательские сценарии
-самостоятельно воспроизведены агентом на доставленном RGP; контроль
-подлинности/целостности и неполноты работает, критические дефекты не
-оставлены без решения, CI/регрессии/ресурсные ограничения подтверждены
-проверками, недоказанных заявлений нет.
-
-**Статус на 31.10.2026:** **Не начат как продуктовый этап**;
-отдельные элементы CI и политики безопасности уже есть и переиспользуются.
-
----
-
-## Матрица доказательств (обязательна для каждого этапа)
-
-| Что проверяется | Кто выполняет | Чем подтверждается |
-| --- | --- | --- |
-| Код и формат | ИИ-агент-разработчик | Команды, exit codes, CI, golden fixtures |
-| Конкретный созданный `.rgp` | Тот же агент | Commit, SHA-256, Reader.validate, проверка полноты |
-| Достижение целей задачи | Тот же агент | Заранее заданные задания, ответы Reader, независимый от RGP эталон исходного commit |
-| Отказоустойчивость | Тот же агент | Негативные cases, коды ошибок, ограничение ресурсов |
-| Публичные сравнительные заявления | Агент + дополнительный аудит согласно действующему Gate B | Сырые наблюдения, честный baseline, независимая оценка/аудит при необходимости |
-
-**Правило приёмки:** просьба «пусть пользователь/ревьюер проверит,
-работает ли итоговый файл» не закрывает ни одну строку матрицы.
-При невозможности запуска агент явно сообщает `BLOCKED`, сохраняет
-доступные проверки и не отмечает этап завершённым.
+**Правило доказательности:** фиксировать конкретные коммиты,
+исходный Git, CI/exit code, модельные токены (если они действительно
+измерены), ошибки и ограничения. Никогда не выдавать отсутствие
+проверки за нулевую стоимость или успешный результат.
 
 FILE	docs/READER_API.md
 # Trusted Reader API: MVP-A resource and coverage contract
 
-`python/rgp_reader.py` is Python stdlib-only and treats the RGP archive as untrusted **data**. It never imports code from the ZIP. Constructing `Reader(path_or_bytes)` verifies the transport checksum, ZIP limits and paths, every blob hash, `manifest.json`, and the input tree digest before it answers requests.
+`python/rgp_reader.py` использует только стандартную библиотеку
+Python и считает любой RGP недоверенными данными. Для текущего
+**RGP/3.0** создание `Reader` проверяет UTF-8, границы байтов,
+порядок путей, дубликаты, NUL и ресурсные лимиты; SHA/Git commit
+**отсутствуют в транспорте**. Метаданные SHA в API вычисляются
+локально и **не подтверждают подлинность** исходников. Проверка
+доверенного источника выполняется **вне Reader**, по Git blob
+или независимому SHA-256, связанному с исходной Git-ревизией.
+
+Для старых RGP/1.0–1.2 Reader сохраняет проверку ZIP/Base64
+и внутренних SHA, а для RGP/2.0–2.1 проверяет встроенные
+хеши UTF-8-транспорта. Не путать исторические свойства с 3.0.
 
 ## API
 
@@ -1512,7 +1423,7 @@ page = reader.tree(prefix="src/", limit=100)
 while page["next_cursor"] is not None:
     page = reader.tree(prefix="src/", limit=100, cursor=page["next_cursor"])
 reader.read("README.md", start_line=1, end_line=40)
-exact_git_blob = reader.read_bytes("README.md")  # verified raw bytes, no decoding
+exact_git_blob = reader.read_bytes("README.md")  # exact RGP bytes, NOT independently Git-verified
 page = reader.search("TODO", paths=["README.md"], limit=10)
 while page["next_cursor"] is not None:
     page = reader.search("TODO", paths=["README.md"], limit=10, cursor=page["next_cursor"])
@@ -1522,11 +1433,11 @@ while page["next_cursor"] is not None:
     page = reader.search("TODO", prefix="src/", limit=10, cursor=page["next_cursor"])
 ```
 
-`read_bytes(path)` is a **public Python-only verified raw source API**.
+`read_bytes(path)` is a **public Python-only raw source API**. It verifies the internal structure and length; on RGP/3.0 it does not prove those bytes equal a Git blob.
 It preserves exact Git blob bytes including binary data and line endings,
 without interpreting symlinks or importing source. Unknown/omitted paths
 raise `PARTIAL_SNAPSHOT`. It is not a 256 KiB JSON response; individual
-blobs remain bounded by verified Reader resource limits. It supports
+blobs remain bounded by Reader resource limits. It supports
 [safe sandbox source workspaces](SANDBOX_SOURCE_WORKSPACE.md), which
 never depend on the Reader's private ZIP implementation.
 
@@ -1555,30 +1466,31 @@ and `search` terms, and the context CLI reports invalid term arguments.
 MCP keeps answering subsequent tool requests, including after a
 surrogate-containing JSON-RPC request identifier.
 
-## Resource limits (v1.0 Reader)
+## Resource limits
 
-| Boundary | Maximum |
-|---|---:|
-| Outer text | 128 MiB |
-| ZIP payload | 64 MiB |
-| Total ZIP entries | 50,000 |
-| Total uncompressed ZIP data | 128 MiB |
-| A single content blob | 16 MiB |
-| `manifest.json` | 16 MiB |
-| ZIP expansion ratio | 200×, with a 4 KiB allowance per member |
-| UTF-8 source/ZIP path | 4,096 bytes |
-| A single `read()` response content | 256 KiB, **including Base64 expansion** |
-| Tree result | 200 paths |
-| Search result | 100 hits; 512 UTF-8 bytes per excerpt |
-| Search query | 1,024 UTF-8 bytes |
-| Cursor token | 8,192 characters |
-| Exclusion rows returned in overview | 100, with `excluded_truncated` indicator |
+| Ограничение | RGP/3.0 | Исторические RGP/1.x/2.x |
+| --- | --- | --- |
+| Полный текст RGP | 192 MiB | Отдельные транспортные лимиты |
+| Отдельный файл | 16 MiB | 16 MiB |
+| Индекс / JSON-манифест | 16 MiB (text index) | 16 MiB (manifest) |
+| Длина пути | 4096 байт UTF-8 | 4096 байт UTF-8 |
+| Число файлов | 50 000 (верхняя граница) | Лимиты по форматам |
+| ZIP-разжатие | **Отсутствует** | Проверка количества, размера и 200× ratio |
+| Содержимое одного `read()` | 256 KiB | 256 KiB |
+| `tree()` | до 200 путей | до 200 |
+| `search()` | до 100 результатов, 512 байт на snippet | то же |
+| Строка запроса `search()` | 1024 UTF-8 байта | то же |
+| Cursor | 8192 символов | то же |
+| Обзор исключений | до 100 записей | то же |
 
-Limits are validation policies, not guarantees of fixed peak process RSS or wall time. Construction currently holds decoded ZIP and verified content blobs in RAM, so peak memory exceeds the uncompressed-byte ceiling. ZIP is never extracted with `extractall()`. Queries over large files may scan them; the v1 Reader does not promise indexed or constant-time search.
+Общий объём и память ограничены; Reader в текущем виде может
+держать полное содержимое в памяти и сканировать строки при поиске.
+Лимит файла не обещает фиксированной задержки или RSS.
+Текстовый RGP/3.0 не является сжатым ZIP-архивом.
 
 ## Explicit completeness
 
-`overview()` and `coverage("snapshot")` report `included_files`, `pointer_only_files`, `excluded_files`, `excluded_by_reason`, and `snapshot_complete`. An intentionally excluded `REPO_CONTEXT.rgp` (`self_artifact`) is not treated as a missing source file. Sensitive, oversized or unavailable submodule paths, and unhydrated LFS pointers, mark the snapshot `partial`.
+`overview()` and `coverage("snapshot")` report `included_files`, `pointer_only_files`, `excluded_files`, `excluded_by_reason`, and `snapshot_complete`. An intentionally excluded `REPO_CONTEXT.rgp` (`self_artifact`) is not treated as a missing source file. The configured `.rgpignore` removes deliberately omitted paths from scope, while sensitive, oversized, unavailable submodule paths and unhydrated LFS pointers mark the selected snapshot `partial`. For RGP/3.0 ignored paths are reported by count, not as a full enumerated list.
 
 `tree()` and `search()` return `snapshot_status` so an empty result in a partial snapshot cannot be confused with proof of absence. An explicitly requested path missing from the snapshot causes `PARTIAL_SNAPSHOT` instead of silently searching nothing. `coverage("index")` and `coverage("graph")` return `not_indexed`; `coverage("investigation")` returns `unknown`, because tool disclosure does not prove what an agent understood.
 
@@ -1792,17 +1704,76 @@ LLM с GitHub и RGP, подсчёт токенов/времени/вызово�
 сетевых байтов не доказана.
 
 FILE	docs/RGP_SECURITY_MODEL.md
-# Security model (PoC baseline)
+# Модель безопасности RGP/3.0
 
-**Trust boundary:** every RGP byte is untrusted, including manifest JSON, source comments, and code. SHA-256 of bytes stored alongside those bytes demonstrates **integrity during delivery**, not **authenticity or trust**. Provenance is represented by `source_commit`, not independently authenticated. Consumers must authenticate the transport/repository by an independent channel before assigning trust to the source.
+**Доверительная граница:** содержимое каждого RGP и любой исходный
+код внутри него — **недоверенные данные**, включая встроенную
+инструкцию агента. Они не имеют приоритета над внешними правилами
+и заданиями пользователя. Reader работает без `exec/eval`,
+импортов и выполнения архива.
 
-The trusted Python Reader lives outside the artifact; it never uses `exec`, `eval`, dynamic imports or `zipimport` on archive content. ZIP data is loaded only after strict outer-container verification. Manifest paths and ZIP paths are validated; duplicate/ambiguous names, malformed schemas and mismatching file hashes fail closed. Blob reads use ZIP APIs, never `extractall`. Resource caps bound outer size, per-blob size, ZIP member count and total inflated bytes; search and read results are capped. These controls reduce risk, but the PoC still needs fuzzing and adversarial resource testing before production.
+## Целостность и происхождение
 
-**Publication safety:** the Rust generator omits `REPO_CONTEXT.rgp` and conservative sensitive filenames such as `.env*`, `*.pem`, `*.key`, `id_rsa*`, `credentials*`, `secrets*`. This is not secret scanning and does not make automatic publication of an arbitrary repository safe. CI does not commit or upload generated repository snapshots to a public location. Project owners must review content, access controls, submodules and Git LFS status before publication.
+В RGP/3.0 намеренно нет SHA-256, исходного Git commit ID,
+отдельного sidecar или внутреннего JSON-манифеста. Reader проверяет
+UTF-8, отсутствие NUL, длины секций, безопасные пути, порядок,
+дубликаты, лимиты и терминатор. **Он не обнаруживает равнодлинные
+подмены исходного текста**, а локально вычисленный им digest
+не доказывает ни происхождение, ни подлинность.
 
-**Completeness:** `pointer_only`, submodules, omitted large blobs and excluded secrets make a snapshot partial. An absent graph or language index is `not_indexed`, **never** evidence that a relation does not exist. Source text handed to an LLM is untrusted material, not instructions.
+При доверенном использовании нужен **внешний** trust anchor:
+закреплённая исходная Git-ревизия и Git blob опубликованного
+`REPO_CONTEXT.rgp` (либо независимо полученный SHA-256),
+сверка исходников с той же ревизией при необходимости.
+При частичном чтении через GitHub line-range без полного скачивания
+проверка всего файла **не может считаться завершённой**.
+Устаревший RGP нельзя представлять как актуальный.
 
-**GitHub Actions artifact adapter:** the stdlib `python/rgp_bootstrap.py` accepts a ZIP wrapper with exactly one `.rgp` and optional `expected.json`, enforces entry names/types, per-entry limits, anti-zip-bomb ratios, validates the received RGP with the trusted Reader and atomically emits verified bytes. The optional `--trusted-sha256` must come from an independently authenticated channel to support authenticity; the manifest bundled alongside an artifact does *not* meet that criterion. This adapter is intentionally separate from raw RGP file decoding.
+`python/rgp_sandbox.py` требует внешний digest и для RGP/3.0
+внешнее утверждение о source commit. Эти значения должны быть
+получены из доверенного источника, а не из той же непроверенной
+копии файла. Само наличие двух аргументов ещё не доказывает,
+что они независимы или правильно связаны.
+
+## Границы и публикация
+
+- RGP/3.0 — до 192 MiB валидного UTF-8; отдельный файл до
+  16 MiB, ограничен общий объём и число путей. `FILE`-секции
+  отмеряются **байтами**, а не по словам-разделителям.
+- Исключены недопустимые пути, NUL, контрольные символы в
+  именах, дубликаты, абсолютные пути и `..`.
+  Symlink сохраняется как инертный текст, не разыменовывается.
+- `.rgpignore` — фильтр **контекста**, не защита от утечек.
+  Его правила и число намеренно исключённых файлов находятся
+  в снимке; сами пропущенные файлы остаются в Git.
+- Поименованное исключение `.env*`, ключей и подобных файлов
+  не заменяет secret scanning или явную политику публикации.
+  **Не публиковать автоматически приватные/секретные репозитории**
+  без независимой оценки содержимого и прав доступа.
+- `snapshot_complete` означает полноту только выбранной
+  области после `.rgpignore`; не гарантирует присутствие
+  всех отслеживаемых исходников, LFS или submodules.
+- Источники для агентских ответов требуют проверки `path:line`.
+  `not_indexed` не доказывает отсутствие символа или связи.
+
+## Исторические форматы и опциональная доставка
+
+Legacy Reader продолжает читать RGP/1.0–1.2 (ZIP/Base64)
+и RGP/2.0–2.1 (текст с внутренними хешами).
+Для этих **старых** форматов сохранены проверки ZIP-path,
+лимиты разжатия, anti-zip-bomb, хеши и immutable fixtures.
+Они не входят в формат нового RGP/3.0.
+
+Опциональный `python/rgp_bootstrap.py` принимает
+GitHub Actions ZIP **обёртку**, внутри которой лежит RGP.
+Эта обёртка не делает сам RGP ZIP-архивом и не является
+требованием для чтения исходников через GitHub-коннектор.
+Сопутствующий `expected.json` из той же ZIP-обёртки
+сам по себе не является независимым trust anchor.
+
+**Открытые задачи:** fuzz/adversarial testing границ файла,
+защита публикации приватных проектов, внешняя проверка
+происхождения и честные замеры на реальных задачах.
 
 FILE	docs/SANDBOX_SOURCE_WORKSPACE.md
 # RGP как локальное дерево исходников в песочнице Киры
@@ -6868,159 +6839,6 @@ def main() -> int:
 if __name__ == "__main__":
     raise SystemExit(main())
 
-FILE	scripts/transport_probe.py
-"""Deterministic, *valid* RGP transport fixtures and offline verification.
-
-All fixtures contain synthetic pseudorandom Git-like blobs and a valid manifest.
-This is a developer-only Python stdlib probe; the product generator is Rust.
-The GitHub connector must be tested externally: local verification is NOT Gate A.
-"""
-
-from __future__ import annotations
-
-import argparse
-import base64
-import hashlib
-import io
-import json
-import sys
-import zipfile
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
-from rgp_reader import Reader  # noqa: E402
-
-SIZES = (100 * 1024, 5 * 1024**2, 20 * 1024**2, 50 * 1024**2)
-CHUNK_SIZE = 8 * 1024**2
-ZIP_TIME = (1980, 1, 1, 0, 0, 0)
-
-
-def sha(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
-def make_fixture(target_size: int) -> tuple[bytes, dict]:
-    """Make a valid RGP, within 1% of target text size (not repo size)."""
-    if not 4096 <= target_size <= 50 * 1024**2:
-        raise ValueError("target_size out of experimental range")
-    # Base64 with 76 columns + LF costs ~77/57 bytes per ZIP byte.
-    remaining = max(1024, (target_size - 800) * 57 // 77)
-    files = []
-    contents = []
-    counter = 0
-    while remaining:
-        count = min(remaining, CHUNK_SIZE)
-        data = hashlib.shake_256(f"rgp-transport-v1-{target_size}-{counter}".encode()).digest(count)
-        path = f"probe/chunk-{counter:04d}.bin"
-        digest = sha(data)
-        files.append({
-            "path": path, "mode": "100644", "kind": "file", "size": len(data),
-            "sha256": digest, "blob": f"files/{digest}", "status": "included",
-        })
-        contents.append((f"files/{digest}", data))
-        remaining -= count
-        counter += 1
-    tree = hashlib.sha256()
-    for entry in files:
-        tree.update(entry["path"].encode("utf-8") + b"\x00")
-        tree.update(entry["mode"].encode("ascii") + b"\x00")
-        tree.update(bytes.fromhex(entry["sha256"]))
-    manifest = {
-        "schema_version": "1.0", "source_commit": "0" * 40,
-        "input_tree_digest": tree.hexdigest(), "files": files, "excluded": [],
-        "index_coverage": "not_indexed", "graph_coverage": "not_indexed",
-    }
-    zipped = io.BytesIO()
-    with zipfile.ZipFile(zipped, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
-        def add(name: str, content: bytes) -> None:
-            info = zipfile.ZipInfo(name, date_time=ZIP_TIME)
-            info.compress_type = zipfile.ZIP_DEFLATED
-            info.external_attr = (0o100644 << 16)
-            archive.writestr(info, content)
-
-        add("manifest.json", json.dumps(manifest, separators=(",", ":"), ensure_ascii=False).encode())
-        for name, content in sorted(contents):
-            add(name, content)
-    payload = zipped.getvalue()
-    encoded = base64.b64encode(payload)
-    lines = b"".join(encoded[i:i + 76] + b"\n" for i in range(0, len(encoded), 76))
-    header = (
-        f"RGP/1.0\npayload_length={len(payload)}\n"
-        f"payload_sha256={sha(payload)}\nbase64_line_width=76\n--\n"
-    ).encode("ascii")
-    result = header + lines + b"END RGP\n"
-    if abs(len(result) - target_size) > target_size // 100:
-        raise ValueError(f"text size deviates >1%: target {target_size}, got {len(result)}")
-    expected = {
-        "file": f"probe-{target_size}.rgp", "target_transport_bytes": target_size,
-        "transport_bytes": len(result), "transport_sha256": sha(result),
-        "payload_bytes": len(payload), "payload_sha256": sha(payload),
-        "snapshot_bytes": sum(f["size"] for f in files),
-        "input_tree_digest": manifest["input_tree_digest"], "file_count": len(files),
-    }
-    return result, expected
-
-
-def verify_fixture(path: Path, expected: dict) -> None:
-    """Verify entire received file, including inner RGP and every source blob."""
-    received = path.read_bytes()
-    if len(received) != expected["transport_bytes"] or sha(received) != expected["transport_sha256"]:
-        raise ValueError(f"TRANSPORT_MISMATCH: {path.name}: length or SHA-256 changed")
-    reader = Reader(received)
-    overview = reader.overview()
-    if (overview["input_tree_digest"] != expected["input_tree_digest"] or
-            overview["file_count"] != expected["file_count"] or
-            not overview["snapshot_complete"]):
-        raise ValueError("MANIFEST_MISMATCH: snapshot metadata differs")
-    for entry in reader.manifest["files"]:
-        data = reader._blob(entry["path"])
-        if sha(data) != entry["sha256"] or len(data) != entry["size"]:
-            raise ValueError(f"HASH_MISMATCH: {entry['path']}")
-
-
-def generate(directory: Path, sizes: list[int]) -> None:
-    directory.mkdir(parents=True, exist_ok=True)
-    metrics = []
-    for size in sizes:
-        result, expected = make_fixture(size)
-        path = directory / expected["file"]
-        path.write_bytes(result)
-        verify_fixture(path, expected)
-        metrics.append(expected)
-        print(json.dumps(expected, sort_keys=True), flush=True)
-    (directory / "expected.json").write_text(json.dumps(metrics, indent=2, sort_keys=True) + "\n")
-
-
-def verify(directory: Path, expected_file: Path) -> None:
-    records = json.loads(expected_file.read_text())
-    if not isinstance(records, list) or not records:
-        raise ValueError("invalid expected.json")
-    for record in records:
-        if Path(record["file"]).name != record["file"]:
-            raise ValueError("unsafe fixture filename")
-        verify_fixture(directory / record["file"], record)
-        print(f"verified {record['file']}: {record['transport_bytes']} bytes", flush=True)
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    commands = parser.add_subparsers(dest="command", required=True)
-    create = commands.add_parser("generate")
-    create.add_argument("--output-dir", type=Path, required=True)
-    create.add_argument("--sizes", nargs="+", type=int, default=SIZES)
-    check = commands.add_parser("verify")
-    check.add_argument("--input-dir", type=Path, required=True)
-    check.add_argument("--expected", type=Path, required=True)
-    args = parser.parse_args()
-    if args.command == "generate":
-        generate(args.output_dir, args.sizes)
-    else:
-        verify(args.input_dir, args.expected)
-
-
-if __name__ == "__main__":
-    main()
-
 FILE	src/lean.rs
 //! RGP/3.0: token-lean, plain UTF-8. No hash, commit IDs or JSON in transport.
 //! Independent Git provenance, not in-band data, authenticates the artifact.
@@ -8971,7 +8789,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from rgp_bootstrap import bootstrap  # noqa: E402
 from rgp_reader import RgpError  # noqa: E402
-from transport_probe import make_fixture  # noqa: E402
+from legacy_transport_fixture import make_fixture  # noqa: E402
 
 
 def actions_zip(entries):
@@ -11762,7 +11580,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 import stage1_delivery as delivery  # noqa: E402
-from transport_probe import make_fixture  # noqa: E402
+from legacy_transport_fixture import make_fixture  # noqa: E402
 
 PLAN = json.loads((ROOT / "benchmarks/gate_b/plan.json").read_text())
 CHECKPOINT = json.loads((ROOT / "benchmarks/gate_b/corpus_preparation.json").read_text())
@@ -11850,54 +11668,6 @@ class DeliveryTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "UNSUPPORTED_FORMAT"):
                 delivery.verify_delivered(source, output, "rgp", plan, checkpoints)
             self.assertFalse(output.exists())
-
-
-if __name__ == "__main__":
-    unittest.main()
-
-FILE	tests/test_transport_probe.py
-"""Independent fixtures for connector tests must remain valid Reader inputs."""
-import json
-import sys
-import tempfile
-import unittest
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts"))
-from transport_probe import generate, make_fixture, verify  # noqa: E402
-
-
-class TransportProbeTest(unittest.TestCase):
-    def test_deterministic_reader_compatible_fixture(self):
-        first, expected = make_fixture(32 * 1024)
-        second, other = make_fixture(32 * 1024)
-        self.assertEqual(first, second)
-        self.assertEqual(expected, other)
-        self.assertLess(abs(len(first) - 32 * 1024), 32 * 1024 // 100)
-
-    def test_generated_fixture_verifies_and_detects_truncation(self):
-        with tempfile.TemporaryDirectory() as name:
-            root = Path(name)
-            generate(root, [100 * 1024])
-            verify(root, root / "expected.json")
-            expected = json.loads((root / "expected.json").read_text())[0]
-            fixture = root / expected["file"]
-            fixture.write_bytes(fixture.read_bytes()[:-17])
-            with self.assertRaisesRegex(ValueError, "TRANSPORT_MISMATCH"):
-                verify(root, root / "expected.json")
-
-    def test_single_byte_change_and_reordering_detected(self):
-        with tempfile.TemporaryDirectory() as name:
-            root = Path(name)
-            generate(root, [32 * 1024])
-            expected = json.loads((root / "expected.json").read_text())[0]
-            fixture = root / expected["file"]
-            content = bytearray(fixture.read_bytes())
-            content[200] = ord("A") if content[200] != ord("A") else ord("B")
-            fixture.write_bytes(content)
-            with self.assertRaisesRegex(ValueError, "TRANSPORT_MISMATCH"):
-                verify(root, root / "expected.json")
 
 
 if __name__ == "__main__":
