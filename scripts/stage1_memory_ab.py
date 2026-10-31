@@ -121,7 +121,8 @@ def main() -> int:
                 after = item["candidate"]["elapsed_ms"]
                 if after > 1.1 * before:
                     raise AssertionError("50k-member latency regressed more than 10%")
-        report["status"] = "PASS"
+        if report["status"] != "SKIP":
+            report["status"] = "PASS"
     except Exception as exc:
         report["error"] = str(exc)
     args.report.parent.mkdir(parents=True, exist_ok=True)
