@@ -44,25 +44,6 @@ tasks:
       - task: test:rust
       - task: test:python
 
-  contract:golden:
-    desc: Verify immutable RGP fixtures, their recorded hashes and SQLite schema tests
-    cmds:
-      - python3 scripts/golden_fixtures.py check
-      - python3 -m unittest discover -s tests -p 'test_*.py' -q
-
-  reader:smoke:
-    desc: Exercise trusted Reader CLI pagination, coverage and bounded API tests
-    cmds:
-      - python3 -m unittest discover -s tests -p 'test_reader_api.py' -v
-      - python3 python/rgp_reader.py --artifact tests/fixtures/v1/valid-mixed.rgp coverage --scope snapshot
-      - python3 python/rgp_reader.py --artifact tests/fixtures/v1/valid-mixed.rgp search 'return 42' --limit 1
-
-  contract:cross:
-    desc: Build Rust verifier and check positive/negative golden fixtures against both implementations
-    cmds:
-      - cargo build --locked
-      - python3 scripts/golden_fixtures.py check --rust-cli target/debug/rgp
-
   smoke:
     desc: Run Rust generator, determinism, Rust verifier and Python Reader end-to-end
     cmds:
@@ -99,14 +80,6 @@ tasks:
       - cargo build --locked --release
       - python3 scripts/stage1_stress.py --profile '{{.PROFILE}}' --rust-cli target/release/rgp --report /tmp/rgp-stage1-stress-{{.PROFILE}}.json
 
-  stage1:delivery:
-    desc: Legacy Gate B delivery/checkpoint validation for pinned 1.x/2.x Actions ZIP (not RGP/3.0)
-    vars:
-      REPOSITORY: '{{.REPOSITORY | default "rgp"}}'
-      ZIP: '{{.ZIP | default "/tmp/gate-b-artifact.zip"}}'
-    cmds:
-      - python3 scripts/stage1_delivery.py --repository '{{.REPOSITORY}}' --actions-zip '{{.ZIP}}' --output /tmp/rgp-stage1-delivery-{{.REPOSITORY}}.rgp --report /tmp/rgp-stage1-delivery-{{.REPOSITORY}}.json
-
   stage1:scale:
     desc: Run real Git 50k-member capacity and partial-snapshot acceptance
     cmds:
@@ -119,7 +92,6 @@ tasks:
       - task: fmt:check
       - task: lint
       - task: test
-      - task: contract:cross
       - task: smoke
       - task: stage1:acceptance
 
@@ -136,7 +108,7 @@ tasks:
       - python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp tree --prefix python/
 
   rgp:refresh:
-    desc: Regenerate tracked token-lean RGP/3.0
+    desc: Regenerate tracked RGP/0.1.0
     cmds:
       - cargo run --locked -- generate --repo . --rev HEAD --output REPO_CONTEXT.rgp
       - python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp validate

@@ -4,32 +4,20 @@ from __future__ import annotations
 
 import argparse
 import base64
-import contextlib
 import hashlib
-import io
 import json
 import re
-import stat
 import unicodedata
-import zipfile
 from pathlib import Path
 
-MAX_ARTIFACT = 64 * 1024 * 1024
 MAX_TOTAL = 128 * 1024 * 1024
 MAX_FILE = 16 * 1024 * 1024
 MAX_ENTRIES = 50_000
-MAX_RATIO = 200
 MAX_RESULT = 256 * 1024
 MAX_MANIFEST = 16 * 1024 * 1024
 MAX_CURSOR = 8192
 MAX_PATH_BYTES = 4096
 MAX_OVERVIEW_EXCLUSIONS = 100
-MAX_HEADER = 4096
-# Only legacy RGP/1.1 embeds the old guide. RGP/2.1 uses length-framed inline guidance.
-# Pin its digest here so the trusted Reader stays standalone in a sandbox.
-AGENT_GUIDE_SHA256 = "9585596e0f091096bac8c67163a50fb40ab789ee72f49089f80557acbec4740d"
-HEX = re.compile(r"[0-9a-f]{64}\Z")
-COMMIT = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
 EXCLUSION_REASONS = frozenset({"self_artifact", "sensitive_path", "submodule_unavailable", "size_limit", "entry_limit", "non_text", "rgpignore"})
 
 
@@ -123,178 +111,25 @@ def _matching_excerpt(line: str, query: str) -> str:
     return data[offset:offset + MAX_SEARCH_EXCERPT].decode("utf-8", errors="ignore")
 
 
-def decode_transport(source: bytes) -> bytes:
-    _require(len(source) <= 2 * MAX_ARTIFACT, "RESOURCE_LIMIT", "outer RGP too large")
-    try:
-        header, body = source.split(b"\n--\n", 1)
-    except ValueError as exc:
-        raise RgpError("TRUNCATED_ARTIFACT", "missing separator") from exc
-    _require(len(header) <= MAX_HEADER, "RESOURCE_LIMIT", "header too large")
-    lines = header.split(b"\n")
-    if lines[0] in (b"RGP/1.0", b"RGP/1.2"):
-        _require(len(lines) == 4, "UNSUPPORTED_FORMAT", "plain header fields")
-        fields = lines[1:]
-    elif lines[0] == b"RGP/1.1":
-        _require(len(lines) >= 7, "UNSUPPORTED_FORMAT", "missing agent guide")
-        # Reject instructions modified in transit, including extra header
-        # fields. A ZIP digest alone would not protect the plaintext guide.
-        guide = b"\n".join(lines[1:-3]) + b"\n"
-        _require(_digest(guide) == AGENT_GUIDE_SHA256,
-                 "UNSUPPORTED_FORMAT", "unexpected agent guide")
-        fields = lines[-3:]
-    else:
-        raise RgpError("UNSUPPORTED_FORMAT", "header version")
-    _require(fields[2] == b"base64_line_width=76", "UNSUPPORTED_FORMAT", "Base64 line width")
-    _require(fields[0].startswith(b"payload_length=") and fields[1].startswith(b"payload_sha256="),
-             "UNSUPPORTED_FORMAT", "header fields")
-    declared_size = fields[0].split(b"=", 1)[1]
-    declared_hash = fields[1].split(b"=", 1)[1]
-    _require(bool(re.fullmatch(rb"[0-9]+", declared_size)), "UNSUPPORTED_FORMAT", "nondecimal size")
-    _require(bool(re.fullmatch(rb"[0-9a-f]{64}", declared_hash)), "UNSUPPORTED_FORMAT", "invalid hash")
-    _require(int(declared_size) <= MAX_ARTIFACT, "RESOURCE_LIMIT", "payload too large")
-    _require(body.endswith(b"END RGP\n"), "TRUNCATED_ARTIFACT", "missing terminal marker")
-    body = body[:-len(b"END RGP\n")]
-    _require(body.endswith(b"\n"), "TRUNCATED_ARTIFACT", "missing Base64 newline")
-    chunks = body[:-1].split(b"\n")
-    _require(bool(chunks) and bool(chunks[0]), "TRUNCATED_ARTIFACT", "empty Base64")
-    for n, chunk in enumerate(chunks):
-        _require(0 < len(chunk) <= 76 and (n == len(chunks) - 1 or len(chunk) == 76), "TRUNCATED_ARTIFACT", "invalid Base64 line")
-    try:
-        payload = base64.b64decode(b"".join(chunks), validate=True)
-    except (ValueError, base64.binascii.Error) as exc:
-        raise RgpError("TRUNCATED_ARTIFACT", "invalid Base64") from exc
-    _require(len(payload) == int(declared_size), "TRUNCATED_ARTIFACT", "payload byte count mismatch")
-    _require(_digest(payload).encode("ascii") == declared_hash, "HASH_MISMATCH", "ZIP hash mismatch")
-    return payload
-
-
-def decode_plain(source: bytes) -> tuple[bytes, dict[str, int], dict[str, tuple[int, int]], dict | None]:
-    """Read exact UTF-8 source spans from RGP/2.0 or self-contained 2.1."""
-    _require(len(source) <= 192 * 1024 * 1024, "RESOURCE_LIMIT", "RGP/2.0 too large")
-    try:
-        source.decode("utf-8")
-    except UnicodeDecodeError as exc:
-        raise RgpError("UNSUPPORTED_FORMAT", "non-UTF8 plain RGP") from exc
-    _require(b"\x00" not in source, "UNSUPPORTED_FORMAT", "binary RGP")
-    pos = 0
-
-    def line() -> bytes:
-        nonlocal pos
-        end = source.find(b"\n", pos)
-        _require(end >= 0, "TRUNCATED_ARTIFACT", "plain line")
-        part = source[pos:end]
-        pos = end + 1
-        return part
-
-    version = line()
-    _require(version in (b"RGP/2.0", b"RGP/2.1"),
-             "UNSUPPORTED_FORMAT", "plain version")
-    embedded = None
-    if version == b"RGP/2.1":
-        commit_line = line()
-        complete_line = line()
-        length_line = line()
-        guide_hash_line = line()
-        _require(commit_line.startswith(b"source_commit=") and
-                 complete_line in (b"snapshot_complete=true", b"snapshot_complete=false") and
-                 length_line.startswith(b"guide_length=") and
-                 guide_hash_line.startswith(b"guide_sha256="),
-                 "UNSUPPORTED_FORMAT", "embedded metadata fields")
-        commit = commit_line[len(b"source_commit="):]
-        raw_length = length_line[len(b"guide_length="):]
-        guide_hash = guide_hash_line[len(b"guide_sha256="):]
-        _require(bool(re.fullmatch(rb"(?:[0-9a-f]{40}|[0-9a-f]{64})", commit)) and
-                 bool(re.fullmatch(rb"[0-9]+", raw_length)) and
-                 bool(re.fullmatch(rb"[0-9a-f]{64}", guide_hash)),
-                 "UNSUPPORTED_FORMAT", "embedded metadata values")
-        guide_length = int(raw_length)
-        _require(0 < guide_length <= 8192, "RESOURCE_LIMIT", "embedded guide size")
-        embedded = {
-            "source_commit": commit.decode("ascii"),
-            "snapshot_complete": complete_line == b"snapshot_complete=true",
-            "guide_length": guide_length,
-            "guide_sha256": guide_hash.decode("ascii"),
-        }
-    field = line()
-    digest_field = line()
-    _require(field.startswith(b"manifest_length=") and
-             digest_field.startswith(b"manifest_sha256="), "UNSUPPORTED_FORMAT", "plain header")
-    number = field[len(b"manifest_length="):]
-    digest = digest_field[len(b"manifest_sha256="):]
-    _require(bool(re.fullmatch(rb"[0-9]+", number)) and
-             bool(re.fullmatch(rb"[0-9a-f]{64}", digest)), "UNSUPPORTED_FORMAT", "plain header fields")
-    count = int(number)
-    _require(count <= MAX_MANIFEST, "RESOURCE_LIMIT", "manifest too large")
-    _require(line() == b"--", "UNSUPPORTED_FORMAT", "plain separator")
-    if embedded is not None:
-        raw_guide = source[pos:pos + embedded["guide_length"]]
-        _require(len(raw_guide) == embedded["guide_length"],
-                 "TRUNCATED_ARTIFACT", "embedded guide")
-        _require(_digest(raw_guide) == embedded["guide_sha256"],
-                 "HASH_MISMATCH", "embedded guide")
-        _require(b"\x00" not in raw_guide, "UNSUPPORTED_FORMAT", "guide NUL")
-        embedded["instructions"] = raw_guide.decode("utf-8")
-        pos += embedded["guide_length"]
-        _require(source[pos:pos + 1] == b"\n", "TRUNCATED_ARTIFACT", "guide delimiter")
-        pos += 1
-    manifest_bytes = source[pos:pos + count]
-    _require(len(manifest_bytes) == count, "TRUNCATED_ARTIFACT", "plain manifest")
-    _require(_digest(manifest_bytes).encode() == digest, "HASH_MISMATCH", "plain manifest hash")
-    pos += count
-    _require(source[pos:pos + 1] == b"\n", "TRUNCATED_ARTIFACT", "manifest delimiter")
-    pos += 1
-    try:
-        manifest = json.loads(manifest_bytes)
-    except (ValueError, UnicodeError) as exc:
-        raise RgpError("UNSUPPORTED_FORMAT", "plain manifest JSON") from exc
-    _require(isinstance(manifest, dict) and isinstance(manifest.get("files"), list) and
-             len(manifest["files"]) < MAX_ENTRIES, "UNSUPPORTED_FORMAT", "plain file list")
-    sizes = {}
-    offsets = {}
-    total = 0
-    for record in manifest["files"]:
-        _require(isinstance(record, dict), "UNSUPPORTED_FORMAT", "plain file record")
-        path, size, digest = (record.get("path"), record.get("size"), record.get("sha256"))
-        _require(_safe_path(path) and type(size) is int and 0 <= size <= MAX_FILE and
-                 isinstance(digest, str) and bool(HEX.fullmatch(digest)),
-                 "UNSUPPORTED_FORMAT", "plain source description")
-        total += size
-        _require(total <= MAX_TOTAL, "RESOURCE_LIMIT", "source bytes")
-        path_json = json.dumps(path, ensure_ascii=False, separators=(",", ":"))
-        expected = f"FILE\t{path_json}\t{size}\t{digest}".encode("utf-8")
-        _require(line() == expected, "UNSUPPORTED_FORMAT", "plain file ordering/header")
-        raw = source[pos:pos + size]
-        _require(len(raw) == size, "TRUNCATED_ARTIFACT", "plain source")
-        _require(_digest(raw) == digest, "HASH_MISMATCH", "plain source SHA")
-        sizes[f"files/{digest}"] = size
-        offsets[f"files/{digest}"] = (pos, size)
-        pos += size
-        _require(source[pos:pos + 1] == b"\n", "TRUNCATED_ARTIFACT", "plain file separator")
-        pos += 1
-    _require(line() == b"END RGP" and pos == len(source),
-             "TRUNCATED_ARTIFACT", "plain terminal marker/trailing data")
-    return manifest_bytes, sizes, offsets, embedded
-
-
 def decode_lean(source: bytes):
-    """RGP/3.0: zero hashes/commit IDs in text; derive fingerprints only in RAM."""
-    _require(len(source) <= 192 * 1024 * 1024, "RESOURCE_LIMIT", "RGP/3.0 size")
+    """RGP/0.1.0: zero hashes/commit IDs in text; derive fingerprints only in RAM."""
+    _require(len(source) <= 192 * 1024 * 1024, "RESOURCE_LIMIT", "RGP/0.1.0 size")
     try:
         source.decode("utf-8")
     except UnicodeDecodeError as exc:
-        raise RgpError("UNSUPPORTED_FORMAT", "RGP/3.0 requires UTF-8") from exc
-    _require(b"\x00" not in source, "UNSUPPORTED_FORMAT", "RGP/3.0 contains NUL")
+        raise RgpError("UNSUPPORTED_FORMAT", "RGP/0.1.0 requires UTF-8") from exc
+    _require(b"\x00" not in source, "UNSUPPORTED_FORMAT", "RGP/0.1.0 contains NUL")
     pos = 0
 
     def line():
         nonlocal pos
         end = source.find(b"\n", pos)
-        _require(end >= 0, "TRUNCATED_ARTIFACT", "RGP/3.0 line")
+        _require(end >= 0, "TRUNCATED_ARTIFACT", "RGP/0.1.0 line")
         part = source[pos:end]
         pos = end + 1
         return part
 
-    _require(line() == b"RGP/3.0", "UNSUPPORTED_FORMAT", "lean version")
+    _require(line() == b"RGP/0.1.0", "UNSUPPORTED_FORMAT", "lean version")
     sizes = []
     for label, cap in ((b"guide_bytes=", 8192), (b"index_bytes=", MAX_MANIFEST)):
         field = line()
@@ -406,140 +241,27 @@ class Reader:
             source = artifact
         else:
             path = Path(artifact)
-            _require(path.stat().st_size <= 192 * 1024 * 1024, "RESOURCE_LIMIT", "artifact too large")
+            _require(path.stat().st_size <= 192 * 1024 * 1024,
+                     "RESOURCE_LIMIT", "artifact too large")
             source = path.read_bytes()
-        self._plain = None
-        self._plain_offsets = {}
-        self._embedded_metadata = None
-        self._lean = False
-        self._lean_counts = {"rgpignore": 0, "self_artifact": 0}
-        self._lean_guide = None
-        if source.startswith(b"RGP/3.0\n"):
-            manifest_data, blobs, self._plain_offsets, self._lean_counts, self._lean_guide = decode_lean(source)
-            self._plain = source
-            self._lean = True
-            payload = None
-        elif source.startswith((b"RGP/2.0\n", b"RGP/2.1\n")):
-            manifest_data, blobs, self._plain_offsets, self._embedded_metadata = decode_plain(source)
-            self._plain = source
-            payload = None
-        else:
-            # Explicitly reject unknown transport versions before legacy
-            # separator parsing, which otherwise misreports truncation.
-            if source.startswith(b"RGP/") and not source.startswith((
-                b"RGP/1.0\n", b"RGP/1.1\n", b"RGP/1.2\n",
-            )):
-                raise RgpError("UNSUPPORTED_FORMAT", "unsupported RGP transport")
-            payload = decode_transport(source)
-            # Validate every source blob eagerly, but retain only its length and
-            # the compressed ZIP payload. Reads and searches decompress on demand.
-            blobs: dict[str, int] = {}
-            try:
-                archive = zipfile.ZipFile(io.BytesIO(payload))
-                with archive:
-                    infos = archive.infolist()
-                    _require(0 < len(infos) <= MAX_ENTRIES, "RESOURCE_LIMIT", "ZIP entry count")
-                    names: set[str] = set()
-                    total = 0
-                    for index, info in enumerate(infos):
-                        name = info.filename
-                        _require(_safe_path(name), "UNSAFE_PATH", f"invalid ZIP path: {name!r}")
-                        _require(not stat.S_ISLNK(info.external_attr >> 16), "UNSAFE_PATH", "ZIP symlink entry")
-                        _require(name.lower() not in names, "UNSAFE_PATH", "duplicate ZIP path")
-                        names.add(name.lower())
-                        _require(name == "manifest.json" or name.startswith("files/"), "UNSAFE_PATH", "unexpected ZIP member")
-                        _require(info.file_size <= (MAX_MANIFEST if name == "manifest.json" else MAX_FILE), "RESOURCE_LIMIT", "oversized ZIP member")
-                        _require(info.file_size <= max(4096, info.compress_size * MAX_RATIO), "RESOURCE_LIMIT", "compression ratio")
-                        total += info.file_size
-                        _require(total <= MAX_TOTAL, "RESOURCE_LIMIT", "expanded ZIP size")
-                        contents = archive.read(info)
-                        _require(len(contents) == info.file_size, "HASH_MISMATCH", "ZIP entry length")
-                        if name == "manifest.json":
-                            _require(index == 0, "UNSUPPORTED_FORMAT", "manifest must be first")
-                            manifest_data = contents
-                        else:
-                            _require(name == f"files/{_digest(contents)}", "HASH_MISMATCH", "blob mismatch")
-                            blobs[name] = len(contents)
-            except (zipfile.BadZipFile, RuntimeError, EOFError) as exc:
-                raise RgpError("UNSUPPORTED_FORMAT", "invalid ZIP archive") from exc
-        _require("manifest_data" in locals(), "UNSUPPORTED_FORMAT", "missing manifest")
-        try:
-            def no_duplicate_keys(pairs):
-                result = {}
-                for key, value in pairs:
-                    _require(key not in result, "UNSUPPORTED_FORMAT", "duplicate JSON key")
-                    result[key] = value
-                return result
-
-            manifest = json.loads(manifest_data, object_pairs_hook=no_duplicate_keys)
-        except (ValueError, UnicodeError) as exc:
-            raise RgpError("UNSUPPORTED_FORMAT", "malformed JSON manifest") from exc
-        _require(isinstance(manifest, dict) and manifest.get("schema_version") == "1.0", "UNSUPPORTED_FORMAT", "manifest schema")
-        commit = manifest.get("source_commit")
-        tree_hash = manifest.get("input_tree_digest")
-        _require((commit is None if self._lean else isinstance(commit, str) and bool(COMMIT.fullmatch(commit))),
-                 "UNSUPPORTED_FORMAT", "source commit")
-        _require(isinstance(tree_hash, str) and bool(HEX.fullmatch(tree_hash)), "UNSUPPORTED_FORMAT", "tree digest")
-        _require(manifest.get("index_coverage") == "not_indexed" and manifest.get("graph_coverage") == "not_indexed", "UNSUPPORTED_FORMAT", "coverage fields")
-        files = manifest.get("files")
-        excluded = manifest.get("excluded")
-        _require(isinstance(files, list) and isinstance(excluded, list) and len(files) <= MAX_ENTRIES and len(excluded) <= MAX_ENTRIES, "UNSUPPORTED_FORMAT", "manifest shape")
-        records = {}
-        used = set()
-        previous = None
-        for entry in files:
-            _require(isinstance(entry, dict), "UNSUPPORTED_FORMAT", "file entry")
-            path = entry.get("path")
-            _require(_safe_path(path), "UNSAFE_PATH", "manifest file path")
-            _require(path.lower() not in used, "UNSAFE_PATH", "colliding paths")
-            _require(previous is None or previous < path, "UNSUPPORTED_FORMAT", "file ordering")
-            previous = path
-            used.add(path.lower())
-            mode = entry.get("mode")
-            _require(mode in ("100644", "100755", "120000"), "UNSUPPORTED_FORMAT", "file mode")
-            _require(entry.get("kind") == ("symlink" if mode == "120000" else "file"), "UNSUPPORTED_FORMAT", "file kind")
-            _require(entry.get("status") in ("included", "pointer_only"), "UNSUPPORTED_FORMAT", "file status")
-            sha256 = entry.get("sha256")
-            _require(isinstance(sha256, str) and bool(HEX.fullmatch(sha256)), "UNSUPPORTED_FORMAT", "file hash")
-            blob = f"files/{sha256}"
-            _require(entry.get("blob") == blob and blob in blobs, "HASH_MISMATCH", "missing blob")
-            _require(type(entry.get("size")) is int and entry["size"] == blobs[blob], "HASH_MISMATCH", "blob length")
-            records[path] = entry
-        _require(set(blobs) == {rec["blob"] for rec in records.values()}, "UNSUPPORTED_FORMAT", "unused ZIP blobs")
-        last_exclusion = None
-        for exclusion in excluded:
-            _require(isinstance(exclusion, dict), "UNSUPPORTED_FORMAT", "exclusion entry")
-            path = exclusion.get("path")
-            _require(_safe_path(path) and path.lower() not in used, "UNSAFE_PATH", "invalid exclusion path")
-            _require(last_exclusion is None or last_exclusion < path, "UNSUPPORTED_FORMAT", "exclusion ordering")
-            last_exclusion = path
-            _require(exclusion.get("reason") in EXCLUSION_REASONS, "UNSUPPORTED_FORMAT", "exclusion reason")
-            used.add(path.lower())
-        _require(_tree_digest(files) == manifest.get("input_tree_digest"), "HASH_MISMATCH", "input tree digest")
-        self.manifest = manifest
+        _require(source.startswith(b"RGP/0.1.0\n"),
+                 "UNSUPPORTED_FORMAT", "only RGP/0.1.0 is supported")
+        manifest_data, blobs, self._plain_offsets, self._lean_counts, self._lean_guide = decode_lean(source)
+        self._plain = source
+        self.manifest = json.loads(manifest_data)
+        self._files = {entry["path"]: entry for entry in self.manifest["files"]}
         self._blobs = frozenset(blobs)
-        self._payload = payload
-        self._files = records
-        if self._embedded_metadata is not None:
-            _require(self._embedded_metadata["source_commit"] == manifest["source_commit"],
-                     "HASH_MISMATCH", "source commit header")
-            _require(self._embedded_metadata["snapshot_complete"] ==
-                     self._snapshot_summary()["snapshot_complete"],
-                     "HASH_MISMATCH", "snapshot completeness header")
 
     def _blob(self, path: str) -> bytes:
-        """Read a verified source blob on demand, without caching all raw files."""
-        if self._plain is not None:
-            start, size = self._plain_offsets[self._files[path]["blob"]]
-            return self._plain[start:start + size]
-        with zipfile.ZipFile(io.BytesIO(self._payload)) as archive:
-            return archive.read(self._files[path]["blob"])
+        """Return source bytes from the structurally validated UTF-8 snapshot."""
+        start, size = self._plain_offsets[self._files[path]["blob"]]
+        return self._plain[start:start + size]
 
     def read_bytes(self, path: str) -> bytes:
-        """Return independently verified raw Git source bytes for a known path.
+        """Return source bytes without normalizing line endings.
 
-        Unlike read(), this preserves binary data, encodings and line endings
-        exactly. It never executes or follows symlinks in the source snapshot.
+        Structure checks do not establish Git provenance. Source is never
+        executed or followed as a symlink.
         """
         _require(isinstance(path, str) and path in self._files,
                  "PARTIAL_SNAPSHOT", "file not present in snapshot")
@@ -554,9 +276,8 @@ class Reader:
         by_reason = {reason: 0 for reason in sorted(EXCLUSION_REASONS)}
         for excluded in self.manifest["excluded"]:
             by_reason[excluded["reason"]] += 1
-        if self._lean:
-            by_reason["rgpignore"] += self._lean_counts["rgpignore"]
-            by_reason["self_artifact"] += self._lean_counts["self_artifact"]
+        by_reason["rgpignore"] += self._lean_counts["rgpignore"]
+        by_reason["self_artifact"] += self._lean_counts["self_artifact"]
         # Self-referential output is deliberately outside the snapshot's input scope.
         # Deliberate RGP ignore exclusions are outside the selected source scope.
         unavailable = sum(
@@ -579,11 +300,8 @@ class Reader:
     def overview(self) -> dict:
         return {
             "source_commit": self.manifest["source_commit"],
-            "transport": "RGP/3.0" if self._lean else ("RGP/2.1" if self._embedded_metadata is not None
-                         else ("RGP/2.0" if self._plain is not None else "RGP/1.x")),
-            "embedded_instructions": self._lean_guide if self._lean
-                                     else (self._embedded_metadata["instructions"]
-                                           if self._embedded_metadata is not None else None),
+            "transport": "RGP/0.1.0",
+            "embedded_instructions": self._lean_guide,
             "input_tree_digest": self.manifest["input_tree_digest"],
             "file_count": len(self._files),
             "excluded": self.manifest["excluded"][:MAX_OVERVIEW_EXCLUSIONS],
@@ -597,7 +315,7 @@ class Reader:
         if scope == "snapshot":
             return {"scope": "snapshot", **self.overview()}
         if scope in ("index", "graph"):
-            return {"scope": scope, "status": "not_indexed", "reason": "no analyzer output in RGP 1.0"}
+            return {"scope": scope, "status": "not_indexed", "reason": "no analyzer output in RGP/0.1.0"}
         if scope == "investigation":
             return {"scope": "investigation", "status": "unknown", "reason": "Reader cannot observe agent comprehension"}
         raise RgpError("UNSUPPORTED_FORMAT", "unknown coverage scope")
@@ -683,32 +401,23 @@ class Reader:
         _require(position is None or (position[0] in selected and position[1] >= 1), "UNSUPPORTED_FORMAT", "search cursor position")
         page = []
         last = None
-        # Reuse one ZIP handle for legacy transports; RGP/2.0 reads the
-        # verified source spans directly from the original plaintext buffer.
-        source = (zipfile.ZipFile(io.BytesIO(self._payload)) if self._plain is None
-                  else contextlib.nullcontext())
-        with source as archive:
-            for path in selected:
-                if position is not None and path < position[0]:
+        for path in selected:
+            if position is not None and path < position[0]:
+                continue
+            try:
+                text = self._blob(path).decode("utf-8")
+            except UnicodeDecodeError:
+                continue
+            for number, line in enumerate(text.splitlines(), start=1):
+                if position is not None and path == position[0] and number <= position[1]:
                     continue
-                try:
-                    raw = (archive.read(self._files[path]["blob"]) if archive is not None
-                           else self._blob(path))
-                    text = raw.decode("utf-8")
-                except UnicodeDecodeError:
+                if query not in line:
                     continue
-                for number, line in enumerate(text.splitlines(), start=1):
-                    if position is not None and path == position[0] and number <= position[1]:
-                        continue
-                    if query not in line:
-                        continue
-                    if len(page) >= limit:
-                        return {"matches": page, "next_cursor": self._make_cursor("search", context, last[0], last[1]), "snapshot_status": self._snapshot_summary()["status"]}
-                    # Use a bounded match-aware window, not the first bytes of
-                    # a potentially long minified/source line.
-                    excerpt = _matching_excerpt(line, query)
-                    page.append({"path": path, "line": number, "excerpt": excerpt})
-                    last = (path, number)
+                if len(page) >= limit:
+                    return {"matches": page, "next_cursor": self._make_cursor("search", context, last[0], last[1]), "snapshot_status": self._snapshot_summary()["status"]}
+                excerpt = _matching_excerpt(line, query)
+                page.append({"path": path, "line": number, "excerpt": excerpt})
+                last = (path, number)
         return {"matches": page, "next_cursor": None, "snapshot_status": self._snapshot_summary()["status"]}
 
 

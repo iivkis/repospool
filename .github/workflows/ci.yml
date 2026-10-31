@@ -33,12 +33,6 @@ jobs:
         run: cargo test --locked --all-targets
       - name: Reader stdlib tests
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v
-      - name: Reader bounded API and CLI smoke
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 python/rgp_reader.py --artifact tests/fixtures/v1/valid-mixed.rgp coverage --scope snapshot
-          python3 python/rgp_reader.py --artifact tests/fixtures/v1/valid-mixed.rgp search 'return 42' --limit 1
       - name: Assistant-only Gate B tests and HOLD
         shell: bash
         run: |
@@ -78,13 +72,8 @@ jobs:
           path: ${{ runner.temp }}/gate-b-review-handoff/
           if-no-files-found: error
           retention-days: 14
-      - name: Immutable golden fixtures and Rust/Python verifier parity
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 scripts/golden_fixtures.py check
-          cargo build --locked
-          python3 scripts/golden_fixtures.py check --rust-cli target/debug/rgp
+      - name: Build current-format Rust verifier
+        run: cargo build --locked
       - name: Canonical cross-language round-trip and determinism
         shell: bash
         run: |

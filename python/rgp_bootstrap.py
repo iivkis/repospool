@@ -16,7 +16,10 @@ import tempfile
 import zipfile
 from pathlib import Path
 
-from rgp_reader import MAX_ARTIFACT, MAX_RATIO, Reader, RgpError, _require
+from rgp_reader import Reader, RgpError, _require
+
+MAX_ARTIFACT = 192 * 1024 * 1024
+MAX_RATIO = 200
 
 HEX = re.compile(r"[0-9a-f]{64}\Z")
 

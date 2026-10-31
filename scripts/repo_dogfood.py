@@ -57,13 +57,12 @@ def check(repo: Path, artifact: Path | None = None) -> dict:
              "local REPO_CONTEXT.rgp differs from committed Git blob")
     reader = Reader(actual)
     overview = reader.overview()
-    # RGP/2.1 verifies its own guide, provenance header, manifest and source
-    # hashes. Full artifact integrity is anchored independently in Git HEAD.
+    # The transport is structurally checked; Git HEAD anchors its authenticity.
     _require(overview["snapshot_complete"], "PARTIAL_SNAPSHOT",
              "in-repository source snapshot is not complete")
     source = overview["source_commit"]
-    if source is None and overview["transport"] == "RGP/3.0":
-        # RGP/3.0 intentionally contains no commit/hash text. Recover the
+    if source is None and overview["transport"] == "RGP/0.1.0":
+        # RGP/0.1.0 intentionally contains no commit/hash text. Recover the
         # source revision ONLY from independently trusted local Git history.
         # The publication bot makes a one-file RGP commit after source HEAD.
         parent_result = git(repo, "rev-parse", "HEAD^")

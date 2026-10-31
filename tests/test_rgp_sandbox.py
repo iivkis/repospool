@@ -16,12 +16,11 @@ from rgp_sandbox import METADATA, export_workspace as _export_workspace  # noqa:
 
 def export_workspace(*args, **kwargs):
     """Existing test fixture is tied to the deliberately frozen fake commit."""
-    return _export_workspace(*args, expected_commit="a" * 40, **kwargs)
+    return _export_workspace(*args, expected_commit="a" * 40,
+                             attested_source_commit="a" * 40, **kwargs)
 
 from rgp_reader import RgpError, Reader  # noqa: E402
-from test_reader_api import three_scope_artifact  # noqa: E402
-from test_manifest_contract import fake_artifact  # noqa: E402
-from test_reader import fixture  # noqa: E402
+from rgp_fixture import make_artifact, three_scope_artifact  # noqa: E402
 
 
 class SandboxWorkspaceTests(unittest.TestCase):
@@ -38,7 +37,7 @@ class SandboxWorkspaceTests(unittest.TestCase):
         destination = self.root / "stale"
         with self.assertRaisesRegex(RgpError, "STALE_SNAPSHOT"):
             _export_workspace(self.artifact, destination, self.trusted,
-                              expected_commit="b" * 40)
+                              expected_commit="b" * 40, attested_source_commit="a" * 40)
         self.assertFalse(destination.exists())
         self.assertEqual(list(self.root.glob(".rgp-stage-*")), [])
         with self.assertRaises(TypeError):
@@ -53,10 +52,10 @@ class SandboxWorkspaceTests(unittest.TestCase):
     def test_correct_commit_report_avoids_claiming_live_github_check(self):
         destination = self.root / "matching"
         result = _export_workspace(self.artifact, destination, self.trusted,
-                                   expected_commit="a" * 40)
+                                   expected_commit="a" * 40, attested_source_commit="a" * 40)
         self.assertEqual(result["expected_commit"], "a" * 40)
         self.assertEqual(result["source_commit"], "a" * 40)
-        self.assertEqual(result["commit_match"], "matched_caller_supplied_commit")
+        self.assertEqual(result["commit_match"], "externally_attested")
         self.assertFalse(result["current_github_head_checked_by_exporter"])
 
     def test_real_reader_bytes_and_provenance_in_local_workspace(self):
@@ -101,8 +100,8 @@ class SandboxWorkspaceTests(unittest.TestCase):
         self.assertFalse(target.exists())
 
     def test_partial_snapshot_requires_explicit_opt_in(self):
-        source = fake_artifact(lambda manifest: manifest["excluded"].append(
-            {"path": "secrets.txt", "reason": "sensitive_path"}))
+        source = make_artifact({"src/file.txt": b"some content\n"},
+                               excluded=(("secrets.txt", "sensitive_path"),))
         self.artifact.write_bytes(source)
         digest = hashlib.sha256(source).hexdigest()
         target = self.root / "out"
@@ -130,14 +129,8 @@ class SandboxWorkspaceTests(unittest.TestCase):
             self.assertFalse(target.exists())
 
     def test_source_symlink_is_never_materialized_as_actual_symlink(self):
-        def as_symlink(manifest):
-            entry = manifest["files"][0]
-            entry["mode"] = "120000"
-            entry["kind"] = "symlink"
-            manifest["input_tree_digest"] = hashlib.sha256(
-                entry["path"].encode() + b"\0" + b"120000\0" +
-                bytes.fromhex(entry["sha256"])).hexdigest()
-        raw = fake_artifact(as_symlink)
+        raw = make_artifact({"src/file.txt": b"relative/target\n"},
+                            flags={"src/file.txt": "l"})
         self.artifact.write_bytes(raw)
         target = self.root / "link-text"
         result = export_workspace(self.artifact, target, hashlib.sha256(raw).hexdigest())
@@ -148,20 +141,15 @@ class SandboxWorkspaceTests(unittest.TestCase):
                          ["src/file.txt"])
 
     def test_source_executable_bit_is_not_materialized(self):
-        def executable(manifest):
-            entry = manifest["files"][0]
-            entry["mode"] = "100755"
-            manifest["input_tree_digest"] = hashlib.sha256(
-                entry["path"].encode() + b"\0" + b"100755\0" +
-                bytes.fromhex(entry["sha256"])).hexdigest()
-        raw = fake_artifact(executable)
+        raw = make_artifact({"src/file.txt": b"echo hello\n"},
+                            flags={"src/file.txt": "x"})
         self.artifact.write_bytes(raw)
         target = self.root / "scripts"
         export_workspace(self.artifact, target, hashlib.sha256(raw).hexdigest())
         self.assertEqual((target / "src/file.txt").stat().st_mode & 0o111, 0)
 
     def test_metadata_collision_refused_and_no_workspace_created(self):
-        raw = fixture(path=METADATA)
+        raw = make_artifact({METADATA: b"collision\n"})
         self.artifact.write_bytes(raw)
         output = self.root / "blocked"
         with self.assertRaisesRegex(RgpError, "UNSAFE_PATH"):
@@ -175,6 +163,7 @@ class SandboxWorkspaceTests(unittest.TestCase):
              "--artifact", str(self.artifact),
              "--trusted-sha256", self.trusted,
              "--expected-commit", "a" * 40,
+             "--attested-source-commit", "a" * 40,
              "--output", str(target), "--prefix", "tests/"],
             capture_output=True, text=True, check=True)
         report = json.loads(completed.stdout)

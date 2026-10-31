@@ -58,7 +58,7 @@ def check(repo: Path, rust_cli: Path) -> dict:
         data = first.read_bytes()
         assert data == second.read_bytes(), "nondeterministic RGP bytes"
         inline = Reader(first).overview()
-        assert inline["transport"] == "RGP/3.0", "missing standalone transport"
+        assert inline["transport"] == "RGP/0.1.0", "missing standalone transport"
         assert inline["embedded_instructions"], "missing inline agent instructions"
         assert inline["source_commit"] is None, "RGP must not contain Git hash"
         evidence["checks"].append("hash-free RGP; externally verified Git source")

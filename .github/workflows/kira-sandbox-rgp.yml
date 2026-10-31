@@ -43,7 +43,7 @@ jobs:
           from rgp_reader import Reader
           from pathlib import Path
           reader = Reader(Path(os.environ["RUNNER_TEMP"]) / "REPO_CONTEXT.rgp")
-          assert reader.overview()["transport"] == "RGP/3.0"
+          assert reader.overview()["transport"] == "RGP/0.1.0"
           assert reader.overview()["source_commit"] is None
           assert reader.overview()["embedded_instructions"]
           print("RGP_INLINE_GUIDE_AND_PROVENANCE=PASS")

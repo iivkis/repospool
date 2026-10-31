@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
 sys.path.insert(0, str(ROOT / "tests"))
-from test_reader_api import three_scope_artifact  # noqa: E402
+from rgp_fixture import three_scope_artifact  # noqa: E402
 from rgp_mcp import RgpMcp, TOOLS, MAX_RESPONSE  # noqa: E402
 from rgp_reader import Reader  # noqa: E402
 
@@ -56,7 +56,7 @@ class ProtocolTests(unittest.TestCase):
                           "rgp_read", "rgp_context"})
         self.assertEqual(len(TOOLS), 5)
         status = self.tool("rgp_status")
-        self.assertEqual(status["overview"]["source_commit"], "a" * 40)
+        self.assertEqual(status["overview"]["source_commit"], None)
         self.assertTrue(status["overview"]["snapshot_complete"])
         self.assertEqual(status["index"]["status"], "not_indexed")
         self.assertTrue(status["repository_source_untrusted"])

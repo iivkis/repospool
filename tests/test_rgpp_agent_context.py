@@ -9,7 +9,7 @@ sys.path.insert(0, str(ROOT / "python"))
 sys.path.insert(0, str(ROOT / "tests"))
 from rgp_reader import Reader  # noqa: E402
 from rgp_agent_context import context, compact_json  # noqa: E402
-from test_reader_api import three_scope_artifact  # noqa: E402
+from rgp_fixture import three_scope_artifact  # noqa: E402
 
 
 class AgentContextTests(unittest.TestCase):
@@ -18,7 +18,7 @@ class AgentContextTests(unittest.TestCase):
 
     def test_pinned_source_lines_not_a_model_answer(self):
         result = context(self.reader, ["needle"], prefix="src/")
-        self.assertEqual(result["source_commit"], "a" * 40)
+        self.assertEqual(result["source_commit"], None)
         self.assertTrue(result["snapshot_complete"])
         self.assertEqual(result["index_coverage"], "not_indexed")
         self.assertEqual(result["retrieval"], "lexical_not_semantic")

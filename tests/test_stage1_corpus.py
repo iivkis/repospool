@@ -48,42 +48,18 @@ class Stage1CorpusTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unknown repository"):
             corpus.tasks_for(PLAN, "unknown")
 
-    def test_existing_corpus_checkpoint_requires_exact_bytes_and_commit(self):
-        checkpoints = json.loads(
-            (ROOT / "benchmarks/gate_b/corpus_preparation.json").read_text()
-        )
+    def test_pinned_source_checkpoint_is_independent_of_old_transport(self):
+        checkpoints = json.loads((ROOT / "benchmarks/gate_b/corpus_preparation.json").read_text())
         for item in checkpoints["artifacts"]:
             summary = {"repository": item["repository"],
                        "source_commit": item["source_commit"],
-                       "rgp_sha256": item["sha256"],
-                       "rgp_bytes": item["rgp_bytes"],
-                       "included_files": item["included_files"]}
-            corpus.match_checkpoint(checkpoints, summary)
-            damaged = dict(summary)
-            damaged["rgp_sha256"] = "0" * 64
-            with self.assertRaisesRegex(ValueError, "compatibility regression"):
-                corpus.match_checkpoint(checkpoints, damaged)
-
-    def test_new_transport_keeps_source_guard_without_fake_legacy_hash_parity(self):
-        checkpoints = json.loads(
-            (ROOT / "benchmarks/gate_b/corpus_preparation.json").read_text()
-        )
-        pinned = checkpoints["artifacts"][0]
-        summary = {
-            "repository": pinned["repository"],
-            "source_commit": pinned["source_commit"],
-            "included_files": pinned["included_files"],
-            "transport_version": "RGP/1.1",
-            "rgp_sha256": "1" * 64,
-            "rgp_bytes": pinned["rgp_bytes"] + 1300,
-        }
-        self.assertEqual(corpus.match_checkpoint(checkpoints, summary),
-                         "SOURCE_EQUIVALENCE_ONLY")
-        damaged = dict(summary, source_commit="0" * 40)
-        with self.assertRaisesRegex(ValueError, "compatibility regression"):
-            corpus.match_checkpoint(checkpoints, damaged)
-        with self.assertRaisesRegex(ValueError, "unsupported transport checkpoint"):
-            corpus.match_checkpoint(checkpoints, dict(summary, transport_version="RGP/9.0"))
+                       "included_files": item["included_files"],
+                       "transport_version": "RGP/0.1.0"}
+            self.assertEqual(corpus.match_checkpoint(checkpoints, summary), "SOURCE_EQUIVALENCE_ONLY")
+            with self.assertRaisesRegex(ValueError, "source regression"):
+                corpus.match_checkpoint(checkpoints, dict(summary, included_files=0))
+            with self.assertRaisesRegex(ValueError, "unsupported transport"):
+                corpus.match_checkpoint(checkpoints, dict(summary, transport_version="RGP/3.0"))
 
     def test_generator_failure_is_a_failure_not_success(self):
         with tempfile.TemporaryDirectory() as td:

@@ -70,17 +70,17 @@ def export_workspace(artifact: Path, output: Path, trusted_sha256: str, *,
     overview = reader.overview()
     # Even authentic source bytes may be stale relative to the GitHub commit
     # the agent intends to edit. The caller must separately obtain that SHA.
-    # In RGP/3.0 the source revision was deliberately removed from the
+    # In RGP/0.1.0 the source revision was deliberately removed from the
     # transport to save tokens. Trusted external digest must be tied to the
     # separately supplied Git commit by the publisher; no in-band claim exists.
     _require(overview["source_commit"] in (None, expected_commit), "STALE_SNAPSHOT",
              "snapshot commit differs from expected Git revision; acquire a matching RGP")
     if overview["source_commit"] is None:
-        # RGP/3.0 contains NO provenance. Fail closed unless an independent
+        # RGP/0.1.0 contains NO provenance. Fail closed unless an independent
         # Git/attestation source binds its full-file digest to the source SHA.
         _require(isinstance(attested_source_commit, str) and
                  bool(COMMIT.fullmatch(attested_source_commit)),
-                 "STALE_SNAPSHOT", "RGP/3.0 requires external source attestation")
+                 "STALE_SNAPSHOT", "RGP/0.1.0 requires external source attestation")
         _require(attested_source_commit == expected_commit, "STALE_SNAPSHOT",
                  "expected Git revision differs from external source attestation")
     _require(overview["snapshot_complete"] or allow_partial, "PARTIAL_SNAPSHOT",
@@ -158,7 +158,7 @@ def main() -> int:
     parser.add_argument("--expected-commit", required=True,
                         help="GitHub commit this snapshot must represent; obtain HEAD separately")
     parser.add_argument("--attested-source-commit",
-                        help="independently authenticated source SHA; mandatory for hash-free RGP/3.0")
+                        help="independently authenticated source SHA; mandatory for hash-free RGP/0.1.0")
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--prefix", default="")
     parser.add_argument("--allow-partial", action="store_true")

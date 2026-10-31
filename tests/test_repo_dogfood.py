@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "tests"))
 from repo_dogfood import check  # noqa: E402
-from test_manifest_contract import fake_artifact  # noqa: E402
+from rgp_fixture import make_artifact  # noqa: E402
 from rgp_reader import RgpError  # noqa: E402
 
 
@@ -29,8 +29,7 @@ class RepoDogfoodTests(unittest.TestCase):
         self.call("commit", "-qm", "original source")
         self.source_commit = self.call("rev-parse", "HEAD").stdout.decode().strip()
         self.snapshot = self.repo / "REPO_CONTEXT.rgp"
-        self.snapshot.write_bytes(fake_artifact(
-            lambda m: m.update(source_commit=self.source_commit)))
+        self.snapshot.write_bytes(make_artifact({"src/file.txt": b"alpha\nbeta\nbeta\n"}))
         self.call("add", "REPO_CONTEXT.rgp")
         self.call("commit", "-qm", "publish only the RGP")
         self.publish_commit = self.call("rev-parse", "HEAD").stdout.decode().strip()
@@ -93,26 +92,13 @@ class RepoDogfoodTests(unittest.TestCase):
         with self.assertRaisesRegex(RgpError, "UNSUPPORTED_FORMAT"):
             check(self.repo)
 
-    def test_unrelated_source_commit_rejected_even_if_source_text_same(self):
-        original = self.source_commit
-        self.call("checkout", "-qb", "unrelated", original)
-        self.call("commit", "--allow-empty", "-qm", "different unrelated HEAD")
-        other = self.call("rev-parse", "HEAD").stdout.decode().strip()
-        # Explicitly use commit data from a diverged branch, then return.
-        self.call("checkout", "-q", self.publish_commit)
-        self.snapshot.write_bytes(fake_artifact(
-            lambda m: m.update(source_commit=other)))
-        self.call("add", "REPO_CONTEXT.rgp")
-        self.call("commit", "-qm", "point snapshot at a non-ancestor")
-        with self.assertRaisesRegex(RgpError, "STALE_SNAPSHOT"):
-            check(self.repo)
-
     def test_export_materializes_only_checked_source(self):
         from repo_dogfood import export_workspace
         folder = self.repo / "outside-snapshot"
         report = check(self.repo)
         out = export_workspace(self.snapshot, folder, report["artifact_sha256"],
-                               expected_commit=report["source_commit"])
+                               expected_commit=report["source_commit"],
+                               attested_source_commit=report["source_commit"])
         self.assertEqual(out["files_exported"], 1)
         self.assertEqual((folder / "src/file.txt").read_bytes(), b"alpha\nbeta\nbeta\n")
 

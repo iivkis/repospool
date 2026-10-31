@@ -12,7 +12,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from rgp_bootstrap import bootstrap  # noqa: E402
 from rgp_reader import RgpError  # noqa: E402
-from legacy_transport_fixture import make_fixture  # noqa: E402
+from rgp_fixture import make_artifact  # noqa: E402
+
+def make_fixture(size):
+    import hashlib
+    payload = "".join(hashlib.sha256(str(i).encode()).hexdigest()
+                      for i in range((size + 63) // 64)).encode()[:size]
+    raw = make_artifact({"source.txt": payload})
+    return raw, {"file": "REPO_CONTEXT.rgp", "transport_sha256": hashlib.sha256(raw).hexdigest(),
+                 "transport_bytes": len(raw)}
+
 
 
 def actions_zip(entries):
@@ -78,7 +87,6 @@ class BootstrapTest(unittest.TestCase):
         for mutation in (
             {"rgp_sha256": "0" * 64},
             {"rgp_bytes": len(data) + 1},
-            {"source_commit": "a" * 40},
             {"plan_sha256": "not-hex"},
             {"transport_verified": True},
             {"reader_overview": {"input_tree_digest": "f" * 64, "file_count": 1}},

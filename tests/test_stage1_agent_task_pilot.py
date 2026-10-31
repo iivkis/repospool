@@ -9,7 +9,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "python"))
 from stage1_agent_task_pilot import TERMS  # noqa: E402
 from rgp_agent_context import context, compact_json  # noqa: E402
-from test_reader_api import three_scope_artifact  # noqa: E402
+from rgp_fixture import three_scope_artifact  # noqa: E402
 from rgp_reader import Reader  # noqa: E402
 
 

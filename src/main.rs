@@ -1,31 +1,21 @@
 use anyhow::{anyhow, ensure, Context, Result};
-use base64::{engine::general_purpose::STANDARD, Engine as _};
 use clap::{Parser, Subcommand};
 
 mod lean;
-mod plain;
 mod rgpignore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashSet};
 use std::fs::{self, OpenOptions};
-use std::io::{BufRead, BufReader, BufWriter, Cursor, Read, Seek, SeekFrom, Write};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
-use zip::{write::FileOptions, CompressionMethod, DateTime, ZipArchive, ZipWriter};
 
-const MAX_ARTIFACT: usize = 64 * 1024 * 1024;
 const MAX_FILE: usize = 16 * 1024 * 1024;
 const MAX_MANIFEST: usize = 16 * 1024 * 1024;
 const MAX_TOTAL: usize = 128 * 1024 * 1024;
 const MAX_ENTRIES: usize = 50_000;
-const MAX_RATIO: u64 = 200;
-const MAX_HEADER: usize = 4096;
-// Versioned, canonical text is compiled into the generator and verifier.
-// Exact legacy 1.1 text is retained solely to verify old archives.
-const LEGACY_AGENT_GUIDE: &str = include_str!("../docs/RGP_AGENT_GUIDE.txt");
-const INLINE_AGENT_GUIDE: &str = include_str!("../docs/RGP_INLINE_AGENT_GUIDE.txt");
 
 #[derive(Parser)]
 #[command(about = "Create and verify deterministic Repository Graph Packs")]
@@ -278,9 +268,9 @@ fn snapshot(repo: &Path, rev: &str) -> Result<(Manifest, BTreeMap<String, Vec<u8
         }
         ensure!(kind == "blob", "unsupported Git object: {kind}");
         let object_size: usize = size.parse().context("invalid blob size")?;
-        // Reserve one ZIP member for manifest.json. Even if Git contains
+        // Reserve one index entry for the source list. Even if Git contains
         // more than 49,999 distinct blobs, the emitted RGP must remain
-        // readable under the fixed RGP/1.0 50,000-member ceiling.
+        // bounded by the format's 50,000-file ceiling.
         // Exclusions are recorded explicitly, never silently dropped.
         if manifest.files.len() >= MAX_ENTRIES - 1 {
             manifest.excluded.push(Exclusion {
@@ -297,7 +287,7 @@ fn snapshot(repo: &Path, rev: &str) -> Result<(Manifest, BTreeMap<String, Vec<u8
             continue;
         }
         let bytes = git_blobs.read(object, object_size)?;
-        // New RGP/2.0 is intended to be read directly by an AI agent.
+        // UTF-8 is intended to be read directly by an AI agent.
         // Do not smuggle binary bytes, invalid UTF-8 or NUL into a text file.
         // Record each skipped source explicitly as incomplete coverage.
         if std::str::from_utf8(&bytes).is_err() || bytes.contains(&0) {
@@ -395,202 +385,10 @@ impl Drop for StagedOutput {
     }
 }
 
-// Choose a safe storage method by inspecting the actual ZIP metadata, not
-// by guessing compressibility from samples. A valid, repetitive source file
-// must not be rejected as a ZIP bomb by our own independent readers.
-// Ordinary archives retain their original compression and byte format.
-#[allow(dead_code)] // Retained for historical ZIP compatibility test vectors only.
-fn build_zip<W: Write + Seek>(
-    writer: W,
-    manifest_data: &[u8],
-    blobs: &BTreeMap<String, Vec<u8>>,
-    stored: &HashSet<String>,
-) -> Result<W> {
-    let mut zip = ZipWriter::new(writer);
-    let options = FileOptions::default()
-        .compression_method(CompressionMethod::Deflated)
-        .last_modified_time(DateTime::default())
-        .unix_permissions(0o644);
-    let manifest_method = if stored.contains("manifest.json") {
-        CompressionMethod::Stored
-    } else {
-        CompressionMethod::Deflated
-    };
-    zip.start_file("manifest.json", options.compression_method(manifest_method))?;
-    zip.write_all(manifest_data)?;
-    for (name, contents) in blobs {
-        let method = if stored.contains(name) {
-            CompressionMethod::Stored
-        } else {
-            CompressionMethod::Deflated
-        };
-        zip.start_file(name, options.compression_method(method))?;
-        zip.write_all(contents)?;
-    }
-    Ok(zip.finish()?)
-}
-
-#[allow(dead_code)] // Retained for historical ZIP compatibility test vectors only.
-fn excessive_compression<R: Read + Seek>(reader: R) -> Result<HashSet<String>> {
-    let mut archive = ZipArchive::new(reader)?;
-    let mut out = HashSet::new();
-    for index in 0..archive.len() {
-        let member = archive.by_index(index)?;
-        if member.size() > std::cmp::max(4096, member.compressed_size().saturating_mul(MAX_RATIO)) {
-            out.insert(member.name().to_owned());
-        }
-    }
-    Ok(out)
-}
-
-// ZIP/1.0 memory budget: tiny-member archives make disk seeks expensive.
-// Conservatively estimate a worst-case noncompressed archive, including
-// local and central ZIP records. A 32 MiB bound avoids unbounded memory
-// growth while making high-cardinality source trees fast again. Anything
-// larger continues using the file-backed safety path.
-#[allow(dead_code)] // Retained for historical ZIP compatibility test vectors only.
-const ZIP_MEMORY_BUDGET: usize = 32 * 1024 * 1024;
-
-#[allow(dead_code)] // Retained for historical ZIP compatibility test vectors only.
-fn cache_zip_in_memory(manifest_data: &[u8], blobs: &BTreeMap<String, Vec<u8>>) -> bool {
-    let raw = blobs.values().fold(manifest_data.len(), |total, blob| {
-        total.saturating_add(blob.len())
-    });
-    // All ZIP member names are fixed 70-byte content hashes, except the
-    // manifest. 256 bytes/member reserves ample header and DEFLATE slack.
-    raw.saturating_add((blobs.len() + 1).saturating_mul(256)) <= ZIP_MEMORY_BUDGET
-}
-
-#[allow(dead_code)] // Retained for historical ZIP compatibility test vectors only.
-enum PreparedZip {
-    Memory(Vec<u8>),
-    File(StagedOutput),
-}
-
-#[allow(dead_code)] // Retained for historical ZIP compatibility test vectors only.
-fn prepare_zip(
-    output: &Path,
-    manifest_data: &[u8],
-    blobs: &BTreeMap<String, Vec<u8>>,
-) -> Result<PreparedZip> {
-    if cache_zip_in_memory(manifest_data, blobs) {
-        let first = build_zip(
-            Cursor::new(Vec::new()),
-            manifest_data,
-            blobs,
-            &HashSet::new(),
-        )?
-        .into_inner();
-        let outliers = excessive_compression(Cursor::new(&first))?;
-        if outliers.is_empty() {
-            return Ok(PreparedZip::Memory(first));
-        }
-        let safe =
-            build_zip(Cursor::new(Vec::new()), manifest_data, blobs, &outliers)?.into_inner();
-        ensure!(
-            excessive_compression(Cursor::new(&safe))?.is_empty(),
-            "RESOURCE_LIMIT: unsafe compression ratio after fallback"
-        );
-        Ok(PreparedZip::Memory(safe))
-    } else {
-        let (first_zip, file) = StagedOutput::create(output)?;
-        // Seekable buffering eliminates thousands of tiny ZIP header
-        // writes. The buffer is flushed before validation or opening.
-        drop(
-            build_zip(
-                BufWriter::with_capacity(256 * 1024, file),
-                manifest_data,
-                blobs,
-                &HashSet::new(),
-            )?
-            .into_inner()
-            .map_err(|error| anyhow!("cannot flush staged ZIP: {error}"))?,
-        );
-        let outliers = excessive_compression(fs::File::open(&first_zip.path)?)?;
-        if outliers.is_empty() {
-            return Ok(PreparedZip::File(first_zip));
-        }
-        let (fallback, file) = StagedOutput::create(output)?;
-        drop(
-            build_zip(
-                BufWriter::with_capacity(256 * 1024, file),
-                manifest_data,
-                blobs,
-                &outliers,
-            )?
-            .into_inner()
-            .map_err(|error| anyhow!("cannot flush staged ZIP: {error}"))?,
-        );
-        ensure!(
-            excessive_compression(fs::File::open(&fallback.path)?)?.is_empty(),
-            "RESOURCE_LIMIT: unsafe compression ratio after fallback"
-        );
-        Ok(PreparedZip::File(fallback))
-    }
-}
-
-// SHA is calculated over completed ZIP bytes, from memory or a seekable
-// file. 57 source bytes make one canonical 76-character Base64 line.
-// The encoded transport is never stored as one large String.
-#[allow(dead_code)] // Retained for historical ZIP compatibility test vectors only.
-fn stream_transport<R: Read + Seek>(mut source: R, destination: &mut fs::File) -> Result<usize> {
-    let size = source.seek(SeekFrom::End(0))?;
-    ensure!(
-        size <= MAX_ARTIFACT as u64,
-        "RESOURCE_LIMIT: ZIP payload too large"
-    );
-    source.seek(SeekFrom::Start(0))?;
-    let mut zip = BufReader::new(&mut source);
-    let mut hasher = Sha256::new();
-    let mut buffer = [0u8; 64 * 1024];
-    loop {
-        let n = zip.read(&mut buffer)?;
-        if n == 0 {
-            break;
-        }
-        hasher.update(&buffer[..n]);
-    }
-    let mut output = BufWriter::with_capacity(64 * 1024, &mut *destination);
-    writeln!(
-        output,
-        "RGP/1.2\npayload_length={}\npayload_sha256={}\nbase64_line_width=76\n--",
-        size,
-        hex::encode(hasher.finalize())
-    )?;
-    drop(zip);
-    source.seek(SeekFrom::Start(0))?;
-    let mut zip = BufReader::new(&mut source);
-    let mut raw = [0u8; 57];
-    let mut encoded = [0u8; 76];
-    loop {
-        let mut n = 0;
-        while n < raw.len() {
-            let read = zip.read(&mut raw[n..])?;
-            if read == 0 {
-                break;
-            }
-            n += read;
-        }
-        if n == 0 {
-            break;
-        }
-        let encoded_size = STANDARD
-            .encode_slice(&raw[..n], &mut encoded)
-            .map_err(|_| anyhow!("Base64 output buffer insufficient"))?;
-        output.write_all(&encoded[..encoded_size])?;
-        output.write_all(b"\n")?;
-    }
-    output.write_all(b"END RGP\n")?;
-    output.flush()?;
-    drop(output);
-    Ok(destination.metadata()?.len() as usize)
-}
-
 fn generate(repo: &Path, output: &Path, rev: &str) -> Result<()> {
     let (manifest, blobs) = snapshot(repo, rev)?;
-    // RGP/2.1 stores its inline guide, Git provenance and original UTF-8
-    // sources directly, without ZIP, Base64, or a metadata sidecar.
-    // Length-framed sections preserve exact newline sequences.
+    // A single versioned UTF-8 transport: an auto-generated generic guide,
+    // compact index, and byte-framed original source text.
     let (staged, mut file) = StagedOutput::create(output)?;
     let artifact_size = lean::write_lean(&mut file, &manifest, &blobs)?;
     drop(blobs);
@@ -604,162 +402,8 @@ fn generate(repo: &Path, output: &Path, rev: &str) -> Result<()> {
     Ok(())
 }
 
-fn parse_transport(path: &Path) -> Result<Vec<u8>> {
-    let data = fs::read(path)?;
-    ensure!(
-        data.len() <= MAX_ARTIFACT * 2,
-        "RESOURCE_LIMIT: outer text too large"
-    );
-    let data = std::str::from_utf8(&data).context("UNSUPPORTED_FORMAT: non-ASCII text")?;
-    let (header, rest) = data
-        .split_once("\n--\n")
-        .ok_or_else(|| anyhow!("TRUNCATED_ARTIFACT: missing separator"))?;
-    ensure!(
-        header.len() <= MAX_HEADER,
-        "RESOURCE_LIMIT: header too large"
-    );
-    // RGP/1.2 contains only transport fields. Legacy 1.1 retains its
-    // exact inline guide for verification; legacy 1.0 also stays readable.
-    let fields = if let Some(plain) = header
-        .strip_prefix("RGP/1.2\n")
-        .or_else(|| header.strip_prefix("RGP/1.0\n"))
-    {
-        plain
-    } else {
-        let prefix = format!("RGP/1.1\n{LEGACY_AGENT_GUIDE}");
-        header
-            .strip_prefix(&prefix)
-            .ok_or_else(|| anyhow!("UNSUPPORTED_FORMAT: version or legacy agent guide"))?
-    };
-    let fields: Vec<_> = fields.split('\n').collect();
-    ensure!(fields.len() == 3, "UNSUPPORTED_FORMAT: header fields");
-    let len: usize = fields[0]
-        .strip_prefix("payload_length=")
-        .ok_or_else(|| anyhow!("UNSUPPORTED_FORMAT: length"))?
-        .parse()?;
-    let hash = fields[1]
-        .strip_prefix("payload_sha256=")
-        .ok_or_else(|| anyhow!("UNSUPPORTED_FORMAT: SHA"))?;
-    ensure!(
-        fields[2] == "base64_line_width=76",
-        "UNSUPPORTED_FORMAT: line width"
-    );
-    ensure!(
-        hash.len() == 64
-            && hash
-                .bytes()
-                .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()),
-        "UNSUPPORTED_FORMAT: SHA hex"
-    );
-    ensure!(len <= MAX_ARTIFACT, "RESOURCE_LIMIT: payload too large");
-    let body = rest
-        .strip_suffix("END RGP\n")
-        .ok_or_else(|| anyhow!("TRUNCATED_ARTIFACT: missing footer"))?;
-    ensure!(
-        body.ends_with('\n'),
-        "TRUNCATED_ARTIFACT: Base64 final line"
-    );
-    let lines: Vec<&str> = body.trim_end_matches('\n').split('\n').collect();
-    ensure!(
-        !lines.is_empty() && !lines[0].is_empty(),
-        "TRUNCATED_ARTIFACT: empty body"
-    );
-    let mut joined = String::new();
-    for (i, line) in lines.iter().enumerate() {
-        ensure!(
-            !line.is_empty() && line.len() <= 76,
-            "TRUNCATED_ARTIFACT: invalid Base64 line"
-        );
-        if i + 1 != lines.len() {
-            ensure!(line.len() == 76, "TRUNCATED_ARTIFACT: short Base64 line");
-        }
-        joined.push_str(line);
-    }
-    let payload = STANDARD
-        .decode(joined)
-        .context("TRUNCATED_ARTIFACT: Base64 decode failed")?;
-    ensure!(payload.len() == len, "TRUNCATED_ARTIFACT: length mismatch");
-    ensure!(sha(&payload) == hash, "HASH_MISMATCH: payload SHA-256");
-    Ok(payload)
-}
-
 fn verify(path: &Path) -> Result<Manifest> {
-    // Plain source text is the default; legacy ZIP+Base64 stays readable.
-    let mut magic = [0u8; 8];
-    let got = fs::File::open(path)?.read(&mut magic)?;
-    if got == 8 && &magic == b"RGP/3.0\n" {
-        return lean::verify_lean(path);
-    }
-    if got == 8 && (&magic == b"RGP/2.0\n" || &magic == b"RGP/2.1\n") {
-        return plain::verify_plain(path);
-    }
-    let payload = parse_transport(path)?;
-    let mut archive = ZipArchive::new(Cursor::new(payload))?;
-    ensure!(
-        !archive.is_empty() && archive.len() <= MAX_ENTRIES,
-        "RESOURCE_LIMIT: ZIP entry count"
-    );
-    let mut names = HashSet::new();
-    let mut blobs = BTreeMap::new();
-    let mut manifest_bytes = None;
-    let mut total = 0usize;
-    for i in 0..archive.len() {
-        let mut entry = archive.by_index(i)?;
-        let name = entry.name().to_owned();
-        validate_path(&name)?;
-        ensure!(
-            names.insert(name.to_lowercase()),
-            "UNSAFE_PATH: duplicate ZIP entry"
-        );
-        ensure!(
-            name == "manifest.json" || name.starts_with("files/"),
-            "UNSAFE_PATH: unexpected ZIP entry"
-        );
-        let member_limit = if name == "manifest.json" {
-            MAX_MANIFEST
-        } else {
-            MAX_FILE
-        };
-        ensure!(
-            entry.size() <= member_limit as u64,
-            "RESOURCE_LIMIT: single ZIP entry"
-        );
-        ensure!(
-            entry.size() <= MAX_TOTAL as u64,
-            "RESOURCE_LIMIT: ZIP entry size"
-        );
-        ensure!(
-            entry.size() <= entry.compressed_size().saturating_mul(MAX_RATIO).max(4096),
-            "RESOURCE_LIMIT: compression ratio"
-        );
-        total = total
-            .checked_add(entry.size() as usize)
-            .ok_or_else(|| anyhow!("RESOURCE_LIMIT"))?;
-        ensure!(total <= MAX_TOTAL, "RESOURCE_LIMIT: decompressed size");
-        let mut buf = Vec::new();
-        entry.read_to_end(&mut buf)?;
-        ensure!(
-            buf.len() as u64 == entry.size(),
-            "HASH_MISMATCH: decompressed size"
-        );
-        if name == "manifest.json" {
-            ensure!(
-                manifest_bytes.is_none() && i == 0,
-                "UNSUPPORTED_FORMAT: manifest order"
-            );
-            manifest_bytes = Some(buf);
-        } else {
-            ensure!(
-                name == format!("files/{}", sha(&buf)),
-                "HASH_MISMATCH: ZIP blob"
-            );
-            blobs.insert(name, buf.len() as u64);
-        }
-    }
-    let manifest: Manifest = serde_json::from_slice(
-        &manifest_bytes.ok_or_else(|| anyhow!("UNSUPPORTED_FORMAT: missing manifest"))?,
-    )?;
-    verify_manifest(manifest, blobs)
+    lean::verify_lean(path)
 }
 
 fn verify_manifest(manifest: Manifest, blobs: BTreeMap<String, u64>) -> Result<Manifest> {
@@ -906,129 +550,13 @@ mod tests {
     }
 
     #[test]
-    fn zip_strategy_has_explicit_memory_ceiling() {
-        let mut blobs = BTreeMap::new();
-        blobs.insert("files/small".to_owned(), vec![1u8; 1024]);
-        assert!(cache_zip_in_memory(b"{}", &blobs));
-        blobs.insert("files/large".to_owned(), vec![1u8; ZIP_MEMORY_BUDGET]);
-        assert!(!cache_zip_in_memory(b"{}", &blobs));
-    }
-
-    #[test]
-    fn in_memory_and_disk_zip_are_byte_identical() -> Result<()> {
-        let mut blobs = BTreeMap::new();
-        blobs.insert("files/example".to_owned(), b"repeat-test-data".to_vec());
-        let memory =
-            build_zip(Cursor::new(Vec::new()), b"{}", &blobs, &HashSet::new())?.into_inner();
-        let (stage, file) = StagedOutput::create(Path::new("strategy-unit-test.rgp"))?;
-        let file = build_zip(
-            BufWriter::with_capacity(1024, file),
-            b"{}",
-            &blobs,
-            &HashSet::new(),
-        )?;
-        drop(file.into_inner()?);
-        assert_eq!(memory, fs::read(&stage.path)?);
-        Ok(())
-    }
-
-    #[test]
-    fn streamed_transport_matches_original_in_memory_bytes_at_line_boundaries() -> Result<()> {
-        for length in [1usize, 56, 57, 58, 114, 115, 4097, 65539] {
-            let bytes: Vec<u8> = (0..length).map(|n| ((n * 131) % 251) as u8).collect();
-            let (source, mut source_file) = StagedOutput::create(Path::new("stream-test.rgp"))?;
-            source_file.write_all(&bytes)?;
-            source_file.sync_all()?;
-            drop(source_file);
-            let (destination, mut destination_file) =
-                StagedOutput::create(Path::new("stream-test.rgp"))?;
-            let written = stream_transport(fs::File::open(&source.path)?, &mut destination_file)?;
-            drop(destination_file);
-            let actual = fs::read(&destination.path)?;
-            let encoded = STANDARD.encode(&bytes);
-            let mut expected = format!(
-                "RGP/1.2\npayload_length={}\npayload_sha256={}\nbase64_line_width=76\n--\n",
-                length,
-                sha(&bytes)
-            );
-            for line in encoded.as_bytes().chunks(76) {
-                expected.push_str(std::str::from_utf8(line)?);
-                expected.push('\n');
-            }
-            expected.push_str("END RGP\n");
-            assert_eq!(actual, expected.as_bytes());
-            assert_eq!(written, actual.len());
-            assert_eq!(parse_transport(&destination.path)?, bytes);
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn generated_v12_is_instruction_free() -> Result<()> {
-        let (staged, mut output) = StagedOutput::create(Path::new("plain-header-test.rgp"))?;
-        stream_transport(Cursor::new(b"example".as_slice()), &mut output)?;
-        drop(output);
-        let data = fs::read(&staged.path)?;
-        let header = data.split(|byte| *byte == b'\n').next().unwrap();
-        assert_eq!(header, b"RGP/1.2");
-        assert!(!data[..256.min(data.len())]
-            .windows(b"agent_guide_begin".len())
-            .any(|window| window == b"agent_guide_begin"));
-        assert_eq!(parse_transport(&staged.path)?, b"example");
-        Ok(())
-    }
-
-    #[test]
-    fn tampered_agent_guide_is_rejected() -> Result<()> {
-        // The 1.1 legacy guide must still be authenticated even though new
-        // archives no longer carry instructions in the transport.
-        let (staged, mut output) = StagedOutput::create(Path::new("guide-test.rgp"))?;
-        output.write_all(
-            format!(
-                "RGP/1.1\n{LEGACY_AGENT_GUIDE}payload_length=1\npayload_sha256={}\nbase64_line_width=76\n--\nYQ==\nEND RGP\n",
-                sha(b"a")
-            )
-            .as_bytes(),
-        )?;
-        drop(output);
-        // The ZIP bytes are synthetic; parse_transport verifies the envelope.
-        assert_eq!(parse_transport(&staged.path)?, b"a");
-        let mut artifact = fs::read(&staged.path)?;
-        let at = artifact
-            .windows(b"AGENT QUICKSTART".len())
-            .position(|part| part == b"AGENT QUICKSTART")
-            .expect("legacy guide");
-        artifact[at] = b'X';
-        fs::write(&staged.path, artifact)?;
-        assert!(parse_transport(&staged.path)
-            .unwrap_err()
-            .to_string()
-            .contains("UNSUPPORTED_FORMAT"));
-        Ok(())
-    }
-
-    #[test]
-    fn high_compression_blob_uses_stored_without_disabling_reader_limits() {
-        let mut blobs = BTreeMap::new();
-        let repeated = vec![0u8; 1024 * 1024];
-        let key = format!("files/{}", sha(&repeated));
-        blobs.insert(key.clone(), repeated);
-        let first = build_zip(Cursor::new(Vec::new()), b"{}", &blobs, &HashSet::new())
-            .unwrap()
-            .into_inner();
-        let outliers = excessive_compression(Cursor::new(&first)).unwrap();
-        assert!(outliers.contains(&key));
-        let rebuilt = build_zip(Cursor::new(Vec::new()), b"{}", &blobs, &outliers)
-            .unwrap()
-            .into_inner();
-        assert!(excessive_compression(Cursor::new(&rebuilt))
-            .unwrap()
-            .is_empty());
-        let mut zip = ZipArchive::new(Cursor::new(rebuilt)).unwrap();
-        assert_eq!(
-            zip.by_name(&key).unwrap().compression(),
-            CompressionMethod::Stored
-        );
+    fn generated_guide_is_generic_and_versioned() {
+        let guide = lean::generated_guide();
+        assert!(guide.contains("RGP/0.1.0"));
+        assert!(guide.contains("F ="));
+        assert!(guide.contains("independent"));
+        assert!(!guide.contains("github.com/iivkis"));
+        assert!(!guide.contains("REPO_CONTEXT.rgp"));
     }
 
     #[test]
@@ -1054,12 +582,4 @@ mod tests {
         assert!(!a_path.exists() && !b_path.exists());
     }
 
-    #[test]
-    fn transport_corruption_detected() {
-        let tmp =
-            std::env::temp_dir().join(format!("rgp-corrupt-{}-{}.rgp", std::process::id(), "test"));
-        fs::write(&tmp, "RGP/1.0\npayload_length=4\npayload_sha256=0000000000000000000000000000000000000000000000000000000000000000\nbase64_line_width=76\n--\nAAAA\nEND RGP\n").unwrap();
-        assert!(parse_transport(&tmp).is_err());
-        fs::remove_file(tmp).unwrap();
-    }
 }
