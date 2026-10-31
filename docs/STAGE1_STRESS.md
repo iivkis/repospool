@@ -1,99 +1,46 @@
-# Stage 1: stress hardening and anti-zip-bomb correctness
+# Stress-тесты текущего RGP/3.0
 
-**Decision target:** Validate that a **legitimate** highly repetitive source blob
-is not falsely rejected as a ZIP bomb, without weakening either independent
-Reader's hard resource limits. Test broad file count, incompressible 12 MiB
-blob, compressible 12 MiB text, and the 16 MiB per-file exclusion boundary.
+**Текущий формат:** один читаемый UTF-8-файл без ZIP/Base64 и
+сжатия. Поэтому проверки DEFLATE, `ZIP_STORED`, адаптивного ZIP
+и zip-bomb **не относятся к генератору RGP/3.0**. Старые результаты
+сжатия и тесты наследуемого RGP/1.x доступны в Git history и
+legacy golden fixtures, но не считаются замером текущего формата.
 
-## Implementation
+## Что проверяет активный конвейер
 
-The Rust generator now inspects the **actual compressed ZIP member sizes**
-of its first deterministic archive. If any entry would exceed the existing
-`max(4096 bytes, compressed_size × 200)` expansion rule, it deterministically
-re-encodes only offending entries as `ZIP_STORED`, then verifies that the
-ratio limit is respected. All standard members retain the original DEFLATE
-settings. No change to RGP 1.0, no new dependency, no weakening of Rust or
-Python verification, and no change to the stable pinned-corpus snapshots.
+[Stage1 workflow](../.github/workflows/stage1-stress.yml) запускает
+`scripts/stage1_stress.py` на фиксированных синтетических Git-коммитах
+и сверяет выход Rust-генератора с Python Reader и исходниками из Git:
 
-This is deliberately a *bounded second pass*, not an untested heuristic
-based on sampling entropy. It costs CPU and temporary memory on compression
-outliers, and the existing 64 MiB compressed payload and 128 MiB expanded
-size limits still apply. Highly repetitive content is no longer rejected
-solely for being highly compressible.
+| Профиль | Текущая цель |
+| --- | --- |
+| `many-files` | 2000 разных UTF-8 файлов, порядок, пагинация |
+| `incompressible` | 12 MiB текста с высокой энтропией, точные байты |
+| `compressible` | 12 MiB повторяющегося текста, без декомпрессии |
+| `disk-fallback` | 36 MiB текста, безопасная файловая стадия |
+| `oversized` | Файл выше лимита помечается как исключённый |
 
-## Reproducible stress pipeline
-
-[stage1_stress.py](../scripts/stage1_stress.py) generates synthetic source,
-commits to a temporary Git repository with fixed authorship and timestamps,
-uses the production Rust CLI to generate identical RGP bytes twice,
-verifies with Rust and Python, and independently compares source bytes
-against `git show` for that exact commit. It also tests truncated artifact
-rejection and records `/usr/bin/time` wall time/peak RSS plus Reader
-validation latency.
-
-Profiles in [GitHub Actions](../.github/workflows/stage1-stress.yml):
-
-| Profile | Fixture | Required evidence |
-| --- | --- | --- |
-| `many-files` | 2,000 distinct 1 KiB Git blobs | Determinism, full RGP byte equality, paginated tree with no gaps |
-| `incompressible` | 12 MiB cryptographically derived pseudo-random blob | Included, byte fidelity, complete snapshot, regular DEFLATE |
-| `compressible` | 12 MiB repetitive text in 4 KiB lines | Included, complete snapshot, STORED fallback, bounded Reader search/read |
-| `oversized` | 16 MiB + 1 byte blob and an included README | Oversized file excluded and marked partial, unavailable file rejected, included data still readable |
-
-The exact test RGP SHA-256, commit, observed time and RAM are uploaded as
-**metadata-only JSON** in each workflow artifact. No source bytes,
-generated large blobs, or archives are uploaded.
-
-## Run it
+В каждом профиле сравниваются два выхода одной и той же ревизии,
+вызываются Rust `verify` и Python `Reader`, проверяются
+границы ресурсов, отказ на усечённом файле и совпадение исходного
+текста с Git. CI загружает **метаданные измерения**, не исходные
+синтетические репозитории.
 
 ```sh
 cargo build --locked --release
-python3 scripts/stage1_stress.py --profile many-files --rust-cli target/release/rgp --report /tmp/many.json
-python3 scripts/stage1_stress.py --profile incompressible --rust-cli target/release/rgp --report /tmp/random.json
-python3 scripts/stage1_stress.py --profile compressible --rust-cli target/release/rgp --report /tmp/repetitive.json
-python3 scripts/stage1_stress.py --profile oversized --rust-cli target/release/rgp --report /tmp/oversized.json
+python3 scripts/stage1_stress.py --profile many-files \
+  --rust-cli target/release/rgp --report /tmp/rgp-stress.json
 ```
 
-This suite tests substantial synthetic workloads and resource boundaries,
-not arbitrary scale, real connector transport or LLM comprehension. The
-`/usr/bin/time` wall-clock resolution is coarse for short commands;
-peak RSS and elapsed time are **observations**, not baseline-adjusted
-performance improvements.
+## Что это НЕ доказывает
 
-## Product gates still open
+- Прикладную пользу модели или экономию **токенов**.
+- Устойчивость к равнодлинной подмене содержимого **без внешнего
+  Git trust anchor**. RGP/3.0 намеренно не содержит SHA.
+- Неограниченную скорость и память на всех типах репозиториев.
+- Независимую доставку из GitHub-коннектора в Python-песочницу.
 
-- Gate B independent answer grading and verified source-acquisition
-  ledger: **HOLD**. A self-scored result cannot serve as independent audit.
-- Real GitHub connector delivery with independently anchored authenticity:
-  only the previously verified Actions-artifact channel has limited proof.
-- Truly large enterprise repositories / the 128 MiB expanded-size ceiling
-  boundary still require separate controlled resources; see 50k-member evidence above.
-- Stress runs must be inspected and documented with exact SHA and
-  pass/fail evidence before marking this work completed.
-
-## 50k-member boundary now tested
-
-The previously outstanding high-cardinality ZIP member limit is
-now covered by a separate [50,005-file Git fixture, 50,000-member
-acceptance test](STAGE1_SCALE.md) with an actual passing CI run and
-[measured result](../benchmarks/stage1/SCALE_50K_2026-10-31.md).
-This **does not** establish the 128 MiB expanded-byte exhaustion
-boundary for arbitrary content, all enterprise workloads or future
-GitHub connection transports.
-
-## Bounded-memory generation A/B
-
-The generator's temporary ZIP and streaming Base64 memory optimization
-has a [four-profile, same-runner A/B report](../benchmarks/stage1/MEMORY_AB_2026-10-31.md).
-Memory gains are measured (about 52% peak RSS for 12MiB and 50k
-cases), but 50k generation latency **increases substantially**.
-Do not claim pure performance improvement.
-
-## Buffered disk fallback independently covered
-
-The later [adaptive ZIP producer](STAGE1_ADAPTIVE_ZIP.md) adds a
-36 MiB incompressible Git fixture to the stress matrix. This
-exercises the **disk-backed fallback** when the 32 MiB in-memory ZIP
-estimate is exceeded. It verifies both Rust and Python readers,
-source byte fidelity and canonical deterministic output; see the
-[paired five-profile report](../benchmarks/stage1/ADAPTIVE_ZIP_2026-10-31.md).
+Результаты измерений из ранних ZIP-версий нельзя напрямую
+сравнивать с RGP/3.0. Актуальная задача после технических
+ограничений — Gate B, статус **HOLD**, и реальные GitHub-правки
+агента. См. [дорожную карту](PRODUCT_ROADMAP.md).
