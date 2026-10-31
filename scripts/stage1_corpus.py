@@ -179,7 +179,7 @@ def inspect(repo: dict, tasks: list[dict], source: Path, binary: Path, work: Pat
     # Invalid bytes must still fail before returning any source content.
     for damaged, expected_error in (
         (raw[:-10], "TRUNCATED_ARTIFACT"),
-        (raw.replace(b"RGP/1.0", b"RGP/2.0", 1), "UNSUPPORTED_FORMAT"),
+        (raw.replace(raw.split(b"\n", 1)[0], b"RGP/2.0", 1), "UNSUPPORTED_FORMAT"),
         (re.sub(rb"(payload_sha256=)[0-9a-f]{64}", lambda m: m.group(1) + b"0" * 64,
                 raw, count=1), "HASH_MISMATCH"),
     ):
@@ -191,6 +191,7 @@ def inspect(repo: dict, tasks: list[dict], source: Path, binary: Path, work: Pat
             raise AssertionError("corrupted archive was accepted")
     return {
         "repository": repo["id"], "source_commit": commit, "status": "PASS",
+        "transport_version": raw.split(b"\n", 1)[0].decode("ascii"),
         "rgp_sha256": hashlib.sha256(raw).hexdigest(), "rgp_bytes": len(raw),
         "included_files": overview["file_count"], "unique_reference_files": len(seen_paths),
         "query_count": query_count, "tasks": task_rows,
@@ -204,8 +205,12 @@ def inspect(repo: dict, tasks: list[dict], source: Path, binary: Path, work: Pat
     }
 
 
-def match_checkpoint(corpus: dict, result: dict) -> None:
-    """Fail if generation silently changes the old pinned RGP/1.0 bytes."""
+def match_checkpoint(corpus: dict, result: dict) -> str:
+    """Preserve the legacy byte checkpoint without misapplying it to v1.1.
+
+    Source tasks independently compare manifest and blobs to pinned Git in
+    inspect(). New transport bytes require their own future checkpoint.
+    """
     rows = corpus.get("artifacts")
     require(isinstance(rows, list), "missing pinned checkpoint artifacts")
     checkpoints = [r for r in rows if r.get("repository") == result["repository"]]
@@ -213,11 +218,19 @@ def match_checkpoint(corpus: dict, result: dict) -> None:
     expected = checkpoints[0]
     for key, current in (
         ("source_commit", result["source_commit"]),
-        ("sha256", result["rgp_sha256"]),
-        ("rgp_bytes", result["rgp_bytes"]),
         ("included_files", result["included_files"]),
     ):
         require(expected.get(key) == current, f"pinned compatibility regression: {key}")
+    version = result.get("transport_version", "RGP/1.0")
+    if version == "RGP/1.0":
+        for key, current in (("sha256", result["rgp_sha256"]),
+                             ("rgp_bytes", result["rgp_bytes"])):
+            require(expected.get(key) == current, f"pinned compatibility regression: {key}")
+        return "EXACT_LEGACY_BYTES"
+    require(version == "RGP/1.1", "unsupported transport checkpoint version")
+    # A v1.0 RGP hash cannot authenticate the intentionally changed v1.1
+    # header. The run still verifies determinism, Git source truth and Reader.
+    return "SOURCE_EQUIVALENCE_ONLY"
 
 
 def run(repository: str, binary: Path, plan_file: Path, checkpoint_file: Path) -> dict:
@@ -229,8 +242,8 @@ def run(repository: str, binary: Path, plan_file: Path, checkpoint_file: Path) -
         source = work / "source"
         obtain_pinned_repo(repo, source)
         result = inspect(repo, tasks, source, binary.resolve(), work)
-    match_checkpoint(strict_json(checkpoint_file), result)
-    result["pinned_v1_format_compatibility"] = "PASS"
+    result["pinned_v1_format_compatibility"] = match_checkpoint(
+        strict_json(checkpoint_file), result)
     result.update({
         "kind": "stage1_corpus_source_functional_and_resource_diagnostic",
         "plan_sha256": digest_plan(plan),

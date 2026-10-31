@@ -23,6 +23,10 @@ MAX_MANIFEST = 16 * 1024 * 1024
 MAX_CURSOR = 8192
 MAX_PATH_BYTES = 4096
 MAX_OVERVIEW_EXCLUSIONS = 100
+MAX_HEADER = 4096
+# RGP/1.1 guide text is canonical and compiled into the Rust producer.
+# Pin its digest here so the trusted Reader stays standalone in a sandbox.
+AGENT_GUIDE_SHA256 = "9585596e0f091096bac8c67163a50fb40ab789ee72f49089f80557acbec4740d"
 HEX = re.compile(r"[0-9a-f]{64}\Z")
 COMMIT = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
 EXCLUSION_REASONS = frozenset({"self_artifact", "sensitive_path", "submodule_unavailable", "size_limit", "entry_limit"})
@@ -124,12 +128,26 @@ def decode_transport(source: bytes) -> bytes:
         header, body = source.split(b"\n--\n", 1)
     except ValueError as exc:
         raise RgpError("TRUNCATED_ARTIFACT", "missing separator") from exc
+    _require(len(header) <= MAX_HEADER, "RESOURCE_LIMIT", "header too large")
     lines = header.split(b"\n")
-    _require(len(lines) == 4 and lines[0] == b"RGP/1.0", "UNSUPPORTED_FORMAT", "header version")
-    _require(lines[3] == b"base64_line_width=76", "UNSUPPORTED_FORMAT", "Base64 line width")
-    _require(lines[1].startswith(b"payload_length=") and lines[2].startswith(b"payload_sha256="), "UNSUPPORTED_FORMAT", "header fields")
-    declared_size = lines[1].split(b"=", 1)[1]
-    declared_hash = lines[2].split(b"=", 1)[1]
+    if lines[0] == b"RGP/1.0":
+        _require(len(lines) == 4, "UNSUPPORTED_FORMAT", "legacy header fields")
+        fields = lines[1:]
+    elif lines[0] == b"RGP/1.1":
+        _require(len(lines) >= 7, "UNSUPPORTED_FORMAT", "missing agent guide")
+        # Reject instructions modified in transit, including extra header
+        # fields. A ZIP digest alone would not protect the plaintext guide.
+        guide = b"\n".join(lines[1:-3]) + b"\n"
+        _require(_digest(guide) == AGENT_GUIDE_SHA256,
+                 "UNSUPPORTED_FORMAT", "unexpected agent guide")
+        fields = lines[-3:]
+    else:
+        raise RgpError("UNSUPPORTED_FORMAT", "header version")
+    _require(fields[2] == b"base64_line_width=76", "UNSUPPORTED_FORMAT", "Base64 line width")
+    _require(fields[0].startswith(b"payload_length=") and fields[1].startswith(b"payload_sha256="),
+             "UNSUPPORTED_FORMAT", "header fields")
+    declared_size = fields[0].split(b"=", 1)[1]
+    declared_hash = fields[1].split(b"=", 1)[1]
     _require(bool(re.fullmatch(rb"[0-9]+", declared_size)), "UNSUPPORTED_FORMAT", "nondecimal size")
     _require(bool(re.fullmatch(rb"[0-9a-f]{64}", declared_hash)), "UNSUPPORTED_FORMAT", "invalid hash")
     _require(int(declared_size) <= MAX_ARTIFACT, "RESOURCE_LIMIT", "payload too large")

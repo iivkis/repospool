@@ -2,7 +2,8 @@
 """Paired old-vs-new Rust generator measurement on the exact same Git sources.
 
 The CI job compiles both versions from clean source trees and runs each
-against the same real temporary Git commit. RGP bytes MUST remain identical.
+against the same real temporary Git commit. RGP bytes MUST remain identical
+for the same transport version; cross-version comparisons are marked SKIP.
 Peak RSS is measured by GNU time; no tokens or connector calls are inferred.
 """
 from __future__ import annotations
@@ -61,8 +62,17 @@ def main() -> int:
                     paths[arm] = artifact
                 original = paths["baseline"].read_bytes()
                 optimized = paths["candidate"].read_bytes()
+                baseline_version = original.split(b"\n", 1)[0].decode("ascii", errors="replace")
+                candidate_version = optimized.split(b"\n", 1)[0].decode("ascii", errors="replace")
+                if baseline_version != candidate_version:
+                    # Comparing transport 1.0 to 1.1 cannot satisfy the original
+                    # byte-identical A/B claim, so do not report fake PASS/FAIL.
+                    report.update(status="SKIP", reason="TRANSPORT_VERSION_CHANGED",
+                                  baseline_version=baseline_version,
+                                  candidate_version=candidate_version)
+                    break
                 if original != optimized:
-                    raise AssertionError(f"RGP/1.0 bytes changed on {profile}")
+                    raise AssertionError(f"RGP bytes changed on {profile}")
                 for arm in ("baseline", "candidate"):
                     subprocess.run([
                         str((args.baseline if arm == "baseline" else args.candidate).resolve()),
@@ -111,13 +121,14 @@ def main() -> int:
                 after = item["candidate"]["elapsed_ms"]
                 if after > 1.1 * before:
                     raise AssertionError("50k-member latency regressed more than 10%")
-        report["status"] = "PASS"
+        if report["status"] != "SKIP":
+            report["status"] = "PASS"
     except Exception as exc:
         report["error"] = str(exc)
     args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     print(json.dumps(report, indent=2, sort_keys=True))
-    return 0 if report["status"] == "PASS" else 1
+    return 0 if report["status"] in ("PASS", "SKIP") else 1
 
 
 if __name__ == "__main__":

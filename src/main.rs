@@ -17,6 +17,9 @@ const MAX_MANIFEST: usize = 16 * 1024 * 1024;
 const MAX_TOTAL: usize = 128 * 1024 * 1024;
 const MAX_ENTRIES: usize = 50_000;
 const MAX_RATIO: u64 = 200;
+const MAX_HEADER: usize = 4096;
+// Versioned, canonical text is compiled into the generator and verifier.
+const AGENT_GUIDE: &str = include_str!("../docs/RGP_AGENT_GUIDE.txt");
 
 #[derive(Parser)]
 #[command(about = "Create and verify deterministic Repository Graph Packs")]
@@ -519,7 +522,7 @@ fn stream_transport<R: Read + Seek>(mut source: R, destination: &mut fs::File) -
     let mut output = BufWriter::with_capacity(64 * 1024, &mut *destination);
     writeln!(
         output,
-        "RGP/1.0\npayload_length={}\npayload_sha256={}\nbase64_line_width=76\n--",
+        "RGP/1.1\n{AGENT_GUIDE}payload_length={}\npayload_sha256={}\nbase64_line_width=76\n--",
         size,
         hex::encode(hasher.finalize())
     )?;
@@ -590,20 +593,31 @@ fn parse_transport(path: &Path) -> Result<Vec<u8>> {
     let (header, rest) = data
         .split_once("\n--\n")
         .ok_or_else(|| anyhow!("TRUNCATED_ARTIFACT: missing separator"))?;
-    let fields: Vec<_> = header.split('\n').collect();
     ensure!(
-        fields.len() == 4 && fields[0] == "RGP/1.0",
-        "UNSUPPORTED_FORMAT: header"
+        header.len() <= MAX_HEADER,
+        "RESOURCE_LIMIT: header too large"
     );
-    let len: usize = fields[1]
+    // RGP/1.0 remains readable. RGP/1.1 requires the *exact* canonical
+    // guide, so malicious or accidentally modified header instructions fail.
+    let fields = if let Some(legacy) = header.strip_prefix("RGP/1.0\n") {
+        legacy
+    } else {
+        let prefix = format!("RGP/1.1\n{AGENT_GUIDE}");
+        header
+            .strip_prefix(&prefix)
+            .ok_or_else(|| anyhow!("UNSUPPORTED_FORMAT: version or agent guide"))?
+    };
+    let fields: Vec<_> = fields.split('\n').collect();
+    ensure!(fields.len() == 3, "UNSUPPORTED_FORMAT: header fields");
+    let len: usize = fields[0]
         .strip_prefix("payload_length=")
         .ok_or_else(|| anyhow!("UNSUPPORTED_FORMAT: length"))?
         .parse()?;
-    let hash = fields[2]
+    let hash = fields[1]
         .strip_prefix("payload_sha256=")
         .ok_or_else(|| anyhow!("UNSUPPORTED_FORMAT: SHA"))?;
     ensure!(
-        fields[3] == "base64_line_width=76",
+        fields[2] == "base64_line_width=76",
         "UNSUPPORTED_FORMAT: line width"
     );
     ensure!(
@@ -894,7 +908,7 @@ mod tests {
             let actual = fs::read(&destination.path)?;
             let encoded = STANDARD.encode(&bytes);
             let mut expected = format!(
-                "RGP/1.0\npayload_length={}\npayload_sha256={}\nbase64_line_width=76\n--\n",
+                "RGP/1.1\n{AGENT_GUIDE}payload_length={}\npayload_sha256={}\nbase64_line_width=76\n--\n",
                 length,
                 sha(&bytes)
             );
@@ -905,7 +919,25 @@ mod tests {
             expected.push_str("END RGP\n");
             assert_eq!(actual, expected.as_bytes());
             assert_eq!(written, actual.len());
+            assert_eq!(parse_transport(&destination.path)?, bytes);
         }
+        Ok(())
+    }
+
+    #[test]
+    fn tampered_agent_guide_is_rejected() -> Result<()> {
+        let (staged, mut output) = StagedOutput::create(Path::new("guide-test.rgp"))?;
+        stream_transport(Cursor::new(b"example".as_slice()), &mut output)?;
+        drop(output);
+        let mut artifact = fs::read(&staged.path)?;
+        let at = artifact
+            .windows(b"AGENT QUICKSTART".len())
+            .position(|part| part == b"AGENT QUICKSTART")
+            .expect("guide should be near the beginning");
+        artifact[at] = b'X';
+        fs::write(&staged.path, artifact)?;
+        let error = parse_transport(&staged.path).unwrap_err();
+        assert!(error.to_string().contains("UNSUPPORTED_FORMAT"));
         Ok(())
     }
 

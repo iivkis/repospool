@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   paired-memory:
-    name: Baseline vs candidate (identical pinned Git and RGP bytes)
+    name: Same-format paired memory A/B (cross-version is SKIP)
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
@@ -47,10 +47,15 @@ jobs:
           import json, os
           from pathlib import Path
           x=json.loads((Path(os.environ["RUNNER_TEMP"]) / "stage1-memory-ab.json").read_text())
-          assert x["status"] == "PASS" and x["gate_b"] == "HOLD"
-          assert len(x["profiles"]) == 5
-          assert x["profiles"][-1]["included_files"] == 49999
-          assert all(i["same_artifact_sha256"] for i in x["profiles"])
+          assert x["gate_b"] == "HOLD"
+          if x["status"] == "SKIP":
+              assert x["reason"] == "TRANSPORT_VERSION_CHANGED"
+              assert (x["baseline_version"], x["candidate_version"]) == ("RGP/1.0", "RGP/1.1")
+          else:
+              assert x["status"] == "PASS"
+              assert len(x["profiles"]) == 5
+              assert x["profiles"][-1]["included_files"] == 49999
+              assert all(i["same_artifact_sha256"] for i in x["profiles"])
           PY
       - name: Summarize observed paired run
         if: always()
@@ -65,6 +70,8 @@ jobs:
               with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
                   f.write(f"## Paired A/B memory: {r['status']}\n\n")
                   f.write(f"Baseline: `{os.environ.get('RGP_BASELINE_SHA', 'unknown')}`\n\n")
+                  if r["status"] == "SKIP":
+                      f.write(f"Skipped incompatible transport versions: {r['baseline_version']} -> {r['candidate_version']}. No paired memory claim.\n\n")
                   if "error" in r:
                       f.write(f"Failure: `{r['error']}`\n\n")
                   for item in r["profiles"]:
