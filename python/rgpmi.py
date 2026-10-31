@@ -40,7 +40,7 @@ def read_metadata(path: Path) -> dict:
         raise RgpError("UNSUPPORTED_FORMAT", "invalid metadata JSON") from exc
     _require(isinstance(meta, dict) and set(meta) == FIELDS,
              "UNSUPPORTED_FORMAT", "invalid metadata keys")
-    _require(meta["format"] == "RGP-MI/1.0" and meta["transport"] == "RGP/1.2",
+    _require(meta["format"] == "RGP-MI/1.0" and meta["transport"] in ("RGP/1.2", "RGP/2.0"),
              "UNSUPPORTED_FORMAT", "metadata version")
     name = meta["artifact"]
     _require(isinstance(name, str) and name.endswith(".rgp")
@@ -82,7 +82,7 @@ def validate(metadata_path: Path, artifact_path: Path | None = None,
     _require(hasher.hexdigest() == meta["artifact_sha256"],
              "HASH_MISMATCH", "RGP bytes differ from sidecar")
     with artifact.open("rb") as handle:
-        _require(handle.readline() == b"RGP/1.2\n",
+        _require(handle.readline() == (meta["transport"] + "\n").encode("ascii"),
                  "UNSUPPORTED_FORMAT", "RGP transport disagrees with metadata")
     reader = Reader(artifact)
     overview = reader.overview()
