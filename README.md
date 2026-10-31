@@ -1,8 +1,8 @@
 # RGP (Repository Graph Pack)
 
-RGP creates **reproducible, versioned, single-file snapshots of a Git repository**. Its purpose is to give a coding assistant trustworthy source context inside a Python sandbox without cloning the repository or installing runtime dependencies.
+RGP creates **reproducible, versioned, single-file source snapshots** of Git repositories. A coding assistant can read **selected source ranges directly through GitHub** without loading the full snapshot into model context. The optional local Python Reader needs no third-party runtime dependencies.
 
-**Status: v0.1, transport PoC.** The GitHub Actions artifact delivery path has conditional Gate A evidence; product usefulness and independent answer quality are **not proven**. **Gate B remains HOLD.** RGP currently provides verified file contents and lexical search, not a semantic dependency graph.
+**Status: RGP/3.0 readable-text PoC.** The default artifact has no ZIP, Base64, JSON manifest or in-band source hashes. Reader checks structure and limits; **authenticity requires independently trusted Git provenance**. Practical usefulness, measured token savings and independently assessed answer quality are **not established**. **Gate B remains HOLD.** RGP currently supports lexical source navigation, not a semantic dependency graph.
 
 ## Token-efficient RGP/3.0
 
