@@ -1,9 +1,12 @@
-# RGP 1.0 transport and snapshot specification (PoC)
+# RGP transport and snapshot specification (PoC)
 
-A RGP file is UTF-8-compatible ASCII. Line endings are **LF only**. The v1 header is exact, in this order:
+A RGP file is ASCII text with **LF-only** line endings. The current generator
+emits **RGP/1.1**, which starts with a self-contained guide that an AI coding
+agent can read before decoding any ZIP bytes. The canonical transport is:
 
 ```text
-RGP/1.0
+RGP/1.1
+<exact ASCII content of docs/RGP_AGENT_GUIDE.txt, including its final LF>
 payload_length=<decimal byte length of ZIP>
 payload_sha256=<64 lowercase hex SHA-256 of ZIP>
 base64_line_width=76
@@ -11,6 +14,30 @@ base64_line_width=76
 <canonical padded base64 ZIP in lines of 76 characters except the final line>
 END RGP
 ```
+
+The version 1.1 guide begins with `agent_guide_begin` and ends with
+`agent_guide_end`. Its [canonical plaintext](RGP_AGENT_GUIDE.txt) has SHA-256
+`9585596e0f091096bac8c67163a50fb40ab789ee72f49089f80557acbec4740d`.
+The Rust generator and verifier embed this text at build time; the standalone
+Python Reader pins its digest. **A modified or extra instruction line is an
+`UNSUPPORTED_FORMAT` error**, even when the ZIP payload hash is correct.
+The entire header is bounded to 4096 bytes. If the guide changes, publish a
+new transport version, not a mutable instruction payload.
+
+**Backward compatibility:** the Rust verifier and Python Reader also accept
+legacy RGP/1.0 with the *exact* four-line header:
+
+```text
+RGP/1.0
+payload_length=<decimal byte length of ZIP>
+payload_sha256=<64 lowercase hex SHA-256 of ZIP>
+base64_line_width=76
+--
+```
+
+Legacy files have no guide. The v1.0 golden fixtures remain byte-identical.
+Readers built before RGP/1.1 intentionally reject guided RGP/1.1 archives;
+upgrade the trusted Reader to consume newly generated artifacts.
 
 `payload_length` counts **decoded ZIP bytes**, not the outer text; hash is on the ZIP bytes. The Base64 portion is nonempty, uses RFC 4648 standard alphabet with padding, and has one LF after each line. An exact terminal `END RGP\n` marker is required. Reader decodes strictly, checks ZIP length and SHA **before** opening the ZIP. Any transport that can omit, reorder or duplicate bytes is unsupported until tested; a raw textual representation alone cannot guarantee correct delivery.
 
@@ -36,7 +63,7 @@ The actual fields are emitted in this order by the Rust serializer. `files` and 
 
 `mode=120000` has `kind=symlink` and stores the raw Git link-target bytes, not the dereferenced content. `status=pointer_only` denotes an unhydrated LFS pointer. Submodule gitlinks and files excluded due to conservative publication policy or size limits are reported in `excluded`. Paths must be relative, UTF-8, without backslash, control chars, `.`/`..`, empty segments or case-insensitive collisions. Paths outside this domain currently cause a clear generation failure. A single blob is limited to 16 MiB, total included content to 128 MiB; the transport ZIP is limited to 64 MiB. This is a software safety guardrail, **not** a demonstrated connector size limit.
 
-Schema and format are versioned separately from the Rust crate version. Unknown major versions are rejected; unknown optional future fields from compatible minor versions may be ignored. This proof-of-concept accepts schema `1.0` and transport header `RGP/1.0` exactly. No executable Reader is embedded or automatically imported.
+Schema and format are versioned separately from the Rust crate version. Unknown major versions are rejected; unknown optional future fields from compatible minor versions may be ignored. This proof-of-concept accepts manifest schema `1.0` with transport `RGP/1.0` or `RGP/1.1`. The 1.1 header is an instruction *reference*, not a trusted authority or code loader. The agent still needs an independently trusted Reader or a careful, resource-bounded Python stdlib parser for standalone exploration. No executable Reader is embedded or automatically imported.
 
 ## Compatibility test vectors and planned SQL index
 
