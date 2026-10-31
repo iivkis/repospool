@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from rgp_bootstrap import bootstrap  # noqa: E402
 from rgp_reader import RgpError  # noqa: E402
-from transport_probe import make_fixture  # noqa: E402
+from legacy_transport_fixture import make_fixture  # noqa: E402
 
 
 def actions_zip(entries):
