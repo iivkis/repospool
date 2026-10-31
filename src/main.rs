@@ -415,6 +415,7 @@ impl Drop for StagedOutput {
 // by guessing compressibility from samples. A valid, repetitive source file
 // must not be rejected as a ZIP bomb by our own independent readers.
 // Ordinary archives retain their original compression and byte format.
+#[allow(dead_code)] // Retained for historical ZIP compatibility test vectors only.
 fn build_zip<W: Write + Seek>(
     writer: W,
     manifest_data: &[u8],
@@ -445,6 +446,7 @@ fn build_zip<W: Write + Seek>(
     Ok(zip.finish()?)
 }
 
+#[allow(dead_code)] // Retained for historical ZIP compatibility test vectors only.
 fn excessive_compression<R: Read + Seek>(reader: R) -> Result<HashSet<String>> {
     let mut archive = ZipArchive::new(reader)?;
     let mut out = HashSet::new();
@@ -462,8 +464,10 @@ fn excessive_compression<R: Read + Seek>(reader: R) -> Result<HashSet<String>> {
 // local and central ZIP records. A 32 MiB bound avoids unbounded memory
 // growth while making high-cardinality source trees fast again. Anything
 // larger continues using the file-backed safety path.
+#[allow(dead_code)] // Retained for historical ZIP compatibility test vectors only.
 const ZIP_MEMORY_BUDGET: usize = 32 * 1024 * 1024;
 
+#[allow(dead_code)] // Retained for historical ZIP compatibility test vectors only.
 fn cache_zip_in_memory(manifest_data: &[u8], blobs: &BTreeMap<String, Vec<u8>>) -> bool {
     let raw = blobs.values().fold(manifest_data.len(), |total, blob| {
         total.saturating_add(blob.len())
@@ -473,11 +477,13 @@ fn cache_zip_in_memory(manifest_data: &[u8], blobs: &BTreeMap<String, Vec<u8>>) 
     raw.saturating_add((blobs.len() + 1).saturating_mul(256)) <= ZIP_MEMORY_BUDGET
 }
 
+#[allow(dead_code)] // Retained for historical ZIP compatibility test vectors only.
 enum PreparedZip {
     Memory(Vec<u8>),
     File(StagedOutput),
 }
 
+#[allow(dead_code)] // Retained for historical ZIP compatibility test vectors only.
 fn prepare_zip(
     output: &Path,
     manifest_data: &[u8],
@@ -542,6 +548,7 @@ fn prepare_zip(
 // SHA is calculated over completed ZIP bytes, from memory or a seekable
 // file. 57 source bytes make one canonical 76-character Base64 line.
 // The encoded transport is never stored as one large String.
+#[allow(dead_code)] // Retained for historical ZIP compatibility test vectors only.
 fn stream_transport<R: Read + Seek>(mut source: R, destination: &mut fs::File) -> Result<usize> {
     let size = source.seek(SeekFrom::End(0))?;
     ensure!(
