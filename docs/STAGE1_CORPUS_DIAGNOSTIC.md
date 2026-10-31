@@ -115,5 +115,6 @@ an independently pinned RGP/1.1 artifact hash is still future evidence.
 **Transport 1.2:** Like 1.1, the new lean RGP/1.2 intentionally differs
 from frozen 1.0 bytes. Stage 1 checks pinned Git source equality, Reader
 validity and deterministic output, without pretending the legacy archive
-hash is a 1.2 checkpoint. The external .rgpmi SHA is verified separately
-in the generator smoke and in-repository publication checks.
+hash is a 1.2 checkpoint. The current RGP/2.1 embeds a length- and SHA-256-checked guide, Git
+source commit and scoped completeness in the same file. Whole-file
+provenance is verified against an independent Git blob or digest.

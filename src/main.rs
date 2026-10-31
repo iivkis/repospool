@@ -24,7 +24,7 @@ const MAX_HEADER: usize = 4096;
 // Versioned, canonical text is compiled into the generator and verifier.
 // Exact legacy 1.1 text is retained solely to verify old archives.
 const LEGACY_AGENT_GUIDE: &str = include_str!("../docs/RGP_AGENT_GUIDE.txt");
-const RGPMI_GUIDE: &str = include_str!("../docs/RGPMI_AGENT_GUIDE.txt");
+const INLINE_AGENT_GUIDE: &str = include_str!("../docs/RGP_INLINE_AGENT_GUIDE.txt");
 
 #[derive(Parser)]
 #[command(about = "Create and verify deterministic Repository Graph Packs")]
@@ -81,32 +81,6 @@ struct FileEntry {
 struct Exclusion {
     path: String,
     reason: String,
-}
-
-#[derive(Serialize)]
-struct AgentMetadata<'a> {
-    format: &'static str,
-    artifact: &'a str,
-    transport: &'static str,
-    artifact_sha256: String,
-    artifact_bytes: usize,
-    source_commit: &'a str,
-    snapshot_complete: bool,
-    instructions: &'static str,
-}
-
-fn hash_file(path: &Path) -> Result<String> {
-    let mut reader = BufReader::new(fs::File::open(path)?);
-    let mut hasher = Sha256::new();
-    let mut buffer = [0u8; 64 * 1024];
-    loop {
-        let read = reader.read(&mut buffer)?;
-        if read == 0 {
-            break;
-        }
-        hasher.update(&buffer[..read]);
-    }
-    Ok(hex::encode(hasher.finalize()))
 }
 
 fn sha(bytes: &[u8]) -> String {
@@ -613,59 +587,19 @@ fn stream_transport<R: Read + Seek>(mut source: R, destination: &mut fs::File) -
 
 fn generate(repo: &Path, output: &Path, rev: &str) -> Result<()> {
     let (manifest, blobs) = snapshot(repo, rev)?;
-    let source_commit = manifest.source_commit.clone();
-    let snapshot_complete = manifest
-        .excluded
-        .iter()
-        .all(|entry| matches!(entry.reason.as_str(), "self_artifact" | "rgpignore"));
-    let manifest_data = serde_json::to_vec(&manifest)?;
-    ensure!(
-        manifest_data.len() <= MAX_MANIFEST,
-        "RESOURCE_LIMIT: manifest exceeds 16 MiB"
-    );
-
-    // RGP/2.0 stores original UTF-8 source directly, without ZIP or Base64.
+    // RGP/2.1 stores its inline guide, Git provenance and original UTF-8
+    // sources directly, without ZIP, Base64, or a metadata sidecar.
     // Length-framed sections preserve exact newline sequences.
     let (staged, mut file) = StagedOutput::create(output)?;
     let artifact_size = plain::write_plain(&mut file, &manifest, &blobs)?;
     drop(blobs);
-    drop(manifest_data);
     drop(manifest);
     file.sync_all()?;
     drop(file);
     verify(&staged.path)?;
 
-    // The JSON sidecar is independently readable before the large transport
-    // is downloaded. Hash the entire artifact, not just its inner ZIP.
-    let sidecar_path = output.with_extension("rgpmi");
-    let file_name = output
-        .file_name()
-        .and_then(|name| name.to_str())
-        .ok_or_else(|| anyhow!("UNSAFE_PATH: non-UTF8 output name"))?;
-    let metadata = AgentMetadata {
-        format: "RGP-MI/1.0",
-        artifact: file_name,
-        transport: "RGP/2.0",
-        artifact_sha256: hash_file(&staged.path)?,
-        artifact_bytes: artifact_size,
-        source_commit: &source_commit,
-        snapshot_complete,
-        instructions: RGPMI_GUIDE,
-    };
-    let (sidecar_stage, mut sidecar_file) = StagedOutput::create(&sidecar_path)?;
-    serde_json::to_writer_pretty(&mut sidecar_file, &metadata)?;
-    sidecar_file.write_all(b"\n")?;
-    sidecar_file.sync_all()?;
-    drop(sidecar_file);
-
     fs::rename(&staged.path, output)?;
-    fs::rename(&sidecar_stage.path, &sidecar_path)?;
-    println!(
-        "generated {} ({} bytes) and {}",
-        output.display(),
-        artifact_size,
-        sidecar_path.display()
-    );
+    println!("generated {} ({} bytes)", output.display(), artifact_size);
     Ok(())
 }
 
@@ -752,7 +686,7 @@ fn verify(path: &Path) -> Result<Manifest> {
     // Plain source text is the default; legacy ZIP+Base64 stays readable.
     let mut magic = [0u8; 8];
     let got = fs::File::open(path)?.read(&mut magic)?;
-    if got == 8 && &magic == b"RGP/2.0\n" {
+    if got == 8 && (&magic == b"RGP/2.0\n" || &magic == b"RGP/2.1\n") {
         return plain::verify_plain(path);
     }
     let payload = parse_transport(path)?;

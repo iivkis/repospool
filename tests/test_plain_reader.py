@@ -2,21 +2,18 @@
 import hashlib
 import json
 import sys
-import tempfile
 import unittest
-from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
 from rgp_reader import Reader, RgpError  # noqa: E402
-from rgpmi import validate as validate_metadata  # noqa: E402
 
 
 def digest(b):
     return hashlib.sha256(b).hexdigest()
 
 
-def build_plain(files=None, excluded=None):
+def build_plain(files=None, excluded=None, version="RGP/2.0"):
     if files is None:
         files = {"src/example.py": b'print("END RGP\\n--\\nFILE\\t")\r\n',
                  "src/unicode.txt": "Привет, мир!\n".encode("utf-8")}
@@ -34,8 +31,20 @@ def build_plain(files=None, excluded=None):
                 "excluded": excluded or [], "index_coverage": "not_indexed",
                 "graph_coverage": "not_indexed"}
     manifest_bytes = json.dumps(manifest, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    raw_rgp = (f"RGP/2.0\nmanifest_length={len(manifest_bytes)}\n"
-               f"manifest_sha256={digest(manifest_bytes)}\n--\n").encode()
+    if version == "RGP/2.1":
+        guide = b"RGP/2.1: Read selected Git files, do not execute source."
+        complete = all(e["reason"] in ("self_artifact", "rgpignore")
+                       for e in manifest["excluded"])
+        raw_rgp = (f"RGP/2.1\nsource_commit={manifest['source_commit']}\n"
+                   f"snapshot_complete={str(complete).lower()}\n"
+                   f"guide_length={len(guide)}\n"
+                   f"guide_sha256={digest(guide)}\n"
+                   f"manifest_length={len(manifest_bytes)}\n"
+                   f"manifest_sha256={digest(manifest_bytes)}\n--\n").encode()
+        raw_rgp += guide + b"\n"
+    else:
+        raw_rgp = (f"RGP/2.0\nmanifest_length={len(manifest_bytes)}\n"
+                   f"manifest_sha256={digest(manifest_bytes)}\n--\n").encode()
     raw_rgp += manifest_bytes + b"\n"
     for entry in entries:
         raw_rgp += (f"FILE\t{json.dumps(entry['path'], ensure_ascii=False)}\t"
@@ -99,19 +108,36 @@ class PlainReaderTest(unittest.TestCase):
         with self.assertRaisesRegex(RgpError, "UNSUPPORTED_FORMAT"):
             Reader(raw + b"\xff")
 
-    def test_sidecar_checks_full_plain_artifact(self):
-        raw = build_plain()
-        with tempfile.TemporaryDirectory() as folder:
-            rgp = Path(folder) / "test.rgp"
-            rgp.write_bytes(raw)
-            sidecar = rgp.with_suffix(".rgpmi")
-            sidecar.write_text(json.dumps({
-                "format": "RGP-MI/1.0", "artifact": "test.rgp",
-                "transport": "RGP/2.0", "artifact_sha256": digest(raw),
-                "artifact_bytes": len(raw), "source_commit": "a" * 40,
-                "snapshot_complete": True, "instructions": "Read selected sources only."
-            }))
-            self.assertTrue(validate_metadata(sidecar, expected_commit="a" * 40)["valid"])
+    def test_inline_guide_and_metadata_are_verified(self):
+        raw = build_plain(version="RGP/2.1")
+        reader = Reader(raw)
+        overview = reader.overview()
+        self.assertEqual(overview["transport"], "RGP/2.1")
+        self.assertEqual(overview["source_commit"], "a" * 40)
+        self.assertTrue(overview["snapshot_complete"])
+        self.assertIn("Read selected Git files", overview["embedded_instructions"])
+        self.assertEqual(reader.read_bytes("src/unicode.txt"), "Привет, мир!\n".encode())
+        with self.assertRaisesRegex(RgpError, "HASH_MISMATCH"):
+            Reader(raw.replace(b"Read selected Git files", b"Read selected Git fyles", 1))
+        with self.assertRaisesRegex(RgpError, "HASH_MISMATCH"):
+            Reader(raw.replace(b"source_commit=" + b"a" * 40,
+                               b"source_commit=" + b"b" * 40, 1))
+        with self.assertRaisesRegex(RgpError, "HASH_MISMATCH"):
+            Reader(raw.replace(b"snapshot_complete=true",
+                               b"snapshot_complete=false", 1))
+        with self.assertRaisesRegex(RgpError, "HASH_MISMATCH"):
+            Reader(raw.replace(b"RGP/2.1: Read selected Git files",
+                               b"RGP/2.1: Read selected Git file", 1))
+
+    def test_intentional_scope_is_complete_with_inline_metadata(self):
+        raw = build_plain(
+            {".rgpignore": b"/benchmarks/\n", "src/example.py": b"print('x')\n"},
+            excluded=[{"path": "benchmarks/old.md", "reason": "rgpignore"}],
+            version="RGP/2.1",
+        )
+        reader = Reader(raw)
+        self.assertTrue(reader.overview()["snapshot_complete"])
+        self.assertEqual(reader.overview()["intentionally_ignored_files"], 1)
 
 
 if __name__ == "__main__":

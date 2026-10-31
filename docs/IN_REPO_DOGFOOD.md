@@ -1,15 +1,13 @@
 # Использование RGP для разработки самого RGP
 
-**Приоритет:** Кира сначала читает маленький Git-отслеживаемый
-`REPO_CONTEXT.rgpmi`, скачивает `REPO_CONTEXT.rgp` в песочницу как файл,
-не засоряя контекст модели Base64, а затем изучает исходники через Reader.
+**Приоритет:** Кира сначала читает заголовок и встроенные инструкции единственного файла `REPO_CONTEXT.rgp`, затем запрашивает только нужные диапазоны текста через GitHub-коннектор или Reader.
 Это обязательный dogfooding, отражённый в [AGENTS.md](../AGENTS.md).
 
 ## Обычный цикл
 
 ```sh
 python3 scripts/repo_dogfood.py check --repo .
-python3 python/rgpmi.py --metadata REPO_CONTEXT.rgpmi
+python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp overview
 python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp overview
 python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp tree --prefix python/
 python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp search 'Reader' --prefix python/
@@ -27,17 +25,17 @@ python3 scripts/repo_dogfood.py export --repo . --output /tmp/rgp-context
 
 Снимок не может включать собственные байты и одновременно
 указывать на Git commit, содержащий само это приложение, без
-рекурсии. Генератор **всегда исключает `REPO_CONTEXT.rgp` и `REPO_CONTEXT.rgpmi`**.
+рекурсии. Генератор **всегда исключает `REPO_CONTEXT.rgp`**.
 Автоматическое обновление делается двумя коммитами:
 
 1. **A**: исходники проекта (например, объединённый PR).
 2. Сборка детерминированного RGP на A, где `source_commit=A`.
-3. **B**: коммит только `REPO_CONTEXT.rgp` и `REPO_CONTEXT.rgpmi`.
+3. **B**: коммит только `REPO_CONTEXT.rgp`.
 
 Поэтому `HEAD=B`, а манифест RGP честно указывает `A`.
 `scripts/repo_dogfood.py check` проверяет, что A является
 предком B, а `git diff A B` **не содержит никаких изменений,
-кроме двух файлов публикации, `.rgp` и `.rgpmi`**. Только тогда RGP применим как
+кроме одного файла публикации, `.rgp`**. Только тогда RGP применим как
 контекст исходников B. При изменении любого другого файла
 после A отказ с `STALE_SNAPSHOT` и явная повторная сборка.
 
@@ -52,7 +50,7 @@ python3 scripts/repo_dogfood.py export --repo . --output /tmp/rgp-context
 при обновлении main создаёт снимок точного `GITHUB_SHA`,
 проверяет Rust и Python Reader, экспортирует файлы в песочницу,
 публикует независимый SHA в Actions summary, загружает ZIP,
-а затем **коммитит оба файла, `.rgp` и `.rgpmi`, в main**. GitHub Actions не требуется для чтения пары напрямую из Git.
+а затем **коммитит оба файла, `.rgp`, в main**. GitHub Actions не требуется для чтения файла напрямую из Git.
 
 Бот создаёт commit только при изменении снимка, не переписывает
 другие файлы, не использует force push. Коммит бота сделан
@@ -68,7 +66,7 @@ python3 scripts/repo_dogfood.py export --repo . --output /tmp/rgp-context
 ```sh
 task rgp:refresh
 # Проверить новую версию, затем сделать отдельный Git commit,
-# меняющий ТОЛЬКО REPO_CONTEXT.rgp и REPO_CONTEXT.rgpmi. После commit:
+# меняющий ТОЛЬКО REPO_CONTEXT.rgp. После commit:
 task rgp:check
 ```
 
