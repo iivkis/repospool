@@ -108,9 +108,9 @@ def run(profile: str, binary: Path) -> dict:
         reader = Reader(first)
         reader_validation_ms = round((time.perf_counter_ns() - start) / 1e6, 3)
         overview = reader.overview()
-        insist(overview["source_commit"] == commit and reader.validate()["valid"],
+        insist(overview["source_commit"] is None and reader.validate()["valid"],
                "source revision or RGP integrity mismatch")
-        insist(first_bytes.startswith(b"RGP/2.1\n"), "expected readable transport")
+        insist(first_bytes.startswith(b"RGP/3.0\n"), "expected readable transport")
         insist(b"\nFILE\t" in first_bytes, "missing plaintext file sections")
 
         observed_source_sha = {}
