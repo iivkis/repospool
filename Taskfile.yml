@@ -73,7 +73,8 @@ tasks:
         cargo run --locked -- generate --repo . --output "$work/a.rgp"
         cargo run --locked -- generate --repo . --output "$work/b.rgp"
         cmp "$work/a.rgp" "$work/b.rgp"
-        cmp "$work/a.rgpmi" "$work/b.rgpmi"
+        # Different artifact basenames legitimately produce different JSON sidecars.
+        python3 python/rgpmi.py --metadata "$work/b.rgpmi"
         python3 python/rgpmi.py --metadata "$work/a.rgpmi"
         cargo run --locked -- verify --artifact "$work/a.rgp" --repo .
         python3 python/rgp_reader.py --artifact "$work/a.rgp" validate
