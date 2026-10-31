@@ -1,6 +1,8 @@
 use anyhow::{anyhow, ensure, Context, Result};
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use clap::{Parser, Subcommand};
+
+mod plain;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashSet};
@@ -311,6 +313,16 @@ fn snapshot(repo: &Path, rev: &str) -> Result<(Manifest, BTreeMap<String, Vec<u8
             continue;
         }
         let bytes = git_blobs.read(object, object_size)?;
+        // New RGP/2.0 is intended to be read directly by an AI agent.
+        // Do not smuggle binary bytes, invalid UTF-8 or NUL into a text file.
+        // Record each skipped source explicitly as incomplete coverage.
+        if std::str::from_utf8(&bytes).is_err() || bytes.contains(&0) {
+            manifest.excluded.push(Exclusion {
+                path: path.into(),
+                reason: "non_text".into(),
+            });
+            continue;
+        }
         total += bytes.len();
         let digest = sha(&bytes);
         let blob = format!("files/{digest}");
@@ -596,18 +608,13 @@ fn generate(repo: &Path, output: &Path, rev: &str) -> Result<()> {
         "RESOURCE_LIMIT: manifest exceeds 16 MiB"
     );
 
-    // Small bounded archives use seekable memory: no per-member disk seeks.
-    // Large archives stay file-backed to keep peak memory predictable.
-    let prepared = prepare_zip(output, &manifest_data, &blobs)?;
+    // RGP/2.0 stores original UTF-8 source directly, without ZIP or Base64.
+    // Length-framed sections preserve exact newline sequences.
+    let (staged, mut file) = StagedOutput::create(output)?;
+    let artifact_size = plain::write_plain(&mut file, &manifest, &blobs)?;
     drop(blobs);
     drop(manifest_data);
     drop(manifest);
-
-    let (staged, mut file) = StagedOutput::create(output)?;
-    let artifact_size = match &prepared {
-        PreparedZip::Memory(bytes) => stream_transport(Cursor::new(bytes.as_slice()), &mut file)?,
-        PreparedZip::File(archive) => stream_transport(fs::File::open(&archive.path)?, &mut file)?,
-    };
     file.sync_all()?;
     drop(file);
     verify(&staged.path)?;
@@ -622,7 +629,7 @@ fn generate(repo: &Path, output: &Path, rev: &str) -> Result<()> {
     let metadata = AgentMetadata {
         format: "RGP-MI/1.0",
         artifact: file_name,
-        transport: "RGP/1.2",
+        transport: "RGP/2.0",
         artifact_sha256: hash_file(&staged.path)?,
         artifact_bytes: artifact_size,
         source_commit: &source_commit,
@@ -726,6 +733,12 @@ fn parse_transport(path: &Path) -> Result<Vec<u8>> {
 }
 
 fn verify(path: &Path) -> Result<Manifest> {
+    // Plain source text is the default; legacy ZIP+Base64 stays readable.
+    let mut magic = [0u8; 8];
+    let got = fs::File::open(path)?.read(&mut magic)?;
+    if got == 8 && &magic == b"RGP/2.0\n" {
+        return plain::verify_plain(path);
+    }
     let payload = parse_transport(path)?;
     let mut archive = ZipArchive::new(Cursor::new(payload))?;
     ensure!(
@@ -792,6 +805,10 @@ fn verify(path: &Path) -> Result<Manifest> {
     let manifest: Manifest = serde_json::from_slice(
         &manifest_bytes.ok_or_else(|| anyhow!("UNSUPPORTED_FORMAT: missing manifest"))?,
     )?;
+    verify_manifest(manifest, blobs)
+}
+
+fn verify_manifest(manifest: Manifest, blobs: BTreeMap<String, u64>) -> Result<Manifest> {
     ensure!(
         manifest.schema_version == "1.0",
         "UNSUPPORTED_FORMAT: manifest version"
@@ -859,6 +876,7 @@ fn verify(path: &Path) -> Result<Manifest> {
                     | "submodule_unavailable"
                     | "size_limit"
                     | "entry_limit"
+                    | "non_text"
             ),
             "UNSUPPORTED_FORMAT: exclusion reason"
         );
