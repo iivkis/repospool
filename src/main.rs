@@ -3,6 +3,7 @@ use base64::{engine::general_purpose::STANDARD, Engine as _};
 use clap::{Parser, Subcommand};
 
 mod plain;
+mod lean;
 mod rgpignore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -591,7 +592,7 @@ fn generate(repo: &Path, output: &Path, rev: &str) -> Result<()> {
     // sources directly, without ZIP, Base64, or a metadata sidecar.
     // Length-framed sections preserve exact newline sequences.
     let (staged, mut file) = StagedOutput::create(output)?;
-    let artifact_size = plain::write_plain(&mut file, &manifest, &blobs)?;
+    let artifact_size = lean::write_lean(&mut file, &manifest, &blobs)?;
     drop(blobs);
     drop(manifest);
     file.sync_all()?;
@@ -686,6 +687,9 @@ fn verify(path: &Path) -> Result<Manifest> {
     // Plain source text is the default; legacy ZIP+Base64 stays readable.
     let mut magic = [0u8; 8];
     let got = fs::File::open(path)?.read(&mut magic)?;
+    if got == 8 && &magic == b"RGP/3.0\n" {
+        return lean::verify_lean(path);
+    }
     if got == 8 && (&magic == b"RGP/2.0\n" || &magic == b"RGP/2.1\n") {
         return plain::verify_plain(path);
     }
