@@ -110,7 +110,7 @@ def check(repo: Path, rust_cli: Path) -> dict:
         assert oversized_index != data
         for label, bad, code in (
             ("truncation", data[:-10], "TRUNCATED_ARTIFACT"),
-            ("unknown version", data.replace(data.split(b"\\n", 1)[0], b"RGP/9.0", 1), "UNSUPPORTED_FORMAT"),
+            ("unknown version", data.replace(data.split(b"\n", 1)[0], b"RGP/9.0", 1), "UNSUPPORTED_FORMAT"),
             ("oversized index", oversized_index, "RESOURCE_LIMIT"),
         ):
             try:
