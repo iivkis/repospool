@@ -65,7 +65,6 @@ pub(super) fn write_lean(
         let newlines = source.iter().filter(|&&c| c == b'\n').count();
         let lines = newlines + usize::from(!source.is_empty() && !source.ends_with(b"\n"));
         file_lines.push((newlines, lines));
-
     }
     let ignored = manifest
         .excluded
