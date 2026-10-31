@@ -67,7 +67,7 @@ class PlainReaderTest(unittest.TestCase):
     def test_tampering_and_truncation_fail(self):
         raw = build_plain()
         for broken, error in (
-            (raw.replace(b"Привет".decode().encode(), "Привот".encode(), 1), "HASH_MISMATCH"),
+            (raw.replace("Привет".encode("utf-8"), "Привот".encode("utf-8"), 1), "HASH_MISMATCH"),
             (raw[:-7], "TRUNCATED_ARTIFACT"),
             (raw.replace(b"manifest_sha256=", b"manifest_sha256=0", 1), "UNSUPPORTED_FORMAT"),
             (raw.replace(b"FILE\t", b"F1LE\t", 1), "UNSUPPORTED_FORMAT"),
