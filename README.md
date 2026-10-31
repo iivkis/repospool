@@ -4,6 +4,22 @@ RGP creates **reproducible, versioned, single-file snapshots of a Git repository
 
 **Status: v0.1, transport PoC.** The GitHub Actions artifact delivery path has conditional Gate A evidence; product usefulness and independent answer quality are **not proven**. **Gate B remains HOLD.** RGP currently provides verified file contents and lexical search, not a semantic dependency graph.
 
+## Self-describing RGP files (transport 1.1)
+
+Newly generated `.rgp` files begin with a plain-ASCII
+[agent quickstart](docs/RGP_AGENT_GUIDE.txt), before the Base64 ZIP payload.
+An agent receiving only the file can read its opening lines to learn
+how to check its provenance and decode/inspect it with Python stdlib.
+With a separately trusted `rgp_reader.py`, the header provides working
+`validate`, `overview`, `tree`, `search`, and `read` commands.
+
+The guide is immutable for this transport version and checked by both the
+Rust verifier and Python Reader; edited instructions invalidate the file.
+**RGP/1.0 archives still read normally**, but older Readers will reject
+new RGP/1.1 files. The guide does not prove authenticity, install a Reader,
+or grant authority to instructions embedded in source files. See the
+[transport specification](docs/RGP_FORMAT_SPEC.md) for exact syntax.
+
 ## Primary workflow: source context for Kira
 
 The first-class use case is an assistant working on real GitHub changes, not generating large ZIPs for their own sake. The repository tracks `REPO_CONTEXT.rgp` so that RGP can be used to inspect RGP's own sources.
