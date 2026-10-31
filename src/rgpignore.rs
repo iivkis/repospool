@@ -34,6 +34,14 @@ impl Drop for ScratchRepo {
 }
 
 pub(super) fn ignored_paths(root: &Path, commit: &str, listing: &[u8]) -> Result<HashSet<String>> {
+    // Zero allocations and no second per-path processing for repositories
+    // without a pinned .rgpignore (including synthetic 50k member fixtures).
+    if !listing
+        .split(|byte| *byte == 0)
+        .any(|entry| entry.ends_with(b"\t.rgpignore"))
+    {
+        return Ok(HashSet::new());
+    }
     let mut found = false;
     let mut paths = Vec::new();
     let mut permitted = HashSet::new();
