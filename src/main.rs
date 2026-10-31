@@ -502,7 +502,7 @@ fn main() -> Result<()> {
     match Cli::parse().command {
         Commands::Generate { repo, output, rev } => {
             generate(&repo, &output_path(&repo, output), &rev)
-        },
+        }
         Commands::Verify { artifact, repo } => {
             let manifest = verify(&artifact)?;
             if let Some(repo) = repo {
@@ -565,7 +565,6 @@ mod tests {
         assert!(!guide.contains("REPO_CONTEXT.rgp"));
     }
 
-
     #[test]
     fn generate_accepts_positional_repository_and_defaults_to_its_root() {
         let parsed = Cli::try_parse_from(["rgp", "generate", "some-project"]).unwrap();
@@ -606,8 +605,14 @@ mod tests {
         fs::write(repo.join("source.txt"), "Hello from another repository!\n").unwrap();
         run_git(&["add", "source.txt"]);
         run_git(&[
-            "-c", "user.name=RGP Test", "-c", "user.email=rgp@example.invalid",
-            "commit", "-q", "-m", "Initial source",
+            "-c",
+            "user.name=RGP Test",
+            "-c",
+            "user.email=rgp@example.invalid",
+            "commit",
+            "-q",
+            "-m",
+            "Initial source",
         ]);
         let output = output_path(&repo, None);
         generate(&repo, &output, "HEAD").unwrap();
