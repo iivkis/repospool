@@ -73,6 +73,8 @@ tasks:
         cargo run --locked -- generate --repo . --output "$work/a.rgp"
         cargo run --locked -- generate --repo . --output "$work/b.rgp"
         cmp "$work/a.rgp" "$work/b.rgp"
+        cmp "$work/a.rgpmi" "$work/b.rgpmi"
+        python3 python/rgpmi.py --metadata "$work/a.rgpmi"
         cargo run --locked -- verify --artifact "$work/a.rgp" --repo .
         python3 python/rgp_reader.py --artifact "$work/a.rgp" validate
         python3 python/rgp_reader.py --artifact "$work/a.rgp" read --path README.md
@@ -136,10 +138,11 @@ tasks:
       - python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp tree --prefix python/
 
   rgp:refresh:
-    desc: Regenerate tracked RGP at this Git commit; commit only REPO_CONTEXT.rgp separately
+    desc: Regenerate tracked RGP + RGP-MI; commit both publication files separately
     cmds:
       - cargo run --locked -- generate --repo . --rev HEAD --output REPO_CONTEXT.rgp
       - python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp validate
+      - python3 python/rgpmi.py --metadata REPO_CONTEXT.rgpmi
 
   generate:
     desc: Generate a snapshot (override REPO and ARTIFACT as needed)
