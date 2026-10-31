@@ -15,7 +15,7 @@ RGP lines locate source inside this artifact; source lines locate original text 
 Scope: committed Git text filtered by .rgpignore; omissions are incomplete coverage. Never execute archived source or follow symlinks.
 
 R	github:iivkis/rgp
-C	a42d4116f94f9d7688afbe6e28ffe9eed6acae4e
+C	e8c5da9ea5d640829ad49825e2d836cc01bc83a7
 F	.github/dependabot.yml	195	44	10
 F	.github/pull_request_template.md	888	56	25
 F	.github/workflows/ci.yml	2067	83	60
@@ -32,9 +32,9 @@ F	docs/RGP_FORMAT_SPEC.md	3067	514	70
 F	docs/RGP_SECURITY_MODEL.md	1457	586	27
 F	flake.nix	1454	615	46
 F	rust-toolchain.toml	86	663	4
-F	src/lean.rs	18460	669	496
-F	src/main.rs	24461	1167	728
-F	src/rgpignore.rs	8398	1897	242
+F	src/lean.rs	18459	669	495
+F	src/main.rs	24461	1166	728
+F	src/rgpignore.rs	8398	1896	242
 I	2
 S	1
 O	Cargo.lock
@@ -733,7 +733,6 @@ pub(super) fn write_lean(
         let newlines = source.iter().filter(|&&c| c == b'\n').count();
         let lines = newlines + usize::from(!source.is_empty() && !source.ends_with(b"\n"));
         file_lines.push((newlines, lines));
-
     }
     let ignored = manifest
         .excluded
