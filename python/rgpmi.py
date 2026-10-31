@@ -14,8 +14,8 @@ from pathlib import Path
 from rgp_reader import Reader, RgpError, _require
 
 MAX_METADATA = 16 * 1024
-SHA256 = re.compile(r"[0-9a-f]{64}\\Z")
-COMMIT = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\\Z")
+SHA256 = re.compile(r"[0-9a-f]{64}\Z")
+COMMIT = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
 FIELDS = {
     "format", "artifact", "transport", "artifact_sha256", "artifact_bytes",
     "source_commit", "snapshot_complete", "instructions",
