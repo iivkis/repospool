@@ -19,6 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
 from rgp_reader import Reader, RgpError  # noqa: E402
+from rgpmi import validate as validate_sidecar  # noqa: E402
 
 # Freeze task descriptions BEFORE inspecting the generated RGP.
 # Their answers must agree with the original Git commit, not another RGP.
@@ -57,6 +58,10 @@ def check(repo: Path, rust_cli: Path) -> dict:
         run(*command, "--output", str(second))
         data = first.read_bytes()
         assert data == second.read_bytes(), "nondeterministic RGP bytes"
+        first_meta = validate_sidecar(first.with_suffix(".rgpmi"), expected_commit=commit)
+        second_meta = validate_sidecar(second.with_suffix(".rgpmi"), expected_commit=commit)
+        assert first_meta["sha256"] == second_meta["sha256"], "nondeterministic RGP sidecar digest"
+        evidence["checks"].append("RGP-MI full-artifact SHA and Git commit agreement")
         evidence["artifact_sha256"] = hashlib.sha256(data).hexdigest()
         evidence["artifact_bytes"] = len(data)
         evidence["checks"].append("deterministic RGP generated twice")

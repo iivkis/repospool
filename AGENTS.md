@@ -27,12 +27,18 @@ must be explicit. The agent must not claim to have used RGP when it
 actually relied only on GitHub. If RGP is missing/stale/unverifiable,
 use direct GitHub and disclose the fallback.
 
-To obtain fresh RGP source for work on this repository, use the
-[main-commit sandbox snapshot workflow](.github/workflows/kira-sandbox-rgp.yml).
-Read the **independent SHA-256 and source commit from GitHub Actions job
-summary** before downloading its RGP artifact. Reject a snapshot if
-the GitHub branch advanced beyond the intended commit. Avoid relying
-on frozen Gate B corpus RGPs for coding against current `main`.
+To obtain current RGP source **without requiring GitHub Actions**, read the
+small Git-tracked `REPO_CONTEXT.rgpmi` first (including the SHA-256,
+source commit and agent instructions). Download its sibling
+`REPO_CONTEXT.rgp` as a **binary/file response** from the same pinned
+Git revision, for instance by `curl` against `raw.githubusercontent.com`
+when the sandbox allows network access. Verify the full file against
+the sidecar with `python3 python/rgpmi.py --metadata REPO_CONTEXT.rgpmi`,
+and check the pinned source revision/ancestry independently. Do NOT
+retrieve the full Base64 archive into the model's textual context.
+If file download is blocked, disclose the fallback rather than using
+Actions or dumping Base64 as a hidden requirement. GitHub Actions
+artifacts remain an **optional** distribution and CI mechanism.
 
 For sandbox-based understanding, when a verified RGP is available, an
 inert source workspace can now be exported using
@@ -61,8 +67,7 @@ Direct Reader access in Python is the default when it is simpler.
 
 ## Mandatory in-repository RGP dogfooding
 
-**The root `REPO_CONTEXT.rgp` is a first-class, Git-tracked development
-input to this very project.** On each RGP feature, bugfix or refactoring
+**The root `REPO_CONTEXT.rgp` and `REPO_CONTEXT.rgpmi` form a first-class, Git-tracked development input to this project.** On each RGP feature, bugfix or refactoring
 task, Kira must **check and inspect the project's own .rgp before editing**
 rather than treating an Actions download or raw GitHub file fetching as
 the normal first step:
@@ -76,24 +81,25 @@ python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp search 'def read' --pre
 python3 scripts/repo_dogfood.py export --repo . --output /tmp/rgp-own-context
 ```
 
-The same flow works with Kira's Python sandbox after downloading the
-tracked `REPO_CONTEXT.rgp` via connected GitHub. The read-only snapshot
+The same flow works with Kira's Python sandbox after retrieving the tracked
+`.rgpmi` as text and the `.rgp` as a downloaded file, without passing
+Base64 through the model context. The read-only snapshot
 is *context for planning*, never a substitute for editing a live Git
 checkout or rechecking GitHub `main` before writing.
 
 **Self-snapshot paradox resolved explicitly:** generation excludes
-`REPO_CONTEXT.rgp`. Publishing the archive creates a new Git commit,
+`REPO_CONTEXT.rgp` and its `.rgpmi` sidecar. Publishing both creates a new Git commit,
 so `source_commit` in its manifest normally identifies the **previous
 code commit**, *not* literal current HEAD. `repo_dogfood.py check`
 accepts this difference **only when `git diff` confirms all tracked
-paths other than `REPO_CONTEXT.rgp` are unchanged** and the source
+paths other than `REPO_CONTEXT.rgp` and `REPO_CONTEXT.rgpmi` are unchanged** and the source
 commit is an ancestor. A stale snapshot, tampered/untracked RGP, partial
 source or non-ancestor must **fail closed**. Never weaken this to a
 comparison of the archive's internal checksum with itself.
 
 [The main-branch snapshot workflow](.github/workflows/kira-sandbox-rgp.yml)
-updates the tracked file when code changes, while also publishing the
-usual Actions ZIP and independent SHA. Locally use `task rgp:check`,
+updates both tracked files when code changes, while optionally publishing an
+Actions ZIP and independent SHA. Locally use `task rgp:check`,
 `task rgp:context`, `task rgp:refresh` as appropriate. A pull request
 may intentionally carry the older main snapshot while its source is
 being edited; use the verified base snapshot for discovery, then inspect
@@ -146,6 +152,7 @@ For changes affecting the generator, transport, Reader or their contracts:
    ```sh
    cargo run --locked -- generate --repo . --output /tmp/agent-check.rgp
    cargo run --locked -- verify --artifact /tmp/agent-check.rgp --repo .
+   python3 python/rgpmi.py --metadata /tmp/agent-check.rgpmi
    python3 python/rgp_reader.py --artifact /tmp/agent-check.rgp validate
    python3 python/rgp_reader.py --artifact /tmp/agent-check.rgp overview
    python3 python/rgp_reader.py --artifact /tmp/agent-check.rgp tree

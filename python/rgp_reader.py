@@ -24,7 +24,7 @@ MAX_CURSOR = 8192
 MAX_PATH_BYTES = 4096
 MAX_OVERVIEW_EXCLUSIONS = 100
 MAX_HEADER = 4096
-# RGP/1.1 guide text is canonical and compiled into the Rust producer.
+# Only legacy RGP/1.1 embeds this guide. New RGP/1.2 uses a .rgpmi sidecar.
 # Pin its digest here so the trusted Reader stays standalone in a sandbox.
 AGENT_GUIDE_SHA256 = "9585596e0f091096bac8c67163a50fb40ab789ee72f49089f80557acbec4740d"
 HEX = re.compile(r"[0-9a-f]{64}\Z")
@@ -130,8 +130,8 @@ def decode_transport(source: bytes) -> bytes:
         raise RgpError("TRUNCATED_ARTIFACT", "missing separator") from exc
     _require(len(header) <= MAX_HEADER, "RESOURCE_LIMIT", "header too large")
     lines = header.split(b"\n")
-    if lines[0] == b"RGP/1.0":
-        _require(len(lines) == 4, "UNSUPPORTED_FORMAT", "legacy header fields")
+    if lines[0] in (b"RGP/1.0", b"RGP/1.2"):
+        _require(len(lines) == 4, "UNSUPPORTED_FORMAT", "plain header fields")
         fields = lines[1:]
     elif lines[0] == b"RGP/1.1":
         _require(len(lines) >= 7, "UNSUPPORTED_FORMAT", "missing agent guide")

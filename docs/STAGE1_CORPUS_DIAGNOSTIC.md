@@ -111,3 +111,9 @@ included-file counts and exact read/search source matches. The report marks
 `pinned_v1_format_compatibility=SOURCE_EQUIVALENCE_ONLY` for v1.1 instead
 of claiming an exact legacy byte match. The old frozen checkpoint is preserved;
 an independently pinned RGP/1.1 artifact hash is still future evidence.
+
+**Transport 1.2:** Like 1.1, the new lean RGP/1.2 intentionally differs
+from frozen 1.0 bytes. Stage 1 checks pinned Git source equality, Reader
+validity and deterministic output, without pretending the legacy archive
+hash is a 1.2 checkpoint. The external .rgpmi SHA is verified separately
+in the generator smoke and in-repository publication checks.
