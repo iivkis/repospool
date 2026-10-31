@@ -83,7 +83,6 @@ struct Exclusion {
     reason: String,
 }
 
-#[derive(Serialize)]
 fn sha(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
 }
