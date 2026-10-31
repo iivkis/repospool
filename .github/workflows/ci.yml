@@ -47,7 +47,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: DeterminateSystems/nix-installer-action@v17
+      - uses: DeterminateSystems/nix-installer-action@v23
       - run: nix flake check --no-update-lock-file --show-trace
       - run: nix build --no-update-lock-file .#repospool --out-link "$RUNNER_TEMP/repospool-package"
       - name: Nix-installed CLI generates and verifies a standalone artifact
