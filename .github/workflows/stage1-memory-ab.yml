@@ -50,7 +50,8 @@ jobs:
           assert x["gate_b"] == "HOLD"
           if x["status"] == "SKIP":
               assert x["reason"] == "TRANSPORT_VERSION_CHANGED"
-              assert (x["baseline_version"], x["candidate_version"]) == ("RGP/1.0", "RGP/1.1")
+              assert x["baseline_version"] != x["candidate_version"]
+              assert x["candidate_version"] == "RGP/1.2"
           else:
               assert x["status"] == "PASS"
               assert len(x["profiles"]) == 5
