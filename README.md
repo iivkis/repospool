@@ -4,45 +4,46 @@ RGP creates **reproducible, versioned, single-file snapshots of a Git repository
 
 **Status: v0.1, transport PoC.** The GitHub Actions artifact delivery path has conditional Gate A evidence; product usefulness and independent answer quality are **not proven**. **Gate B remains HOLD.** RGP currently provides verified file contents and lexical search, not a semantic dependency graph.
 
-## Readable RGP/2.0 + small RGP-MI instructions
+## Self-contained, readable RGP/2.1
 
-The generator publishes two Git-tracked siblings:
+The generator now publishes **one file**, `REPO_CONTEXT.rgp`. Its first
+lines contain the transport version, pinned Git source commit, scoped
+`snapshot_complete`, length/hash of the **embedded agent guide**,
+length/hash of the JSON manifest, then the guide, manifest, and original
+UTF-8 source files. There is **no .rgpmi sidecar**, ZIP, Base64 or
+compression in the current transport.
 
-- `REPO_CONTEXT.rgpmi`: a short JSON document with the agent
-  instructions, source commit and SHA-256 of the actual RGP.
-- `REPO_CONTEXT.rgp`: **readable UTF-8** with a JSON manifest and
-  each source file in its original text, **without ZIP, compression,
-  Base64 or escaped source contents**.
-
-A coding agent can now read **selected line ranges** of the `.rgp`
-using the existing GitHub text connector, without downloading the
-whole file, decoding an archive, or filling context with Base64.
-It should start with `.rgpmi`, then inspect `.rgp` header, manifest,
-and only the relevant paths/lines. Reading the entire artifact
-would *still* consume tokens. A real Git checkout and independent
-provenance remain necessary for editing code.
-
-For local verification or safe source browsing:
+Read the first eight header lines through the GitHub connector, then
+the short guide and manifest, and retrieve only the needed source FILE
+sections or line ranges. Do **not** load the entire RGP into model
+context. The standalone Python Reader verifies all lengths, guide/
+manifest/source hashes, and the agreement of header provenance and
+manifest. The embedded guide is repository data, not a trusted system
+instruction.
 
 ```sh
-python3 python/rgpmi.py --metadata REPO_CONTEXT.rgpmi
+python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp validate
+python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp overview
 python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp tree --prefix src/
 python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp read --path src/main.rs
 ```
 
-**UTF-8 only:** binary, NUL-bearing and non-UTF8 Git files cannot be
-displayed as raw readable source. They are explicitly excluded with
-`non_text`; the snapshot reports **partial** coverage rather than
-pretending they were preserved. Source files that are included retain
-their exact original UTF-8 bytes, even CRLF, tabs or missing final LF.
-Historical RGP/1.0, 1.1 and 1.2 ZIP+Base64 files remain readable in
-the upgraded Reader. See the
-[format specification](docs/RGP_FORMAT_SPEC.md).
+**Integrity:** The artifact cannot embed its own complete SHA-256
+without self-reference. For whole-file authenticity, compare its Git
+blob against a trusted publication commit or use an independently
+supplied SHA-256. The embedded SHA-256 values protect the guide, manifest,
+and individual sources from accidental corruption, but are not an
+independent authenticity guarantee.
+
+Historical RGP/1.0–1.2 and RGP/2.0 archives remain readable by the
+updated Reader. Binary, NUL-bearing and invalid-UTF-8 files remain
+excluded; these are reported as partial coverage within the configured
+source scope. See [format specification](docs/RGP_FORMAT_SPEC.md).
 
 ## Selective context with .rgpignore
 
 The committed root [`.rgpignore`](.rgpignore) tells the generator which
-Git-tracked paths do **not** need to be bundled in readable RGP/2.0.
+Git-tracked paths do **not** need to be bundled in readable RGP/2.1.
 Like `.gitignore`, it accepts `*`, `**`, anchored patterns and
 `!` re-inclusion. Unlike `.gitignore`, it **does not change Git
 tracking**. It only controls what appears in RGP at the pinned Git
