@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-rgp3-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -48,7 +48,6 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: DeterminateSystems/nix-installer-action@v17
-      - uses: DeterminateSystems/magic-nix-cache-action@v11
       - run: nix flake check --no-update-lock-file --show-trace
       - run: nix build --no-update-lock-file .#rgp --out-link "$RUNNER_TEMP/rgp-package"
       - name: Nix-installed CLI generates and verifies a standalone artifact
