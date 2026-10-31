@@ -2,7 +2,7 @@
 """Stage 1: 50,000-member RGP boundary from a real synthetic Git commit.
 
 Generates 50,005 distinct Git blobs using git fast-import (no filesystem
-checkout), tests the 49,999-blob + manifest ZIP boundary, verifies exact
+checkout), tests the bounded 50,000-file snapshot boundary, verifies exact
 source reads, pagination, deterministic bytes and honest exclusions.
 CI artifacts contain JSON measurements only. No model or third-party Python.
 """
@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import io
 import json
 import os
 import resource
@@ -18,7 +17,6 @@ import subprocess
 import sys
 import tempfile
 import time
-import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]

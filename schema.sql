@@ -1,8 +1,9 @@
--- RGP SQLite index schema v0.1 (design contract, NOT shipped by MVP-A).
--- Compatible with SQLite 3.35+: no JSON1, FTS5, generated columns or STRICT tables required.
--- All byte-for-byte originals remain in files/<sha256> inside RGP, never in this DB.
--- Consumers MUST verify the outer RGP and ZIP before extracting this database, and
--- MUST open an extracted copy read-only with PRAGMA query_only=ON.
+-- Optional future SQLite index proposal, NOT included in RGP/0.1.0.
+-- The only supported RGP transport is length-framed UTF-8 source text,
+-- with no embedded ZIP, manifest, hashes, source commit, or database.
+-- Any future index must derive from independently authenticated source,
+-- and consumers must open SQLite read-only with PRAGMA query_only=ON.
+-- This SQL is a design artifact, not a supported Reader feature.
 PRAGMA foreign_keys = ON;
 PRAGMA user_version = 1;
 

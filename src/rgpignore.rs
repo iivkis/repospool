@@ -217,7 +217,7 @@ mod tests {
     }
 
     #[test]
-    fn repositories_without_rgpignore_keep_legacy_inclusion() -> Result<()> {
+    fn repositories_without_rgpignore_keep_default_inclusion() -> Result<()> {
         let dir = ScratchRepo::create()?;
         git(&dir.0, &["init", "-q"])?;
         add_file(&dir.0, "src/code.py", "print('source')\n")?;

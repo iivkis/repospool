@@ -9,14 +9,12 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import io
 import json
 import os
 import subprocess
 import sys
 import tempfile
 import time
-import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -49,7 +47,7 @@ def make_source(repo: Path, profile: str) -> tuple[str, dict[str, bytes]]:
     originals: dict[str, bytes] = {}
 
     def noise(seed: bytes, size: int) -> bytes:
-        # Deterministic ASCII high-entropy data, not binary ZIP fixtures.
+        # Deterministic ASCII high-entropy data, not encoded transport fixtures.
         return hashlib.shake_256(seed).digest(size // 2 + size % 2).hex().encode()[:size]
 
     if profile == "many-files":

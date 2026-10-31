@@ -94,7 +94,7 @@ def run(artifact: Path, source_repo: Path, repository: str, plan: Path) -> dict:
             "rgp_status", "rgp_tree", "rgp_search", "rgp_read", "rgp_context"}
         status = client.tool("rgp_status")["overview"]
         assert status["source_commit"] in (None, repo["commit"])
-        # RGP/3.0 leaves authenticity to the pinned Git source comparisons.
+        # RGP/0.1.0 leaves authenticity to the pinned Git source comparisons.
         assert status["snapshot_complete"]
         assert status["file_count"] > 0
         assert status["index_coverage"] == "not_indexed"

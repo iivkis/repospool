@@ -33,7 +33,7 @@ def run(repository: str, artifact: Path, source_repo: Path, output: Path) -> dic
     reader = Reader(artifact)
     hash_free = reader.overview()["source_commit"] is None
     # The historic SHA checkpoint is frozen to the old transport. In
-    # RGP/3.0 we can only check this run's artifact hash locally, then
+    # RGP/0.1.0 we can only check this run's artifact hash locally, then
     # independently compare every exported file to pinned Git.
     trusted = hashlib.sha256(artifact.read_bytes()).hexdigest() if hash_free else anchor["sha256"]
     # An authenticated RGP from the wrong commit must be rejected before

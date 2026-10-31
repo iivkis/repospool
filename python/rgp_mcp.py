@@ -216,7 +216,7 @@ def serve(server: RgpMcp) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--artifact", type=Path, required=True,
-                        help="Previously authenticated local RGP/1.0 path")
+                        help="Previously authenticated local RGP/0.1.0 path")
     args = parser.parse_args()
     try:
         serve(RgpMcp(Reader(args.artifact)))

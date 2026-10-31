@@ -1,4 +1,4 @@
-# RGP/3.0 context filter. Gitignore syntax; evaluated at the pinned Git commit.
+# RGP/0.1.0 context filter. Gitignore syntax; evaluated at the pinned Git commit.
 # These paths stay in Git: an agent can fetch them directly when needed.
 # This file itself is ALWAYS included in the RGP and documents its scope.
 #
@@ -12,9 +12,8 @@
 /docs/GATE_B_REVIEW.md
 /docs/gate-a/
 
-# Binary/encoded golden transports, which are especially wasteful in a text RGP.
+# Obsolete fixture directory, if restored for historical research.
 /tests/fixtures/
-/scripts/legacy_transport_fixture.py
 
 # Workflow and repository automation: easy to read from GitHub on demand.
 /.github/
