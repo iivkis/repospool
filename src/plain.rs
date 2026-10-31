@@ -31,10 +31,14 @@ pub(super) fn write_plain(
     );
     let guide = INLINE_AGENT_GUIDE.as_bytes();
     ensure!(guide.len() <= MAX_GUIDE, "RESOURCE_LIMIT: guide too large");
-    let complete = manifest.files.iter().all(|file| file.status != "pointer_only")
-        && manifest.excluded.iter().all(|entry| {
-            matches!(entry.reason.as_str(), "self_artifact" | "rgpignore")
-        });
+    let complete = manifest
+        .files
+        .iter()
+        .all(|file| file.status != "pointer_only")
+        && manifest
+            .excluded
+            .iter()
+            .all(|entry| matches!(entry.reason.as_str(), "self_artifact" | "rgpignore"));
     let mut writer = BufWriter::with_capacity(256 * 1024, &mut *output);
     write!(
         writer,
@@ -136,7 +140,10 @@ pub(super) fn verify_plain(path: &Path) -> Result<Manifest> {
             .strip_prefix(b"guide_sha256=")
             .ok_or_else(|| anyhow!("UNSUPPORTED_FORMAT: guide hash field"))?;
         ensure!(
-            hash.len() == 64 && hash.iter().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()),
+            hash.len() == 64
+                && hash
+                    .iter()
+                    .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()),
             "UNSUPPORTED_FORMAT: guide hash"
         );
         guide_metadata = Some((size, hash.to_vec()));
@@ -168,15 +175,25 @@ pub(super) fn verify_plain(path: &Path) -> Result<Manifest> {
         "UNSUPPORTED_FORMAT: header separator"
     );
     if let Some((length, hash)) = guide_metadata {
-        let end = pos.checked_add(length).ok_or_else(|| anyhow!("RESOURCE_LIMIT: guide length"))?;
-        let guide = bytes.get(pos..end).ok_or_else(|| anyhow!("TRUNCATED_ARTIFACT: guide"))?;
+        let end = pos
+            .checked_add(length)
+            .ok_or_else(|| anyhow!("RESOURCE_LIMIT: guide length"))?;
+        let guide = bytes
+            .get(pos..end)
+            .ok_or_else(|| anyhow!("TRUNCATED_ARTIFACT: guide"))?;
         ensure!(
             std::str::from_utf8(guide).is_ok() && !guide.contains(&0),
             "UNSUPPORTED_FORMAT: guide must be text"
         );
-        ensure!(sha(guide).as_bytes() == hash, "HASH_MISMATCH: embedded guide");
+        ensure!(
+            sha(guide).as_bytes() == hash,
+            "HASH_MISMATCH: embedded guide"
+        );
         pos = end;
-        ensure!(bytes.get(pos) == Some(&b'\n'), "TRUNCATED_ARTIFACT: guide separator");
+        ensure!(
+            bytes.get(pos) == Some(&b'\n'),
+            "TRUNCATED_ARTIFACT: guide separator"
+        );
         pos += 1;
     }
     let end = pos
@@ -253,10 +270,14 @@ pub(super) fn verify_plain(path: &Path) -> Result<Manifest> {
             declared_commit.as_deref() == Some(manifest.source_commit.as_str()),
             "HASH_MISMATCH: source commit header"
         );
-        let complete = manifest.files.iter().all(|file| file.status != "pointer_only")
-            && manifest.excluded.iter().all(|entry| {
-                matches!(entry.reason.as_str(), "self_artifact" | "rgpignore")
-            });
+        let complete = manifest
+            .files
+            .iter()
+            .all(|file| file.status != "pointer_only")
+            && manifest
+                .excluded
+                .iter()
+                .all(|entry| matches!(entry.reason.as_str(), "self_artifact" | "rgpignore"));
         ensure!(
             declared_complete == Some(complete),
             "HASH_MISMATCH: snapshot completeness header"
