@@ -3,6 +3,7 @@ use base64::{engine::general_purpose::STANDARD, Engine as _};
 use clap::{Parser, Subcommand};
 
 mod plain;
+mod rgpignore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashSet};
@@ -242,6 +243,7 @@ fn snapshot(repo: &Path, rev: &str) -> Result<(Manifest, BTreeMap<String, Vec<u8
         &["rev-parse", "--verify", &format!("{rev}^{{commit}}")],
     )?;
     let listing = git(root, &["ls-tree", "--full-tree", "-r", "-l", "-z", &commit])?;
+    let ignored = rgpignore::ignored_paths(root, &commit, &listing)?;
     let mut manifest = Manifest {
         schema_version: "1.0".into(),
         source_commit: commit,
@@ -276,6 +278,13 @@ fn snapshot(repo: &Path, rev: &str) -> Result<(Manifest, BTreeMap<String, Vec<u8
             manifest.excluded.push(Exclusion {
                 path: path.into(),
                 reason: "sensitive_path".into(),
+            });
+            continue;
+        }
+        if ignored.contains(path) {
+            manifest.excluded.push(Exclusion {
+                path: path.into(),
+                reason: "rgpignore".into(),
             });
             continue;
         }
@@ -608,7 +617,7 @@ fn generate(repo: &Path, output: &Path, rev: &str) -> Result<()> {
     let snapshot_complete = manifest
         .excluded
         .iter()
-        .all(|entry| entry.reason == "self_artifact");
+        .all(|entry| matches!(entry.reason.as_str(), "self_artifact" | "rgpignore"));
     let manifest_data = serde_json::to_vec(&manifest)?;
     ensure!(
         manifest_data.len() <= MAX_MANIFEST,
@@ -884,6 +893,7 @@ fn verify_manifest(manifest: Manifest, blobs: BTreeMap<String, u64>) -> Result<M
                     | "size_limit"
                     | "entry_limit"
                     | "non_text"
+                    | "rgpignore"
             ),
             "UNSUPPORTED_FORMAT: exclusion reason"
         );

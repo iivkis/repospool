@@ -70,6 +70,13 @@ MCP is optional: a sandbox process running an MCP server does **not**
 automatically register those tools with this ChatGPT session.
 Direct Reader access in Python is the default when it is simpler.
 
+The root [`.rgpignore`](.rgpignore) intentionally leaves large historical
+benchmarks, older reports, encoded golden fixtures, lockfiles and GitHub
+workflow files out of the readable snapshot. This is a **context filter**,
+not a Git ignore: use the GitHub connector to fetch excluded files
+on demand. The `.rgpignore` version comes from the pinned Git revision,
+and `snapshot_complete` measures its selected scope, not the entire Git tree.
+
 ## Mandatory in-repository RGP dogfooding
 
 **The root `REPO_CONTEXT.rgp` and `REPO_CONTEXT.rgpmi` form a first-class, Git-tracked development input to this project.** On each RGP feature, bugfix or refactoring

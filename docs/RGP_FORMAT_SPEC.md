@@ -40,6 +40,35 @@ obtained from a trusted pinned Git publication revision. A text-only
 GitHub connector can now read selective line windows of `.rgp` without
 decoding anything; requesting the **entire** .rgp still consumes context.
 
+## Source selection with .rgpignore
+
+A repository MAY commit a root `.rgpignore` (UTF-8, up to 64 KiB).
+Its rules follow Git's real `.gitignore` matching semantics: comments,
+negation (`!`), anchored names (`/name`), `*`, `**`, `?`,
+directory suffixes and escaped characters. The Rust generator uses
+`git check-ignore --no-index` in an isolated temporary Git repository
+to evaluate exactly these rules, independently of the real repository's
+`.gitignore`, developer global ignores or working-tree state. Rules are
+read from **the same pinned Git commit** as the source files, not from
+an uncommitted or subsequently edited `.rgpignore`. Absent
+`.rgpignore`, the generator behaves as before.
+
+Paths selected for exclusion are never read as source content. They are
+reported in the sorted manifest `excluded` array with reason
+`rgpignore`. The `.rgpignore` file itself is always included,
+even if it contains `*`: the agent needs to understand the selection.
+
+`snapshot_complete: true` means all files **within the selected source
+scope** are available. Intentionally excluded files do not reduce
+scoped completeness; `excluded_by_reason.rgpignore` and
+`intentionally_ignored_files` still disclose their count.
+It **does not mean** the entire Git repository is captured. Other reasons
+(`sensitive_path`, `size_limit`, `non_text`, etc.) still make the
+selected scope partial. Files excluded by .rgpignore can be requested
+directly from GitHub at the exact source revision if needed.
+Changing the committed ignore rules changes the source revision and
+input digest, so stale snapshots remain detectable.
+
 **Compatibility:** The Rust verifier and Python stdlib Reader still
 read historical RGP/1.0, RGP/1.1 (with its exact pinned
 [legacy guide](RGP_AGENT_GUIDE.txt)) and RGP/1.2 (Base64 ZIP). The new

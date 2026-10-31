@@ -39,6 +39,23 @@ Historical RGP/1.0, 1.1 and 1.2 ZIP+Base64 files remain readable in
 the upgraded Reader. See the
 [format specification](docs/RGP_FORMAT_SPEC.md).
 
+## Selective context with .rgpignore
+
+The committed root [`.rgpignore`](.rgpignore) tells the generator which
+Git-tracked paths do **not** need to be bundled in readable RGP/2.0.
+Like `.gitignore`, it accepts `*`, `**`, anchored patterns and
+`!` re-inclusion. Unlike `.gitignore`, it **does not change Git
+tracking**. It only controls what appears in RGP at the pinned Git
+revision. The file itself is always included in the snapshot.
+
+This repository initially excludes archived benchmarks, large historical
+reports/roadmaps, encoded golden fixtures, GitHub workflow definitions,
+dependency lockfiles and generated build/cache paths. These remain
+available through the GitHub connector when relevant. The Reader's
+`excluded_by_reason.rgpignore` and `intentionally_ignored_files`
+make this explicit. `snapshot_complete` means complete **within the
+selected context scope**, never full-repository coverage.
+
 ## Primary workflow: source context for Kira
 
 The first-class use case is an assistant working on real GitHub changes, not generating large ZIPs for their own sake. The repository tracks `REPO_CONTEXT.rgp` so that RGP can be used to inspect RGP's own sources.

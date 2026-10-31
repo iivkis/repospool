@@ -1,0 +1,40 @@
+# RGP/2.0 context filter. Gitignore syntax; evaluated at the pinned Git commit.
+# These paths stay in Git: an agent can fetch them directly when needed.
+# This file itself is ALWAYS included in the RGP and documents its scope.
+#
+# Historic measurements, checkpoints and long-form archived planning.
+/benchmarks/
+/docs/ROADMAP_v1.1.md
+/docs/REVIEW_*.md
+/docs/STAGE1_*.md
+/docs/AGENT_VALUE_TRIAL_*.md
+/docs/POC_TRANSPORT_REPORT.md
+/docs/RGP_BENCHMARK_BASELINE.md
+/docs/GATE_B_REVIEW.md
+/docs/TRANSPORT_PROBE_PROTOCOL.md
+/docs/gate-a/
+
+# Binary/encoded golden transports, which are especially wasteful in a text RGP.
+/tests/fixtures/
+
+# Workflow and repository automation: easy to read from GitHub on demand.
+/.github/
+
+# Dependency resolution locks and generated/local build artifacts.
+/Cargo.lock
+/flake.lock
+/uv.lock
+**/node_modules/
+**/.next/
+**/dist/
+**/build/
+**/target/
+**/.venv/
+**/__pycache__/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/coverage/
+*.min.js
+*.min.css
+*.map
