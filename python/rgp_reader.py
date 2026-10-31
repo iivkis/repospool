@@ -276,6 +276,128 @@ def decode_plain(source: bytes) -> tuple[bytes, dict[str, int], dict[str, tuple[
     return manifest_bytes, sizes, offsets, embedded
 
 
+def decode_lean(source: bytes):
+    """RGP/3.0: zero hashes/commit IDs in text; derive fingerprints only in RAM."""
+    _require(len(source) <= 192 * 1024 * 1024, "RESOURCE_LIMIT", "RGP/3.0 size")
+    try:
+        source.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise RgpError("UNSUPPORTED_FORMAT", "RGP/3.0 requires UTF-8") from exc
+    _require(b"\x00" not in source, "UNSUPPORTED_FORMAT", "RGP/3.0 contains NUL")
+    pos = 0
+
+    def line():
+        nonlocal pos
+        end = source.find(b"\n", pos)
+        _require(end >= 0, "TRUNCATED_ARTIFACT", "RGP/3.0 line")
+        part = source[pos:end]
+        pos = end + 1
+        return part
+
+    _require(line() == b"RGP/3.0", "UNSUPPORTED_FORMAT", "lean version")
+    sizes = []
+    for label, cap in ((b"guide_bytes=", 8192), (b"index_bytes=", MAX_MANIFEST)):
+        field = line()
+        _require(field.startswith(label) and bool(re.fullmatch(rb"[0-9]+", field[len(label):])),
+                 "UNSUPPORTED_FORMAT", "lean length")
+        size = int(field[len(label):])
+        _require(size <= cap, "RESOURCE_LIMIT", "lean section size")
+        sizes.append(size)
+    _require(line() == b"--", "UNSUPPORTED_FORMAT", "lean boundary")
+    guide_size, index_size = sizes
+    guide = source[pos:pos + guide_size]
+    _require(len(guide) == guide_size and guide_size > 0,
+             "TRUNCATED_ARTIFACT", "lean guide")
+    pos += guide_size
+    _require(source[pos:pos + 1] == b"\n", "TRUNCATED_ARTIFACT", "lean guide separator")
+    pos += 1
+    index = source[pos:pos + index_size]
+    _require(len(index) == index_size, "TRUNCATED_ARTIFACT", "lean index")
+    pos += index_size
+    _require(source[pos:pos + 1] == b"\n", "TRUNCATED_ARTIFACT", "lean index separator")
+    pos += 1
+    entries = []
+    exclusions = []
+    counts = {"rgpignore": 0, "self_artifact": 0}
+    offsets = {}
+    blobs = {}
+    previous_path = None
+    previous_exclusion = None
+    names = set()
+    exclusions_started = False
+    total = 0
+    for item in index.split(b"\n"):
+        if not item:
+            continue
+        try:
+            fields = item.decode("utf-8").split("\t")
+        except UnicodeDecodeError as exc:
+            raise RgpError("UNSUPPORTED_FORMAT", "lean index UTF-8") from exc
+        if fields[0] == "F":
+            _require(not exclusions_started and len(fields) in (3, 4),
+                     "UNSUPPORTED_FORMAT", "file index entry")
+            name, number = fields[1:3]
+            flag = fields[3] if len(fields) == 4 else ""
+            modes = {"": ("100644", "included"), "x": ("100755", "included"),
+                     "l": ("120000", "included"), "p": ("100644", "pointer_only"),
+                     "xp": ("100755", "pointer_only"), "lp": ("120000", "pointer_only")}
+            _require(_safe_path(name) and bool(re.fullmatch(r"[0-9]+", number)) and
+                     flag in modes and (previous_path is None or previous_path < name),
+                     "UNSUPPORTED_FORMAT", "file path/size/mode/order")
+            length = int(number)
+            total += length
+            _require(length <= MAX_FILE and total <= MAX_TOTAL,
+                     "RESOURCE_LIMIT", "lean file size")
+            _require(name.lower() not in names, "UNSAFE_PATH", "duplicate path")
+            names.add(name.lower())
+            _require(line() == ("FILE\t" + name).encode("utf-8"),
+                     "UNSUPPORTED_FORMAT", "lean FILE header")
+            raw = source[pos:pos + length]
+            _require(len(raw) == length, "TRUNCATED_ARTIFACT", "lean source")
+            _require(source[pos + length:pos + length + 1] == b"\n",
+                     "TRUNCATED_ARTIFACT", "lean source boundary")
+            digest = _digest(raw)  # derived ONLY in RAM, never written to RGP
+            blob = f"files/{digest}"
+            blobs[blob] = length
+            offsets[blob] = (pos, length)
+            pos += length + 1
+            mode, status = modes[flag]
+            entries.append({"path": name, "mode": mode,
+                            "kind": "symlink" if mode == "120000" else "file",
+                            "size": length, "sha256": digest, "blob": blob,
+                            "status": status})
+            previous_path = name
+        elif fields[0] in ("I", "S"):
+            exclusions_started = True
+            key = "rgpignore" if fields[0] == "I" else "self_artifact"
+            _require(len(fields) == 2 and bool(re.fullmatch(r"[0-9]+", fields[1])) and
+                     counts[key] == 0, "UNSUPPORTED_FORMAT", "lean omission count")
+            counts[key] = int(fields[1])
+            _require(counts[key] <= MAX_ENTRIES, "RESOURCE_LIMIT", "omission count")
+        elif fields[0] == "X":
+            exclusions_started = True
+            _require(len(fields) == 3, "UNSUPPORTED_FORMAT", "lean excluded entry")
+            path, reason = fields[1:]
+            _require(_safe_path(path) and (previous_exclusion is None or previous_exclusion < path)
+                     and path.lower() not in names and reason in EXCLUSION_REASONS
+                     and reason not in counts, "UNSUPPORTED_FORMAT", "excluded path/reason")
+            exclusions.append({"path": path, "reason": reason})
+            names.add(path.lower())
+            previous_exclusion = path
+        else:
+            raise RgpError("UNSUPPORTED_FORMAT", "lean index marker")
+    _require(len(entries) < MAX_ENTRIES and len(exclusions) <= MAX_ENTRIES,
+             "RESOURCE_LIMIT", "lean entries")
+    _require(line() == b"END RGP" and pos == len(source),
+             "TRUNCATED_ARTIFACT", "lean end marker")
+    manifest = {"schema_version": "1.0", "source_commit": None,
+                "input_tree_digest": _tree_digest(entries), "files": entries,
+                "excluded": exclusions, "index_coverage": "not_indexed",
+                "graph_coverage": "not_indexed"}
+    return (json.dumps(manifest, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+            blobs, offsets, counts, guide.decode("utf-8"))
+
+
 class Reader:
     """Verifies the complete RGP on construction. RGP content is *data*, never code."""
 
@@ -289,7 +411,15 @@ class Reader:
         self._plain = None
         self._plain_offsets = {}
         self._embedded_metadata = None
-        if source.startswith((b"RGP/2.0\n", b"RGP/2.1\n")):
+        self._lean = False
+        self._lean_counts = {"rgpignore": 0, "self_artifact": 0}
+        self._lean_guide = None
+        if source.startswith(b"RGP/3.0\n"):
+            manifest_data, blobs, self._plain_offsets, self._lean_counts, self._lean_guide = decode_lean(source)
+            self._plain = source
+            self._lean = True
+            payload = None
+        elif source.startswith((b"RGP/2.0\n", b"RGP/2.1\n")):
             manifest_data, blobs, self._plain_offsets, self._embedded_metadata = decode_plain(source)
             self._plain = source
             payload = None
@@ -341,7 +471,8 @@ class Reader:
         _require(isinstance(manifest, dict) and manifest.get("schema_version") == "1.0", "UNSUPPORTED_FORMAT", "manifest schema")
         commit = manifest.get("source_commit")
         tree_hash = manifest.get("input_tree_digest")
-        _require(isinstance(commit, str) and bool(COMMIT.fullmatch(commit)), "UNSUPPORTED_FORMAT", "source commit")
+        _require((commit is None if self._lean else isinstance(commit, str) and bool(COMMIT.fullmatch(commit))),
+                 "UNSUPPORTED_FORMAT", "source commit")
         _require(isinstance(tree_hash, str) and bool(HEX.fullmatch(tree_hash)), "UNSUPPORTED_FORMAT", "tree digest")
         _require(manifest.get("index_coverage") == "not_indexed" and manifest.get("graph_coverage") == "not_indexed", "UNSUPPORTED_FORMAT", "coverage fields")
         files = manifest.get("files")
@@ -417,6 +548,9 @@ class Reader:
         by_reason = {reason: 0 for reason in sorted(EXCLUSION_REASONS)}
         for excluded in self.manifest["excluded"]:
             by_reason[excluded["reason"]] += 1
+        if self._lean:
+            by_reason["rgpignore"] += self._lean_counts["rgpignore"]
+            by_reason["self_artifact"] += self._lean_counts["self_artifact"]
         # Self-referential output is deliberately outside the snapshot's input scope.
         # Deliberate RGP ignore exclusions are outside the selected source scope.
         unavailable = sum(
@@ -439,10 +573,11 @@ class Reader:
     def overview(self) -> dict:
         return {
             "source_commit": self.manifest["source_commit"],
-            "transport": "RGP/2.1" if self._embedded_metadata is not None
-                         else ("RGP/2.0" if self._plain is not None else "RGP/1.x"),
-            "embedded_instructions": self._embedded_metadata["instructions"]
-                                     if self._embedded_metadata is not None else None,
+            "transport": "RGP/3.0" if self._lean else ("RGP/2.1" if self._embedded_metadata is not None
+                         else ("RGP/2.0" if self._plain is not None else "RGP/1.x")),
+            "embedded_instructions": self._lean_guide if self._lean
+                                     else (self._embedded_metadata["instructions"]
+                                           if self._embedded_metadata is not None else None),
             "input_tree_digest": self.manifest["input_tree_digest"],
             "file_count": len(self._files),
             "excluded": self.manifest["excluded"][:MAX_OVERVIEW_EXCLUSIONS],
