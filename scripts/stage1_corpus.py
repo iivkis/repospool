@@ -179,7 +179,7 @@ def inspect(repo: dict, tasks: list[dict], source: Path, binary: Path, work: Pat
     # Invalid bytes must still fail before returning any source content.
     for damaged, expected_error in (
         (raw[:-10], "TRUNCATED_ARTIFACT"),
-        (raw.replace(b"RGP/1.0", b"RGP/2.0", 1), "UNSUPPORTED_FORMAT"),
+        (raw.replace(raw.split(b"\n", 1)[0], b"RGP/2.0", 1), "UNSUPPORTED_FORMAT"),
         (re.sub(rb"(payload_sha256=)[0-9a-f]{64}", lambda m: m.group(1) + b"0" * 64,
                 raw, count=1), "HASH_MISMATCH"),
     ):
