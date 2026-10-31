@@ -169,7 +169,7 @@ def decode_transport(source: bytes) -> bytes:
 
 
 def decode_plain(source: bytes) -> tuple[bytes, dict[str, int], dict[str, tuple[int, int]]]:
-    """Read exact UTF-8 source spans from a length-framed RGP/2.0."""
+    """Read exact UTF-8 source spans from RGP/2.0 or self-contained 2.1."""
     _require(len(source) <= 192 * 1024 * 1024, "RESOURCE_LIMIT", "RGP/2.0 too large")
     try:
         source.decode("utf-8")
@@ -186,7 +186,35 @@ def decode_plain(source: bytes) -> tuple[bytes, dict[str, int], dict[str, tuple[
         pos = end + 1
         return part
 
-    _require(line() == b"RGP/2.0", "UNSUPPORTED_FORMAT", "plain version")
+    version = line()
+    _require(version in (b"RGP/2.0", b"RGP/2.1"),
+             "UNSUPPORTED_FORMAT", "plain version")
+    embedded = None
+    if version == b"RGP/2.1":
+        commit_line = line()
+        complete_line = line()
+        length_line = line()
+        guide_hash_line = line()
+        _require(commit_line.startswith(b"source_commit=") and
+                 complete_line in (b"snapshot_complete=true", b"snapshot_complete=false") and
+                 length_line.startswith(b"guide_length=") and
+                 guide_hash_line.startswith(b"guide_sha256="),
+                 "UNSUPPORTED_FORMAT", "embedded metadata fields")
+        commit = commit_line[len(b"source_commit="):]
+        raw_length = length_line[len(b"guide_length="):]
+        guide_hash = guide_hash_line[len(b"guide_sha256="):]
+        _require(bool(re.fullmatch(rb"(?:[0-9a-f]{40}|[0-9a-f]{64})", commit)) and
+                 bool(re.fullmatch(rb"[0-9]+", raw_length)) and
+                 bool(re.fullmatch(rb"[0-9a-f]{64}", guide_hash)),
+                 "UNSUPPORTED_FORMAT", "embedded metadata values")
+        guide_length = int(raw_length)
+        _require(0 < guide_length <= 8192, "RESOURCE_LIMIT", "embedded guide size")
+        embedded = {
+            "source_commit": commit.decode("ascii"),
+            "snapshot_complete": complete_line == b"snapshot_complete=true",
+            "guide_length": guide_length,
+            "guide_sha256": guide_hash.decode("ascii"),
+        }
     field = line()
     digest_field = line()
     _require(field.startswith(b"manifest_length=") and
@@ -198,6 +226,17 @@ def decode_plain(source: bytes) -> tuple[bytes, dict[str, int], dict[str, tuple[
     count = int(number)
     _require(count <= MAX_MANIFEST, "RESOURCE_LIMIT", "manifest too large")
     _require(line() == b"--", "UNSUPPORTED_FORMAT", "plain separator")
+    if embedded is not None:
+        raw_guide = source[pos:pos + embedded["guide_length"]]
+        _require(len(raw_guide) == embedded["guide_length"],
+                 "TRUNCATED_ARTIFACT", "embedded guide")
+        _require(_digest(raw_guide) == embedded["guide_sha256"],
+                 "HASH_MISMATCH", "embedded guide")
+        _require(b"\\x00" not in raw_guide, "UNSUPPORTED_FORMAT", "guide NUL")
+        embedded["instructions"] = raw_guide.decode("utf-8")
+        pos += embedded["guide_length"]
+        _require(source[pos:pos + 1] == b"\\n", "TRUNCATED_ARTIFACT", "guide delimiter")
+        pos += 1
     manifest_bytes = source[pos:pos + count]
     _require(len(manifest_bytes) == count, "TRUNCATED_ARTIFACT", "plain manifest")
     _require(_digest(manifest_bytes).encode() == digest, "HASH_MISMATCH", "plain manifest hash")
@@ -234,7 +273,7 @@ def decode_plain(source: bytes) -> tuple[bytes, dict[str, int], dict[str, tuple[
         pos += 1
     _require(line() == b"END RGP" and pos == len(source),
              "TRUNCATED_ARTIFACT", "plain terminal marker/trailing data")
-    return manifest_bytes, sizes, offsets
+    return manifest_bytes, sizes, offsets, embedded
 
 
 class Reader:
@@ -249,8 +288,9 @@ class Reader:
             source = path.read_bytes()
         self._plain = None
         self._plain_offsets = {}
-        if source.startswith(b"RGP/2.0\n"):
-            manifest_data, blobs, self._plain_offsets = decode_plain(source)
+        self._embedded_metadata = None
+        if source.startswith((b"RGP/2.0\n", b"RGP/2.1\n")):
+            manifest_data, blobs, self._plain_offsets, self._embedded_metadata = decode_plain(source)
             self._plain = source
             payload = None
         else:
@@ -343,6 +383,12 @@ class Reader:
         self._blobs = frozenset(blobs)
         self._payload = payload
         self._files = records
+        if self._embedded_metadata is not None:
+            _require(self._embedded_metadata["source_commit"] == manifest["source_commit"],
+                     "HASH_MISMATCH", "source commit header")
+            _require(self._embedded_metadata["snapshot_complete"] ==
+                     self._snapshot_summary()["snapshot_complete"],
+                     "HASH_MISMATCH", "snapshot completeness header")
 
     def _blob(self, path: str) -> bytes:
         """Read a verified source blob on demand, without caching all raw files."""
@@ -393,6 +439,10 @@ class Reader:
     def overview(self) -> dict:
         return {
             "source_commit": self.manifest["source_commit"],
+            "transport": "RGP/2.1" if self._embedded_metadata is not None
+                         else ("RGP/2.0" if self._plain is not None else "RGP/1.x"),
+            "embedded_instructions": self._embedded_metadata["instructions"]
+                                     if self._embedded_metadata is not None else None,
             "input_tree_digest": self.manifest["input_tree_digest"],
             "file_count": len(self._files),
             "excluded": self.manifest["excluded"][:MAX_OVERVIEW_EXCLUSIONS],
