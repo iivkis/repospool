@@ -130,7 +130,7 @@ jobs:
           root = Path(os.environ["RUNNER_TEMP"])
           path = root / "REPO_CONTEXT.rgp"
           reader = Reader(path)
-          assert reader.manifest["source_commit"] == os.environ["SRC_COMMIT"]
+          assert reader.manifest["source_commit"] is None, "RGP/3.0 must not embed commit IDs"
           plan_path = Path("benchmarks/gate_b/plan.json")
           from scripts.gate_b import digest_plan, strict_json
           report = {
