@@ -55,10 +55,10 @@ F	scripts/stage1_corpus.py	13089
 F	scripts/stage1_mcp_agent_trial.py	9269
 F	scripts/stage1_memory_ab.py	7455
 F	scripts/stage1_sandbox_task_trial.py	5770
-F	scripts/stage1_scale.py	9381
-F	scripts/stage1_stress.py	10101
+F	scripts/stage1_scale.py	9365
+F	scripts/stage1_stress.py	10085
 F	src/lean.rs	12933
-F	src/main.rs	19131
+F	src/main.rs	19130
 F	src/rgpignore.rs	8397
 F	tests/rgp_fixture.py	1194
 F	tests/test_bootstrap.py	5968
@@ -5282,7 +5282,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
 sys.path.insert(0, str(ROOT / "scripts"))
-from rgp_reader import Reader, RgpError, decode_transport  # noqa: E402
+from rgp_reader import Reader, RgpError  # noqa: E402
 from stage1_corpus import measured  # noqa: E402
 
 FILES = 50_005
@@ -5375,7 +5375,7 @@ def run(binary: Path) -> dict:
                "entry-limit exclusions not disclosed")
         demand(summary["index_coverage"] == "not_indexed",
                "index coverage hallucinated at scale")
-        demand(raw.startswith(b"RGP/3.0\n"), "expected raw UTF-8 source transport")
+        demand(raw.startswith(b"RGP/0.1.0\n"), "expected raw UTF-8 source transport")
         source_sections = len(reader._files)
         demand(source_sections == CAP, "plaintext source section limit")
         # All paths are covered by the public paginated tree operation,
@@ -5494,7 +5494,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python"))
 sys.path.insert(0, str(ROOT / "scripts"))
-from rgp_reader import Reader, RgpError, decode_transport  # noqa: E402
+from rgp_reader import Reader, RgpError  # noqa: E402
 from stage1_corpus import measured  # noqa: E402
 
 MIB = 1024 * 1024
@@ -5582,7 +5582,7 @@ def run(profile: str, binary: Path) -> dict:
         overview = reader.overview()
         insist(overview["source_commit"] is None and reader.validate()["valid"],
                "source revision or RGP integrity mismatch")
-        insist(first_bytes.startswith(b"RGP/3.0\n"), "expected readable transport")
+        insist(first_bytes.startswith(b"RGP/0.1.0\n"), "expected readable transport")
         insist(b"\nFILE\t" in first_bytes, "missing plaintext file sections")
 
         observed_source_sha = {}
@@ -6615,7 +6615,6 @@ mod tests {
         drop(b);
         assert!(!a_path.exists() && !b_path.exists());
     }
-
 }
 
 FILE	src/rgpignore.rs
