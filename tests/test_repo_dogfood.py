@@ -50,7 +50,7 @@ class RepoDogfoodTests(unittest.TestCase):
         self.assertEqual(report["file_count"], 1)
 
     def test_v12_pair_is_valid_only_when_both_published_unchanged(self):
-        data = self.snapshot.read_bytes().replace(b"RGP/1.0\\n", b"RGP/1.2\\n", 1)
+        data = self.snapshot.read_bytes().replace(b"RGP/1.0\n", b"RGP/1.2\n", 1)
         self.snapshot.write_bytes(data)
         sidecar = self.repo / "REPO_CONTEXT.rgpmi"
         metadata = {
