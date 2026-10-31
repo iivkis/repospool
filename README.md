@@ -70,13 +70,15 @@ python3 python/rgp_reader.py --artifact REPO_CONTEXT.rgp read --path README.md
 python3 scripts/repo_dogfood.py export --repo . --output /tmp/rgp-own-context
 ```
 
-The self-snapshot **excludes both its .rgp and .rgpmi publication files**. Therefore, its embedded source commit may be one artifact-only publication commit behind `main`. `repo_dogfood.py check` accepts that only after verifying Git ancestry, committed bytes, complete Reader coverage and that **no other tracked source changed**. A changed or stale snapshot must not be presented as current source context.
+The self-snapshot **excludes its single .rgp publication file**. Therefore, its embedded source commit may be one artifact-only publication commit behind `main`. `repo_dogfood.py check` accepts that only after verifying Git ancestry, committed bytes, complete Reader coverage and that **no other tracked source changed**. A changed or stale snapshot must not be presented as current source context.
 
-For a fresh GitHub commit, fetch the Git-tracked **.rgpmi and .rgp** from
-the same pinned revision (raw file download, not a text-returning tool).
-The [Kira sandbox RGP snapshot](.github/workflows/kira-sandbox-rgp.yml)
-remains an optional distribution/refresh aid, not a requirement. The
-trusted [sandbox exporter](python/rgp_sandbox.py) requires an independently
+For a fresh GitHub commit, read the **single Git-tracked .rgp** at a
+pinned revision. The header and guide can be read as short text ranges;
+for local export, download the whole RGP file and verify its hash
+against independently trusted Git provenance. The
+[Kira sandbox workflow](.github/workflows/kira-sandbox-rgp.yml) is an
+optional publication helper, not a transport dependency. The trusted
+[sandbox exporter](python/rgp_sandbox.py) requires an independently
 trusted digest and source commit:
 
 ```sh
