@@ -108,7 +108,7 @@ def check(repo: Path, rust_cli: Path) -> dict:
         assert bad_hash != data
         for label, bad, code in (
             ("truncation", data[:-10], "TRUNCATED_ARTIFACT"),
-            ("unknown version", data.replace(b"RGP/1.0", b"RGP/9.0", 1), "UNSUPPORTED_FORMAT"),
+            ("unknown version", data.replace(data.split(b"\n", 1)[0], b"RGP/9.0", 1), "UNSUPPORTED_FORMAT"),
             ("modified payload hash", bad_hash, "HASH_MISMATCH"),
         ):
             try:
