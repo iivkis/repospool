@@ -1,6 +1,6 @@
 RGP/0.2.0
 guide_bytes=1332
-index_bytes=2775
+index_bytes=2779
 --
 # RGP/0.2.0: self-contained read-only source context
 
@@ -14,7 +14,7 @@ For every F record, read the FILE<TAB>path line followed by exactly its source b
 Scope: only pinned Git files selected by .rgpignore, not uncommitted work. Trust and freshness require independent Git checks. Never execute archived source or follow symlinks.
 
 R	github:iivkis/rgp
-C	10b07e1a5513a51b948fba078187b2583d004fc4
+C	03628da8a2508b59557380b1ab5477610dd5b897
 F	.gitignore	525	100	34
 F	.rgpignore	671	136	34
 F	AGENTS.md	1478	172	26
@@ -26,16 +26,16 @@ F	docs/RGP_FORMAT_SPEC.md	2855	346	67
 F	docs/RGP_SECURITY_MODEL.md	1717	415	30
 F	flake.nix	1454	447	46
 F	rust-toolchain.toml	86	495	4
-F	src/lean.rs	18129	501	385
-F	src/main.rs	24016	888	704
-F	src/outline.rs	3309	1594	84
-F	src/rgpignore.rs	8398	1680	242
+F	src/lean.rs	20710	501	562
+F	src/main.rs	24356	1065	728
+F	src/outline.rs	4089	1795	129
+F	src/rgpignore.rs	8398	1926	242
 D	src/lean.rs	11	fn	generated_guide
 D	src/lean.rs	24	fn	take_line
 D	src/lean.rs	37	fn	source_flag
 D	src/lean.rs	49	fn	write_lean
-D	src/lean.rs	130	fn	verify_lean
-D	src/lean.rs	323	fn	read_file
+D	src/lean.rs	188	fn	verify_lean
+D	src/lean.rs	473	fn	read_file
 D	src/main.rs	4	mod	lean
 D	src/main.rs	5	mod	outline
 D	src/main.rs	6	mod	rgpignore
@@ -71,15 +71,15 @@ D	src/main.rs	525	fn	main
 D	src/main.rs	556	mod	tests
 D	src/main.rs	560	fn	invalid_paths_rejected
 D	src/main.rs	576	fn	only_safe_github_origins_are_recorded
-D	src/main.rs	597	fn	sensitive_names
-D	src/main.rs	604	fn	generated_guide_is_generic_and_versioned
-D	src/main.rs	614	fn	generate_accepts_positional_repository_and_defaults_to_its_root
-D	src/main.rs	630	fn	real_git_snapshot_is_self_contained
-D	src/main.rs	683	fn	staging_files_are_unique_and_cleaned_on_drop
+D	src/main.rs	614	fn	sensitive_names
+D	src/main.rs	621	fn	generated_guide_is_generic_and_versioned
+D	src/main.rs	631	fn	generate_accepts_positional_repository_and_defaults_to_its_root
+D	src/main.rs	647	fn	real_git_snapshot_is_self_contained
+D	src/main.rs	707	fn	staging_files_are_unique_and_cleaned_on_drop
 D	src/outline.rs	3	struct	Symbol
 D	src/outline.rs	11	fn	symbols_for
-D	src/outline.rs	73	mod	tests
-D	src/outline.rs	76	fn	extracts_bounded_rust_and_python
+D	src/outline.rs	108	mod	tests
+D	src/outline.rs	111	fn	extracts_bounded_rust_and_python
 D	src/rgpignore.rs	8	struct	ScratchRepo
 D	src/rgpignore.rs	11	fn	create
 D	src/rgpignore.rs	31	fn	drop
@@ -552,35 +552,67 @@ pub(super) fn write_lean(
     blobs: &BTreeMap<String, Vec<u8>>,
 ) -> Result<usize> {
     let guide = generated_guide();
-    ensure!(!guide.is_empty() && guide.len() <= 8192, "RESOURCE_LIMIT: guide");
+    ensure!(
+        !guide.is_empty() && guide.len() <= 8192,
+        "RESOURCE_LIMIT: guide"
+    );
     let mut defs = Vec::new();
     let mut file_lines = Vec::new();
     for f in &manifest.files {
         validate_path(&f.path)?;
-        let source = blobs.get(&f.blob).ok_or_else(|| anyhow!("HASH_MISMATCH: missing source"))?;
+        let source = blobs
+            .get(&f.blob)
+            .ok_or_else(|| anyhow!("HASH_MISMATCH: missing source"))?;
         let newlines = source.iter().filter(|&&c| c == b'\n').count();
         let lines = newlines + usize::from(!source.is_empty() && !source.ends_with(b"\n"));
         file_lines.push((newlines, lines));
         if defs.len() < MAX_SYMBOLS && !matches!(source_flag(f), "l" | "lp") {
             for sym in outline::symbols_for(&f.path, source) {
-                if defs.len() == MAX_SYMBOLS { break; }
-                defs.push(format!("D\t{}\t{}\t{}\t{}\n", f.path, sym.line, sym.kind, sym.name));
+                if defs.len() == MAX_SYMBOLS {
+                    break;
+                }
+                defs.push(format!(
+                    "D\t{}\t{}\t{}\t{}\n",
+                    f.path, sym.line, sym.kind, sym.name
+                ));
             }
         }
     }
-    let ignored = manifest.excluded.iter().filter(|e| e.reason == "rgpignore").count();
-    let self_count = manifest.excluded.iter().filter(|e| e.reason == "self_artifact").count();
+    let ignored = manifest
+        .excluded
+        .iter()
+        .filter(|e| e.reason == "rgpignore")
+        .count();
+    let self_count = manifest
+        .excluded
+        .iter()
+        .filter(|e| e.reason == "self_artifact")
+        .count();
     // Only important omitted paths; do not bloat the index with build artifacts.
-    let omissions: Vec<_> = manifest.excluded.iter()
-        .filter(|e| e.reason == "rgpignore"
-            && (e.path.starts_with(".github/workflows/")
-                || e.path.ends_with(".lock") || e.path.starts_with("tests/")))
-        .take(32).collect();
-    let other_exclusions = manifest.excluded.iter()
-        .filter(|e| e.reason != "rgpignore" && e.reason != "self_artifact").count();
-    let index_lines = usize::from(manifest.github_repo.is_some()) + 1
-        + manifest.files.len() + defs.len() + usize::from(ignored > 0)
-        + usize::from(self_count > 0) + omissions.len() + other_exclusions;
+    let omissions: Vec<_> = manifest
+        .excluded
+        .iter()
+        .filter(|e| {
+            e.reason == "rgpignore"
+                && (e.path.starts_with(".github/workflows/")
+                    || e.path.ends_with(".lock")
+                    || e.path.starts_with("tests/"))
+        })
+        .take(32)
+        .collect();
+    let other_exclusions = manifest
+        .excluded
+        .iter()
+        .filter(|e| e.reason != "rgpignore" && e.reason != "self_artifact")
+        .count();
+    let index_lines = usize::from(manifest.github_repo.is_some())
+        + 1
+        + manifest.files.len()
+        + defs.len()
+        + usize::from(ignored > 0)
+        + usize::from(self_count > 0)
+        + omissions.len()
+        + other_exclusions;
     let mut source_line = 8 + guide.bytes().filter(|&b| b == b'\n').count() + index_lines;
     let mut index = String::new();
     if let Some(repo) = &manifest.github_repo {
@@ -590,30 +622,56 @@ pub(super) fn write_lean(
     for (f, (newlines, lines)) in manifest.files.iter().zip(&file_lines) {
         let flag = source_flag(f);
         if flag.is_empty() {
-            writeln!(index, "F\t{}\t{}\t{}\t{}", f.path, f.size, source_line, lines)?;
+            writeln!(
+                index,
+                "F\t{}\t{}\t{}\t{}",
+                f.path, f.size, source_line, lines
+            )?;
         } else {
-            writeln!(index, "F\t{}\t{}\t{}\t{}\t{flag}", f.path, f.size, source_line, lines)?;
+            writeln!(
+                index,
+                "F\t{}\t{}\t{}\t{}\t{flag}",
+                f.path, f.size, source_line, lines
+            )?;
         }
         source_line += newlines + 2;
     }
-    for def in defs { index.push_str(&def); }
-    if ignored != 0 { writeln!(index, "I\t{ignored}")?; }
-    if self_count != 0 { writeln!(index, "S\t{self_count}")?; }
-    for e in omissions { writeln!(index, "O\t{}", e.path)?; }
+    for def in defs {
+        index.push_str(&def);
+    }
+    if ignored != 0 {
+        writeln!(index, "I\t{ignored}")?;
+    }
+    if self_count != 0 {
+        writeln!(index, "S\t{self_count}")?;
+    }
+    for e in omissions {
+        writeln!(index, "O\t{}", e.path)?;
+    }
     for e in &manifest.excluded {
         if e.reason != "rgpignore" && e.reason != "self_artifact" {
             writeln!(index, "X\t{}\t{}", e.path, e.reason)?;
         }
     }
-    ensure!(index.len() <= MAX_MANIFEST, "RESOURCE_LIMIT: index too large");
+    ensure!(
+        index.len() <= MAX_MANIFEST,
+        "RESOURCE_LIMIT: index too large"
+    );
     let mut out = BufWriter::with_capacity(256 * 1024, &mut *output);
-    write!(out, "{TRANSPORT}\nguide_bytes={}\nindex_bytes={}\n--\n", guide.len(), index.len())?;
+    write!(
+        out,
+        "{TRANSPORT}\nguide_bytes={}\nindex_bytes={}\n--\n",
+        guide.len(),
+        index.len()
+    )?;
     out.write_all(guide.as_bytes())?;
     out.write_all(b"\n")?;
     out.write_all(index.as_bytes())?;
     out.write_all(b"\n")?;
     for f in &manifest.files {
-        let source = blobs.get(&f.blob).ok_or_else(|| anyhow!("HASH_MISMATCH: missing source"))?;
+        let source = blobs
+            .get(&f.blob)
+            .ok_or_else(|| anyhow!("HASH_MISMATCH: missing source"))?;
         ensure!(source.len() as u64 == f.size, "HASH_MISMATCH: source size");
         writeln!(out, "FILE\t{}", f.path)?;
         out.write_all(source)?;
@@ -707,94 +765,186 @@ pub(super) fn verify_lean(path: &Path) -> Result<Manifest> {
         let parts: Vec<_> = line.split('\t').collect();
         match parts.as_slice() {
             ["R", repo] => {
-                ensure!(source_commit.is_none() && github_repo.is_none() && files.is_empty(),
-                    "UNSUPPORTED_FORMAT: locator order");
+                ensure!(
+                    source_commit.is_none() && github_repo.is_none() && files.is_empty(),
+                    "UNSUPPORTED_FORMAT: locator order"
+                );
                 let Some(path) = repo.strip_prefix("github:") else {
                     return Err(anyhow!("UNSUPPORTED_FORMAT: repository locator"));
                 };
                 let Some((owner, name)) = path.split_once('/') else {
                     return Err(anyhow!("UNSUPPORTED_FORMAT: repository locator"));
                 };
-                ensure!([owner, name].iter().all(|s| !s.is_empty() && s.len() <= 100
-                    && s.bytes().all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))),
-                    "UNSUPPORTED_FORMAT: repository locator");
+                ensure!(
+                    [owner, name].iter().all(|s| !s.is_empty()
+                        && s.len() <= 100
+                        && s.bytes()
+                            .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))),
+                    "UNSUPPORTED_FORMAT: repository locator"
+                );
                 github_repo = Some((*repo).to_owned());
             }
             ["C", commit] => {
-                ensure!(source_commit.is_none() && files.is_empty(),
-                    "UNSUPPORTED_FORMAT: revision order");
-                ensure!((commit.len() == 40 || commit.len() == 64)
-                    && commit.bytes().all(|b| b.is_ascii_hexdigit()),
-                    "UNSUPPORTED_FORMAT: source commit");
+                ensure!(
+                    source_commit.is_none() && files.is_empty(),
+                    "UNSUPPORTED_FORMAT: revision order"
+                );
+                ensure!(
+                    (commit.len() == 40 || commit.len() == 64)
+                        && commit.bytes().all(|b| b.is_ascii_hexdigit()),
+                    "UNSUPPORTED_FORMAT: source commit"
+                );
                 source_commit = Some((*commit).to_owned());
             }
             ["F", name, size, at, lines] | ["F", name, size, at, lines, ""] => {
-                ensure!(source_commit.is_some() && !in_defs && !in_exclusion,
-                    "UNSUPPORTED_FORMAT: file index ordering");
-                let f = read_file(&bytes, &mut pos, name, size, at, lines, "", &mut source_line,
-                    &mut total, &mut blobs, &mut expected_defs)?;
-                ensure!(last_file.as_deref().is_none_or(|previous| previous < *name),
-                    "UNSUPPORTED_FORMAT: file order");
-                ensure!(names.insert(name.to_lowercase()), "UNSAFE_PATH: duplicate file");
+                ensure!(
+                    source_commit.is_some() && !in_defs && !in_exclusion,
+                    "UNSUPPORTED_FORMAT: file index ordering"
+                );
+                let f = read_file(
+                    &bytes,
+                    &mut pos,
+                    name,
+                    size,
+                    at,
+                    lines,
+                    "",
+                    &mut source_line,
+                    &mut total,
+                    &mut blobs,
+                    &mut expected_defs,
+                )?;
+                ensure!(
+                    last_file.as_deref().is_none_or(|previous| previous < *name),
+                    "UNSUPPORTED_FORMAT: file order"
+                );
+                ensure!(
+                    names.insert(name.to_lowercase()),
+                    "UNSAFE_PATH: duplicate file"
+                );
                 last_file = Some((*name).to_owned());
                 files.push(f);
             }
             ["F", name, size, at, lines, flag] => {
-                ensure!(source_commit.is_some() && !in_defs && !in_exclusion,
-                    "UNSUPPORTED_FORMAT: file index ordering");
-                let f = read_file(&bytes, &mut pos, name, size, at, lines, flag, &mut source_line,
-                    &mut total, &mut blobs, &mut expected_defs)?;
-                ensure!(last_file.as_deref().is_none_or(|previous| previous < *name),
-                    "UNSUPPORTED_FORMAT: file order");
-                ensure!(names.insert(name.to_lowercase()), "UNSAFE_PATH: duplicate file");
+                ensure!(
+                    source_commit.is_some() && !in_defs && !in_exclusion,
+                    "UNSUPPORTED_FORMAT: file index ordering"
+                );
+                let f = read_file(
+                    &bytes,
+                    &mut pos,
+                    name,
+                    size,
+                    at,
+                    lines,
+                    flag,
+                    &mut source_line,
+                    &mut total,
+                    &mut blobs,
+                    &mut expected_defs,
+                )?;
+                ensure!(
+                    last_file.as_deref().is_none_or(|previous| previous < *name),
+                    "UNSUPPORTED_FORMAT: file order"
+                );
+                ensure!(
+                    names.insert(name.to_lowercase()),
+                    "UNSAFE_PATH: duplicate file"
+                );
                 last_file = Some((*name).to_owned());
                 files.push(f);
             }
             ["D", ..] => {
-                ensure!(!in_exclusion && !files.is_empty(), "UNSUPPORTED_FORMAT: definition order");
+                ensure!(
+                    !in_exclusion && !files.is_empty(),
+                    "UNSUPPORTED_FORMAT: definition order"
+                );
                 in_defs = true;
-                ensure!(seen_defs < expected_defs.len() && expected_defs[seen_defs] == line,
-                    "UNSUPPORTED_FORMAT: lexical symbol hint mismatch");
+                ensure!(
+                    seen_defs < expected_defs.len() && expected_defs[seen_defs] == line,
+                    "UNSUPPORTED_FORMAT: lexical symbol hint mismatch"
+                );
                 seen_defs += 1;
             }
             ["I", count] => {
                 in_exclusion = true;
-                ensure!(ignored == 0, "UNSUPPORTED_FORMAT: duplicate ignored summary");
+                ensure!(
+                    ignored == 0,
+                    "UNSUPPORTED_FORMAT: duplicate ignored summary"
+                );
                 ignored = count.parse()?;
-                ensure!(ignored > 0 && ignored <= MAX_ENTRIES, "RESOURCE_LIMIT: ignored count");
+                ensure!(
+                    ignored > 0 && ignored <= MAX_ENTRIES,
+                    "RESOURCE_LIMIT: ignored count"
+                );
             }
             ["S", count] => {
                 in_exclusion = true;
-                ensure!(self_count == 0, "UNSUPPORTED_FORMAT: duplicate self summary");
+                ensure!(
+                    self_count == 0,
+                    "UNSUPPORTED_FORMAT: duplicate self summary"
+                );
                 self_count = count.parse()?;
-                ensure!(self_count > 0 && self_count <= 2, "RESOURCE_LIMIT: self count");
+                ensure!(
+                    self_count > 0 && self_count <= 2,
+                    "RESOURCE_LIMIT: self count"
+                );
             }
             ["O", path] => {
                 in_exclusion = true;
                 validate_path(path)?;
-                ensure!(last_omitted.as_deref().is_none_or(|previous| previous < *path),
-                    "UNSUPPORTED_FORMAT: omission ordering");
-                ensure!(names.insert(path.to_lowercase()), "UNSAFE_PATH: omitted path collision");
+                ensure!(
+                    last_omitted
+                        .as_deref()
+                        .is_none_or(|previous| previous < *path),
+                    "UNSUPPORTED_FORMAT: omission ordering"
+                );
+                ensure!(
+                    names.insert(path.to_lowercase()),
+                    "UNSAFE_PATH: omitted path collision"
+                );
                 last_omitted = Some((*path).to_owned());
                 omitted += 1;
                 ensure!(omitted <= 32, "RESOURCE_LIMIT: omissions");
-                excluded.push(Exclusion { path: (*path).to_owned(), reason: "rgpignore".into() });
+                excluded.push(Exclusion {
+                    path: (*path).to_owned(),
+                    reason: "rgpignore".into(),
+                });
             }
             ["X", name, reason] => {
                 in_exclusion = true;
                 validate_path(name)?;
-                ensure!(last_excluded.as_deref().is_none_or(|previous| previous < *name),
-                    "UNSUPPORTED_FORMAT: exclusion ordering");
-                ensure!(names.insert(name.to_lowercase()), "UNSAFE_PATH: exclusion collision");
+                ensure!(
+                    last_excluded
+                        .as_deref()
+                        .is_none_or(|previous| previous < *name),
+                    "UNSUPPORTED_FORMAT: exclusion ordering"
+                );
+                ensure!(
+                    names.insert(name.to_lowercase()),
+                    "UNSAFE_PATH: exclusion collision"
+                );
                 last_excluded = Some((*name).to_owned());
-                excluded.push(Exclusion { path: (*name).to_owned(), reason: (*reason).to_owned() });
+                excluded.push(Exclusion {
+                    path: (*name).to_owned(),
+                    reason: (*reason).to_owned(),
+                });
             }
             _ => return Err(anyhow!("UNSUPPORTED_FORMAT: index record")),
         }
     }
-    ensure!(source_commit.is_some(), "UNSUPPORTED_FORMAT: missing source commit");
-    ensure!(seen_defs == expected_defs.len(), "UNSUPPORTED_FORMAT: missing symbol hints");
-    ensure!(omitted <= ignored, "UNSUPPORTED_FORMAT: ignored count is too small");
+    ensure!(
+        source_commit.is_some(),
+        "UNSUPPORTED_FORMAT: missing source commit"
+    );
+    ensure!(
+        seen_defs == expected_defs.len(),
+        "UNSUPPORTED_FORMAT: missing symbol hints"
+    );
+    ensure!(
+        omitted <= ignored,
+        "UNSUPPORTED_FORMAT: ignored count is too small"
+    );
     excluded.sort_by(|a, b| a.path.cmp(&b.path));
     ensure!(
         files.len() < MAX_ENTRIES && excluded.len() <= MAX_ENTRIES,
@@ -834,11 +984,15 @@ fn read_file(
     expected_defs: &mut Vec<String>,
 ) -> Result<FileEntry> {
     validate_path(name)?;
-    ensure!(!decimal.is_empty() && decimal.bytes().all(|c| c.is_ascii_digit()),
-        "UNSUPPORTED_FORMAT: size");
+    ensure!(
+        !decimal.is_empty() && decimal.bytes().all(|c| c.is_ascii_digit()),
+        "UNSUPPORTED_FORMAT: size"
+    );
     let len: usize = decimal.parse()?;
     ensure!(len <= MAX_FILE, "RESOURCE_LIMIT: file size");
-    *total = total.checked_add(len).ok_or_else(|| anyhow!("RESOURCE_LIMIT: total"))?;
+    *total = total
+        .checked_add(len)
+        .ok_or_else(|| anyhow!("RESOURCE_LIMIT: total"))?;
     ensure!(*total <= MAX_TOTAL, "RESOURCE_LIMIT: total bytes");
     let (mode, status) = match flags {
         "" => ("100644", "included"),
@@ -850,25 +1004,48 @@ fn read_file(
         _ => return Err(anyhow!("UNSUPPORTED_FORMAT: file flags")),
     };
     let declared: usize = at.parse()?;
-    ensure!(declared == *source_line, "UNSUPPORTED_FORMAT: source line offset");
+    ensure!(
+        declared == *source_line,
+        "UNSUPPORTED_FORMAT: source line offset"
+    );
     let expected = format!("FILE\t{name}");
-    ensure!(take_line(bytes, pos)? == expected.as_bytes(), "UNSUPPORTED_FORMAT: FILE header");
-    let end = pos.checked_add(len).ok_or_else(|| anyhow!("RESOURCE_LIMIT: source"))?;
-    let source = bytes.get(*pos..end).ok_or_else(|| anyhow!("TRUNCATED_ARTIFACT: source"))?;
-    ensure!(std::str::from_utf8(source).is_ok() && !source.contains(&0),
-        "UNSUPPORTED_FORMAT: non-text source");
+    ensure!(
+        take_line(bytes, pos)? == expected.as_bytes(),
+        "UNSUPPORTED_FORMAT: FILE header"
+    );
+    let end = pos
+        .checked_add(len)
+        .ok_or_else(|| anyhow!("RESOURCE_LIMIT: source"))?;
+    let source = bytes
+        .get(*pos..end)
+        .ok_or_else(|| anyhow!("TRUNCATED_ARTIFACT: source"))?;
+    ensure!(
+        std::str::from_utf8(source).is_ok() && !source.contains(&0),
+        "UNSUPPORTED_FORMAT: non-text source"
+    );
     let newline_count = source.iter().filter(|&&c| c == b'\n').count();
     let actual_lines = newline_count + usize::from(!source.is_empty() && !source.ends_with(b"\n"));
-    ensure!(lines.parse::<usize>()? == actual_lines, "UNSUPPORTED_FORMAT: source line count");
+    ensure!(
+        lines.parse::<usize>()? == actual_lines,
+        "UNSUPPORTED_FORMAT: source line count"
+    );
     *source_line += newline_count + 2;
     if expected_defs.len() < MAX_SYMBOLS && flags != "l" && flags != "lp" {
         for sym in outline::symbols_for(name, source) {
-            if expected_defs.len() == MAX_SYMBOLS { break; }
-            expected_defs.push(format!("D\t{name}\t{}\t{}\t{}", sym.line, sym.kind, sym.name));
+            if expected_defs.len() == MAX_SYMBOLS {
+                break;
+            }
+            expected_defs.push(format!(
+                "D\t{name}\t{}\t{}\t{}",
+                sym.line, sym.kind, sym.name
+            ));
         }
     }
     *pos = end;
-    ensure!(bytes.get(*pos) == Some(&b'\n'), "TRUNCATED_ARTIFACT: source delimiter");
+    ensure!(
+        bytes.get(*pos) == Some(&b'\n'),
+        "TRUNCATED_ARTIFACT: source delimiter"
+    );
     *pos += 1;
     let hash = sha(source);
     let blob = format!("files/{hash}");
@@ -1464,17 +1641,34 @@ mod tests {
         // The generator never embeds arbitrary remote URLs or credentials.
         let root = std::env::temp_dir().join(format!("rgp-origin-{}", std::process::id()));
         fs::create_dir_all(&root).unwrap();
-        assert!(Command::new("git").arg("-C").arg(&root).args(["init", "-q"]).status().unwrap().success());
+        assert!(Command::new("git")
+            .arg("-C")
+            .arg(&root)
+            .args(["init", "-q"])
+            .status()
+            .unwrap()
+            .success());
         assert!(github_locator(&root).is_none());
         for (origin, expected) in [
-            ("git@github.com:owner/project.git", Some("github:owner/project")),
-            ("https://github.com/owner/project", Some("github:owner/project")),
+            (
+                "git@github.com:owner/project.git",
+                Some("github:owner/project"),
+            ),
+            (
+                "https://github.com/owner/project",
+                Some("github:owner/project"),
+            ),
             ("https://user:token@github.com/owner/project", None),
             ("https://gitlab.com/owner/project", None),
             ("git@github.com:owner/a/b", None),
         ] {
-            assert!(Command::new("git").arg("-C").arg(&root)
-                .args(["config", "remote.origin.url", origin]).status().unwrap().success());
+            assert!(Command::new("git")
+                .arg("-C")
+                .arg(&root)
+                .args(["config", "remote.origin.url", origin])
+                .status()
+                .unwrap()
+                .success());
             assert_eq!(github_locator(&root).as_deref(), expected);
         }
         fs::remove_dir_all(root).unwrap();
@@ -1535,7 +1729,11 @@ mod tests {
         };
         run_git(&["init", "-q"]);
         fs::write(repo.join("source.txt"), "Hello from another repository!\n").unwrap();
-        fs::write(repo.join("lib.rs"), "pub fn hello() {\n    let value = 1;\n}\n").unwrap();
+        fs::write(
+            repo.join("lib.rs"),
+            "pub fn hello() {\n    let value = 1;\n}\n",
+        )
+        .unwrap();
         run_git(&["add", "source.txt", "lib.rs"]);
         run_git(&[
             "-c",
@@ -1556,7 +1754,10 @@ mod tests {
         assert!(artifact.starts_with("RGP/0.2.0\n"));
         assert!(artifact.contains("FILE\tsource.txt\nHello from another repository!\n"));
         assert!(artifact.contains("D\tlib.rs\t1\tfn\thello"));
-        let index = artifact.lines().find(|line| line.starts_with("F\tlib.rs\t")).unwrap();
+        let index = artifact
+            .lines()
+            .find(|line| line.starts_with("F\tlib.rs\t"))
+            .unwrap();
         let fields: Vec<_> = index.split('\t').collect();
         let at: usize = fields[3].parse().unwrap();
         assert_eq!(artifact.lines().nth(at - 1), Some("pub fn hello() {"));
@@ -1608,7 +1809,10 @@ pub(super) fn symbols_for(path: &str, source: &[u8]) -> Vec<Symbol> {
         "python"
     } else if path.ends_with(".go") {
         "go"
-    } else if [".ts", ".tsx", ".js", ".jsx"].iter().any(|ext| path.ends_with(ext)) {
+    } else if [".ts", ".tsx", ".js", ".jsx"]
+        .iter()
+        .any(|ext| path.ends_with(ext))
+    {
         "js"
     } else {
         return Vec::new();
@@ -1625,7 +1829,14 @@ pub(super) fn symbols_for(path: &str, source: &[u8]) -> Vec<Symbol> {
         let normalized = match lang {
             "rust" => {
                 let mut rest = line;
-                for prefix in ["pub(crate) ", "pub(super) ", "pub ", "async ", "unsafe ", "extern "] {
+                for prefix in [
+                    "pub(crate) ",
+                    "pub(super) ",
+                    "pub ",
+                    "async ",
+                    "unsafe ",
+                    "extern ",
+                ] {
                     if let Some(next) = rest.strip_prefix(prefix) {
                         rest = next;
                     }
@@ -1637,23 +1848,48 @@ pub(super) fn symbols_for(path: &str, source: &[u8]) -> Vec<Symbol> {
                 }
                 rest
             }
-            "js" => line.strip_prefix("export default ").or_else(|| line.strip_prefix("export ")).unwrap_or(line),
+            "js" => line
+                .strip_prefix("export default ")
+                .or_else(|| line.strip_prefix("export "))
+                .unwrap_or(line),
             _ => line,
         };
         let patterns: &[(&str, &str)] = match lang {
-            "rust" => &[("fn ", "fn"), ("struct ", "struct"), ("enum ", "enum"), ("trait ", "trait"), ("mod ", "mod")],
+            "rust" => &[
+                ("fn ", "fn"),
+                ("struct ", "struct"),
+                ("enum ", "enum"),
+                ("trait ", "trait"),
+                ("mod ", "mod"),
+            ],
             "python" => &[("async def ", "fn"), ("def ", "fn"), ("class ", "class")],
             "go" => &[("func ", "fn"), ("type ", "type")],
-            _ => &[("async function ", "fn"), ("function ", "fn"), ("class ", "class"), ("interface ", "interface"), ("type ", "type")],
+            _ => &[
+                ("async function ", "fn"),
+                ("function ", "fn"),
+                ("class ", "class"),
+                ("interface ", "interface"),
+                ("type ", "type"),
+            ],
         };
         for (prefix, kind) in patterns {
             if let Some(after) = normalized.strip_prefix(prefix) {
-                let name = after.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).next().unwrap_or("");
+                let name = after
+                    .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+                    .next()
+                    .unwrap_or("");
                 if !name.is_empty()
                     && name.len() <= 80
-                    && name.bytes().next().is_some_and(|b| b.is_ascii_alphabetic() || b == b'_')
+                    && name
+                        .bytes()
+                        .next()
+                        .is_some_and(|b| b.is_ascii_alphabetic() || b == b'_')
                 {
-                    found.push(Symbol { line: line_no + 1, kind, name: name.to_owned() });
+                    found.push(Symbol {
+                        line: line_no + 1,
+                        kind,
+                        name: name.to_owned(),
+                    });
                 }
                 break;
             }
@@ -1669,7 +1905,17 @@ mod tests {
     fn extracts_bounded_rust_and_python() {
         let src = b"// fn ignored()\npub fn build() {}\nstruct Thing {}\n    fn method() {}\n";
         let symbols = symbols_for("src/lib.rs", src);
-        assert_eq!(symbols.iter().map(|s| (&s.name, s.line)).collect::<Vec<_>>(), vec![(&"build".to_owned(), 2), (&"Thing".to_owned(), 3), (&"method".to_owned(), 4)]);
+        assert_eq!(
+            symbols
+                .iter()
+                .map(|s| (&s.name, s.line))
+                .collect::<Vec<_>>(),
+            vec![
+                (&"build".to_owned(), 2),
+                (&"Thing".to_owned(), 3),
+                (&"method".to_owned(), 4)
+            ]
+        );
         assert!(symbols_for("readme.md", src).is_empty());
         let py = symbols_for("a.py", b"def run():\n    pass\nclass Item:\n    pass\n");
         assert_eq!(py.len(), 2);
