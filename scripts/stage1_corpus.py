@@ -227,7 +227,7 @@ def match_checkpoint(corpus: dict, result: dict) -> str:
                              ("rgp_bytes", result["rgp_bytes"])):
             require(expected.get(key) == current, f"pinned compatibility regression: {key}")
         return "EXACT_LEGACY_BYTES"
-    require(version == "RGP/1.1", "unsupported transport checkpoint version")
+    require(version in ("RGP/1.1", "RGP/1.2"), "unsupported transport checkpoint version")
     # A v1.0 RGP hash cannot authenticate the intentionally changed v1.1
     # header. The run still verifies determinism, Git source truth and Reader.
     return "SOURCE_EQUIVALENCE_ONLY"
