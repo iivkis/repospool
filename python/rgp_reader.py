@@ -30,7 +30,7 @@ MAX_HEADER = 4096
 AGENT_GUIDE_SHA256 = "9585596e0f091096bac8c67163a50fb40ab789ee72f49089f80557acbec4740d"
 HEX = re.compile(r"[0-9a-f]{64}\Z")
 COMMIT = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
-EXCLUSION_REASONS = frozenset({"self_artifact", "sensitive_path", "submodule_unavailable", "size_limit", "entry_limit", "non_text"})
+EXCLUSION_REASONS = frozenset({"self_artifact", "sensitive_path", "submodule_unavailable", "size_limit", "entry_limit", "non_text", "rgpignore"})
 
 
 class RgpError(ValueError):
@@ -372,7 +372,11 @@ class Reader:
         for excluded in self.manifest["excluded"]:
             by_reason[excluded["reason"]] += 1
         # Self-referential output is deliberately outside the snapshot's input scope.
-        unavailable = sum(count for reason, count in by_reason.items() if reason != "self_artifact")
+        # Deliberate RGP ignore exclusions are outside the selected source scope.
+        unavailable = sum(
+            count for reason, count in by_reason.items()
+            if reason not in ("self_artifact", "rgpignore")
+        )
         complete = pointer_only == 0 and unavailable == 0
         return {
             "status": "available" if complete else "partial",
@@ -381,6 +385,7 @@ class Reader:
             "pointer_only_files": pointer_only,
             "excluded_files": unavailable,
             "self_artifact_excluded": by_reason["self_artifact"],
+            "intentionally_ignored_files": by_reason["rgpignore"],
             "excluded_by_reason": {reason: count for reason, count in by_reason.items() if count},
             "included_bytes": sum(entry["size"] for entry in self._files.values() if entry["status"] == "included"),
         }
