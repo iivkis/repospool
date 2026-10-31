@@ -14,7 +14,7 @@ Trust: this format has no embedded content hashes or source revision. Establish 
 Limits: the snapshot is read-only, not a Git checkout or semantic dependency graph. Do not execute archived source or follow symlinks.
 
 F	.gitignore	525
-F	.rgpignore	972
+F	.rgpignore	923
 F	AGENTS.md	4249
 F	Cargo.toml	376
 F	README.md	3582
@@ -22,25 +22,25 @@ F	Taskfile.yml	5948
 F	docs/AGENT_FIRST_PILOT.md	6284
 F	docs/ENGINEERING_PRINCIPLES.md	9642
 F	docs/GATE_B_CORRECTION.md	1027
-F	docs/INDEX_SCHEMA.md	3523
+F	docs/INDEX_SCHEMA.md	1870
 F	docs/IN_REPO_DOGFOOD.md	5588
 F	docs/PRODUCT_NORTH_STAR.md	9217
-F	docs/PRODUCT_ROADMAP.md	13012
+F	docs/PRODUCT_ROADMAP.md	13224
 F	docs/READER_API.md	1883
 F	docs/RGP_FORMAT_SPEC.md	2835
-F	docs/RGP_MCP_AGENT.md	4747
-F	docs/RGP_SECURITY_MODEL.md	5454
-F	docs/SANDBOX_SOURCE_WORKSPACE.md	10157
+F	docs/RGP_MCP_AGENT.md	4768
+F	docs/RGP_SECURITY_MODEL.md	5404
+F	docs/SANDBOX_SOURCE_WORKSPACE.md	10076
 F	flake.nix	910
 F	justfile	168
 F	pyproject.toml	203
 F	python/rgp_agent_context.py	7389
 F	python/rgp_bootstrap.py	7154
-F	python/rgp_mcp.py	10772
+F	python/rgp_mcp.py	10774
 F	python/rgp_reader.py	22990
 F	python/rgp_sandbox.py	9355
 F	rust-toolchain.toml	86
-F	schema.sql	4699
+F	schema.sql	4716
 F	scripts/gate_b.py	13312
 F	scripts/gate_b_call_audit.py	9668
 F	scripts/gate_b_decision.py	3909
@@ -52,14 +52,14 @@ F	scripts/repo_dogfood.py	8179
 F	scripts/stage1_acceptance.py	8004
 F	scripts/stage1_agent_task_pilot.py	8133
 F	scripts/stage1_corpus.py	13089
-F	scripts/stage1_mcp_agent_trial.py	9269
+F	scripts/stage1_mcp_agent_trial.py	9271
 F	scripts/stage1_memory_ab.py	7455
-F	scripts/stage1_sandbox_task_trial.py	5770
-F	scripts/stage1_scale.py	9365
-F	scripts/stage1_stress.py	10085
+F	scripts/stage1_sandbox_task_trial.py	5772
+F	scripts/stage1_scale.py	9342
+F	scripts/stage1_stress.py	10067
 F	src/lean.rs	12933
 F	src/main.rs	19130
-F	src/rgpignore.rs	8397
+F	src/rgpignore.rs	8398
 F	tests/rgp_fixture.py	1194
 F	tests/test_bootstrap.py	5968
 F	tests/test_gate_b.py	7821
@@ -119,7 +119,7 @@ Thumbs.db
 /benchmarks/gate_b/observations.local.json
 
 FILE	.rgpignore
-# RGP/3.0 context filter. Gitignore syntax; evaluated at the pinned Git commit.
+# RGP/0.1.0 context filter. Gitignore syntax; evaluated at the pinned Git commit.
 # These paths stay in Git: an agent can fetch them directly when needed.
 # This file itself is ALWAYS included in the RGP and documents its scope.
 #
@@ -133,9 +133,8 @@ FILE	.rgpignore
 /docs/GATE_B_REVIEW.md
 /docs/gate-a/
 
-# Binary/encoded golden transports, which are especially wasteful in a text RGP.
+# Obsolete fixture directory, if restored for historical research.
 /tests/fixtures/
-/scripts/legacy_transport_fixture.py
 
 # Workflow and repository automation: easy to read from GitHub on demand.
 /.github/
@@ -723,39 +722,26 @@ Token savings cannot be confirmed from unreported counts, and the benchmark
 remains HOLD until actual paired source tasks are performed.
 
 FILE	docs/INDEX_SCHEMA.md
-# SQLite index design v0.1 (not yet produced)
+# Optional semantic index design (not implemented)
 
-`schema.sql` records the **future** local index contract. As of MVP-A, Rust generates `manifest.json` and `files/<sha256>` only, and Python Reader operates directly on those verified blobs. No symbols, relations, or SQL lookup are currently exposed. Shipping an empty database as if it were completed semantic analysis would misrepresent coverage.
+`schema.sql` is a **future research proposal**, not an emitted RGP component or supported Reader API. The sole supported transport is `RGP/0.1.0`: an automatically generated universal guide, a compact index of paths and sizes, and length-framed UTF-8 source sections. It contains no JSON manifest, ZIP payload, hashes, SQLite database or semantic graph.
 
-## Contract
+## Proposed contract
 
-- `snapshot` binds the index to `input_tree_digest`. `source_commit` is provenance, not the freshness rule.
-- `files` references original stored content by digest and path; it never normalizes or substitutes source bytes.
-- `analysis_runs` records the producer, version, configuration and status. A Rust feature set or changed analyzer configuration requires a distinct run.
-- `symbols` stores *positions* and confidence, never a claim of runtime behavior.
-- `relations` distinguishes `imports`, `references`, `calls`, `implements`, `contains`, `tests`, and `configures`. Each relation has evidence location, producer (`run_id`) and one resolved or unresolved target. `confirmed_reference` requires an actually resolved symbol. Merely importing something is not a confirmed runtime call.
-- `coverage` stores `snapshot`, `index`, `graph` and `investigation` separately. Investigation coverage can describe what the Reader **returned**, not what an agent internally understood.
+- `snapshot` would bind local analysis to independently authenticated Git source bytes and a derived in-memory digest.
+- `files` would record paths, modes and source fingerprints; it would not replace original UTF-8 content.
+- `analysis_runs` would identify producers and configurations of parser/analyzer runs.
+- `symbols` would store source positions, not unverified runtime behavior.
+- `relations` would distinguish observed syntactic links, resolved references and uncertain dependencies.
+- `coverage` would distinguish available snapshot data from partial, unsupported or not-indexed semantic analysis.
 
-SQLite foreign keys and constraints are tested in Python stdlib (`tests/test_index_schema.py`). The DDL intentionally avoids optional FTS5/JSON1 and `STRICT` features, and uses `PRAGMA user_version=1` to allow future migrations. **Compatibility with a final minimum SQLite release is not claimed** until the reader sandbox has been tested, including its bundled SQLite version.
+The schema's referential constraints are exercised in `tests/test_index_schema.py`, but passing these tests **does not mean that RGP produces or consumes a semantic index**. There is currently no SQL-backed Reader.
 
-## Trust boundary for the planned reader
+## Future security boundary
 
-The index is untrusted ZIP content. A future reader must first validate transport length/SHA, ZIP paths, hashes, expanded sizes and schema; only then extract a verified SQLite file to a private temporary directory. Open it with a read-only URI and `PRAGMA query_only=ON`. Never execute SQL, scripts, extensions, triggers or embedded Python received from the container. The SQLite schema is a query model, not an endorsement of archive authenticity.
+If a semantic index is ever implemented, it must be generated from source tied to a separately trusted Git revision and authenticated RGP file. Treat derived index data as untrusted unless its production and provenance are established. Open any future SQLite database in read-only/query-only mode with limits; do not execute embedded scripts or SQL from repository content.
 
-## Golden fixtures
-
-`tests/fixtures/v1/` contains seven small synthetic, version-pinned archives with an independent `expected.json` containing exact byte counts and SHA-256. The collection covers valid mixed/empty snapshots and truncation, external payload-hash corruption, ZIP-slip, manifest digest mismatch and unsupported transport versions.
-
-The mixed snapshot includes CRLF/LF, non-UTF8 binary data, a Unicode path, a symlink **as link bytes**, an LFS pointer marked `pointer_only`, a deduplicated blob and explicit exclusions. The test harness validates the trusted Python Reader. CI additionally validates the same files through the Rust verifier; neither tool is allowed to silently reinterpret invalid archives as valid.
-
-```sh
-task contract:golden       # verify committed fixtures without Cargo
-task contract:cross        # build Rust CLI + check both validators
-# Intentionally regenerate committed golden bytes only when changing the format:
-python3 scripts/golden_fixtures.py write
-```
-
-These fixtures test format compatibility and byte integrity, **not** a real GitHub connector, source authenticity, an analyzer, or Gate B. The checks reject mutations of committed golden bytes unless the expected hashes and tested format are deliberately updated.
+Past ZIP/Base64 fixtures and compatibility tasks have been removed from the active codebase. Old experimental materials may be consulted in Git history, but they do not describe the supported `RGP/0.1.0` format.
 
 FILE	docs/IN_REPO_DOGFOOD.md
 # Использование RGP для разработки самого RGP
@@ -982,7 +968,7 @@ GitHub-коннектор → запросить **только нужные д�
 | Происхождение/доверие | Git-ревизия и контрольная сумма **вне файла** |
 | Чтение | GitHub line-range запросы; локальный Reader только если файл действительно получен |
 | GitHub Actions ZIP | Необязательный способ доставки; не определяет формат |
-| Legacy 1.x / 2.x | **Только чтение** через Reader и ограниченный набор immutable fixtures |
+| Старые форматы 1.x / 2.x / 3.0 | **Не поддерживаются**; Reader и verifier принимают только 0.1.0 |
 | Индексы, MCP, граф | Не обязательны; создавать только после измеренной потребности |
 
 `snapshot_complete` отражает **выбранный объём** после `.rgpignore`,
@@ -1064,16 +1050,16 @@ GitHub-коннектор → запросить **только нужные д�
 
 **Зависимость:** этап 2 подтвердил нужный сценарий и интерфейс.
 
-- [ ] Версионированный CLI/Reader, правила совместимости 1.x/2.x
-  и миграции в RGP/0.1.0 без прежнего ZIP/sidecar в новых файлах.
+- [ ] Зафиксировать политику дальнейшего версионирования CLI и Reader
+  после RGP/0.1.0 без восстановления старых транспортов.
 - [ ] Автоматическое обновление Git-tracked RGP с атомарной
   публикацией, подтверждением Git blob и проверкой актуальности.
 - [ ] Определить политику разрешённых публикаций, работу с
   приватными репозиториями, ограничениями коннектора и секретами.
 - [ ] Ограничения ресурсов и security-регрессии: большие пути,
   NUL/UTF-8, границы байтов, повторные записи, необнаружимые
-  без внешнего якоря подмены; **старые ZIP-бомбы** проверять
-  только для сохранённого legacy-reader.
+  без внешнего якоря подмены; отдельно проверять лимиты
+  необязательной ZIP-обёртки доставки, не смешивая её с форматом RGP.
 - [ ] Честная эксплуатационная диагностика и восстановление при
   недоступном файле или частичном RGP.
 - [ ] Полный release rehearsal на фиксированном Git-коммите,
@@ -1089,8 +1075,9 @@ GitHub-коннектор → запросить **только нужные д�
 Ранние ZIP/Base64-транспортные PoC и старые отчёты о сжатии описывают
 **историю разработки**, но не действующий продуктовый формат.
 Сырые замороженные Gate B-наблюдения, протокол независимой проверки,
-план задач и golden fixtures **оставлены как аудит и обратная
-совместимость**. Удалённые исторические файлы доступны в Git history.
+план задач и отчёты оставлены как исторический аудит, **не как
+обязательство обратной совместимости**. Старые транспортные fixtures
+и реализации удалены; при необходимости доступны в Git history.
 
 **Правило доказательности:** фиксировать конкретные коммиты,
 исходный Git, CI/exit code, модельные токены (если они действительно
@@ -1217,7 +1204,7 @@ FILE	docs/RGP_MCP_AGENT.md
 Учитывать `terms_without_source`, `search_capped_terms` и `selection_truncated`.
 
 Содержимое исходника остаётся недоверенными данными. Комментарии
-из ZIP не должны становиться системными инструкциями модели.
+из исходников RGP не должны становиться системными инструкциями модели.
 Сервер не предоставляет shell, exec, изменения файлов или Git-доступ.
 При ответе больше 64 KiB возвращается ошибка, а не тихое усечение.
 
@@ -1296,13 +1283,12 @@ UTF-8, отсутствие NUL, длины секций, безопасные �
 - Источники для агентских ответов требуют проверки `path:line`.
   `not_indexed` не доказывает отсутствие символа или связи.
 
-## Исторические форматы и опциональная доставка
+## Поддерживаемый формат и опциональная доставка
 
-Legacy Reader продолжает читать RGP/1.0–1.2 (ZIP/Base64)
-и RGP/2.0–2.1 (текст с внутренними хешами).
-Для этих **старых** форматов сохранены проверки ZIP-path,
-лимиты разжатия, anti-zip-bomb, хеши и immutable fixtures.
-Они не входят в формат нового RGP/0.1.0.
+Rust verifier и Python Reader принимают только RGP/0.1.0.
+Форматы 1.x, 2.x и 3.0 и их парсеры удалены. Исторические
+материалы можно посмотреть в Git history, но использовать их как
+действующий контракт нельзя.
 
 Опциональный `python/rgp_bootstrap.py` принимает
 GitHub Actions ZIP **обёртку**, внутри которой лежит RGP.
@@ -1345,6 +1331,7 @@ python3 python/rgp_sandbox.py \
   --artifact /mnt/data/REPO_CONTEXT.rgp \
   --trusted-sha256 <sha256-from-separate-trusted-source> \
   --expected-commit <GitHub-commit-SHA> \
+  --attested-source-commit <same-commit-from-external-attestation> \
   --output /mnt/data/my-source-workspace
 
 # После успешной команды можно работать с исходниками как с файлами:
@@ -1410,20 +1397,19 @@ RGP от другого Git-коммита будет отвергнут с `STA
 
 1. Требует **внешний доверенный SHA-256** и сравнивает его с
    реальными RGP-байтами *до* разбора.
-2. Проверяет весь RGP/1.0 с помощью доверенного Python stdlib Reader,
-   включая содержимое и манифест. Неполный снимок отклоняет, если
-   `--allow-partial` не выбран **явно**.
-3. Использует публичный `Reader.read_bytes(path)`, не зависящий от
-   внутреннего способа хранения ZIP; он возвращает точные Git-байты,
-   в том числе бинарные файлы и окончания строк. Экспортирует файлы
-   в **новую** отдельную папку. Существующую
-   директорию не меняет, в случае неудачи очищает временную область.
-   ZIP путями управляет проверенный Reader, вложенные `../`
-   и абсолютные пути не поддерживаются.
+2. Структурно проверяет весь RGP/0.1.0 доверенным Python stdlib Reader:
+   UTF-8, границы байтов, порядок и ограничения. Источник и Git-ревизию
+   он не аутентифицирует. Неполный снимок отклоняет, если `--allow-partial`
+   не выбран **явно**.
+3. Использует публичный `Reader.read_bytes(path)` и сохраняет исходные
+   UTF-8 байты и окончания строк в **новую** отдельную папку.
+   Существующую директорию не меняет, а при ошибке очищает временную
+   область. Опасные пути, включая `../` и абсолютные, отвергаются.
 4. Создаёт только **обычные файлы без исполняемых битов**.
    Git-симлинки записываются *текстом ссылки*, никогда не
    преобразуются в реальные симлинки.
-5. Записывает `.rgp-sandbox.json` с исходным и ожидаемым commit,\n   честным статусом сравнения (но не сетевой проверкой HEAD), хешем,
+5. Записывает `.rgp-sandbox.json` с исходным и ожидаемым commit,
+   честным статусом сравнения (но не сетевой проверкой HEAD), хешем,
    неполнотой, числом файлов, байтами и предупреждениями
    о симлинках/LFS. Это provenance, не разрешение доверять
    комментариям в коде.
@@ -2052,7 +2038,7 @@ def serve(server: RgpMcp) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--artifact", type=Path, required=True,
-                        help="Previously authenticated local RGP/1.0 path")
+                        help="Previously authenticated local RGP/0.1.0 path")
     args = parser.parse_args()
     try:
         serve(RgpMcp(Reader(args.artifact)))
@@ -2724,11 +2710,12 @@ profile = "minimal"
 components = ["rustfmt", "clippy"]
 
 FILE	schema.sql
--- RGP SQLite index schema v0.1 (design contract, NOT shipped by MVP-A).
--- Compatible with SQLite 3.35+: no JSON1, FTS5, generated columns or STRICT tables required.
--- All byte-for-byte originals remain in files/<sha256> inside RGP, never in this DB.
--- Consumers MUST verify the outer RGP and ZIP before extracting this database, and
--- MUST open an extracted copy read-only with PRAGMA query_only=ON.
+-- Optional future SQLite index proposal, NOT included in RGP/0.1.0.
+-- The only supported RGP transport is length-framed UTF-8 source text,
+-- with no embedded ZIP, manifest, hashes, source commit, or database.
+-- Any future index must derive from independently authenticated source,
+-- and consumers must open SQLite read-only with PRAGMA query_only=ON.
+-- This SQL is a design artifact, not a supported Reader feature.
 PRAGMA foreign_keys = ON;
 PRAGMA user_version = 1;
 
@@ -4901,7 +4888,7 @@ def run(artifact: Path, source_repo: Path, repository: str, plan: Path) -> dict:
             "rgp_status", "rgp_tree", "rgp_search", "rgp_read", "rgp_context"}
         status = client.tool("rgp_status")["overview"]
         assert status["source_commit"] in (None, repo["commit"])
-        # RGP/3.0 leaves authenticity to the pinned Git source comparisons.
+        # RGP/0.1.0 leaves authenticity to the pinned Git source comparisons.
         assert status["snapshot_complete"]
         assert status["file_count"] > 0
         assert status["index_coverage"] == "not_indexed"
@@ -5177,7 +5164,7 @@ def run(repository: str, artifact: Path, source_repo: Path, output: Path) -> dic
     reader = Reader(artifact)
     hash_free = reader.overview()["source_commit"] is None
     # The historic SHA checkpoint is frozen to the old transport. In
-    # RGP/3.0 we can only check this run's artifact hash locally, then
+    # RGP/0.1.0 we can only check this run's artifact hash locally, then
     # independently compare every exported file to pinned Git.
     trusted = hashlib.sha256(artifact.read_bytes()).hexdigest() if hash_free else anchor["sha256"]
     # An authenticated RGP from the wrong commit must be rejected before
@@ -5265,7 +5252,7 @@ FILE	scripts/stage1_scale.py
 """Stage 1: 50,000-member RGP boundary from a real synthetic Git commit.
 
 Generates 50,005 distinct Git blobs using git fast-import (no filesystem
-checkout), tests the 49,999-blob + manifest ZIP boundary, verifies exact
+checkout), tests the bounded 50,000-file snapshot boundary, verifies exact
 source reads, pagination, deterministic bytes and honest exclusions.
 CI artifacts contain JSON measurements only. No model or third-party Python.
 """
@@ -5273,7 +5260,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import io
 import json
 import os
 import resource
@@ -5281,7 +5267,6 @@ import subprocess
 import sys
 import tempfile
 import time
-import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -5486,14 +5471,12 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import io
 import json
 import os
 import subprocess
 import sys
 import tempfile
 import time
-import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -5526,7 +5509,7 @@ def make_source(repo: Path, profile: str) -> tuple[str, dict[str, bytes]]:
     originals: dict[str, bytes] = {}
 
     def noise(seed: bytes, size: int) -> bytes:
-        # Deterministic ASCII high-entropy data, not binary ZIP fixtures.
+        # Deterministic ASCII high-entropy data, not encoded transport fixtures.
         return hashlib.shake_256(seed).digest(size // 2 + size % 2).hex().encode()[:size]
 
     if profile == "many-files":
@@ -6842,7 +6825,7 @@ mod tests {
     }
 
     #[test]
-    fn repositories_without_rgpignore_keep_legacy_inclusion() -> Result<()> {
+    fn repositories_without_rgpignore_keep_default_inclusion() -> Result<()> {
         let dir = ScratchRepo::create()?;
         git(&dir.0, &["init", "-q"])?;
         add_file(&dir.0, "src/code.py", "print('source')\n")?;
