@@ -117,9 +117,9 @@ def run(binary: Path) -> dict:
                "entry-limit exclusions not disclosed")
         demand(summary["index_coverage"] == "not_indexed",
                "index coverage hallucinated at scale")
-        with zipfile.ZipFile(io.BytesIO(decode_transport(raw))) as archive:
-            member_count = len(archive.infolist())
-            demand(member_count == 50_000, "ZIP count should include exactly 1 manifest")
+        demand(raw.startswith(b"RGP/2.0\n"), "expected raw UTF-8 source transport")
+        source_sections = len(reader._files)
+        demand(source_sections == CAP, "plaintext source section limit")
         # All paths are covered by the public paginated tree operation,
         # not by inspecting the Reader's private path map.
         pages = 0
@@ -175,7 +175,7 @@ def run(binary: Path) -> dict:
             "status": "PASS", "source_commit": commit,
             "source_files": FILES, "included_files": CAP,
             "excluded_files": FILES - CAP,
-            "zip_members_including_manifest": member_count,
+            "plain_source_sections": source_sections,
             "rgp_sha256": hashlib.sha256(raw).hexdigest(),
             "rgp_bytes": len(raw), "pagination_pages": pages,
             "sampled_git_source_checks": len(SAMPLE),
@@ -188,7 +188,7 @@ def run(binary: Path) -> dict:
             "gate_b": "HOLD",
             "not_measured": ["GitHub connector latency", "agent inference tokens",
                              "independent natural-language grading"],
-            "note": "Synthetic pinned Git commit; complete ZIP integrity checked by Rust and Python; partial snapshot is deliberate at member cap.",
+            "note": "Synthetic pinned Git commit; text section integrity checked by Rust and Python; partial snapshot is deliberate at member cap.",
         }
 
 
