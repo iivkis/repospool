@@ -44,7 +44,7 @@ jobs:
           target/release/repospool verify --artifact "$RUNNER_TEMP/.repospool" --repo .
           echo "Source commit: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
           sha256sum "$RUNNER_TEMP/.repospool" >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: steps.changes.outputs.skip != 'true'
         with:
           name: repospool-${{ github.sha }}
